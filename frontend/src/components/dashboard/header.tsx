@@ -1,0 +1,107 @@
+
+"use client";
+
+import { LeadGenLogo } from "@/components/icons";
+import { Wifi, WifiOff, Moon, Sun } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { CreditsDialog } from "./credits-dialog";
+import { Authentication } from "./authentication";
+import { Badge } from "../ui/badge";
+
+export function Header() {
+  const [isOnline, setIsOnline] = useState(true);
+  const [theme, setTheme] = useState("dark");
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    
+    setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Theme handling
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    setTheme(savedTheme);
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme);
+    if (newTheme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  };
+  
+  if (!isClient) {
+    return (
+      <div className="flex items-center justify-between space-y-2">
+        <div className="flex items-center gap-3">
+          <LeadGenLogo />
+          <h1 className="text-3xl font-bold tracking-tight font-headline holographic-text">
+            LeadGen
+          </h1>
+        </div>
+        <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2 text-sm font-medium p-2 rounded-md glassmorphic">
+            <Wifi className="h-4 w-4" />
+            <span></span>
+            <div className="h-2 w-2 rounded-full"></div>
+          </div>
+          <Button variant="outline" size="icon">
+            <Sun className="h-[1.2rem] w-[1.2rem]" />
+          </Button>
+          <CreditsDialog />
+        </div>
+      </div>
+    );
+  }
+
+
+  return (
+    <div className="flex items-center justify-between space-y-2">
+      <div className="flex items-center gap-3">
+        <LeadGenLogo />
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-3xl font-bold tracking-tight font-headline holographic-text">
+            LeadGen
+          </h1>
+          <Badge variant="secondary">Beta 1.0V</Badge>
+        </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <div className={`flex items-center gap-2 text-sm font-medium p-2 rounded-md glassmorphic ${isOnline ? 'text-green-500' : 'text-red-500'}`}>
+          {isOnline ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+          <span>{isOnline ? 'Live Sync' : 'Offline'}</span>
+          <div className={`h-2 w-2 rounded-full ${isOnline ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+        </div>
+        <Button variant="outline" size="icon" onClick={toggleTheme}>
+          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">Toggle theme</span>
+        </Button>
+        <CreditsDialog />
+        <Authentication />
+      </div>
+    </div>
+  );
+}
