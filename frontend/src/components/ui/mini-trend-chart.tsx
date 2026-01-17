@@ -50,7 +50,7 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
             labelFormatter={(label) => `Day ${label}`}
             separator=" "
           />
-          <Line type="monotone" dataKey="arrival_minutes" stroke={statusColors['on time'] || '#22c55e'} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={false} />
+          <Line type="monotone" dataKey="arrival_minutes" stroke={statusColors['on time'] || '#22c55e'} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={true} />
 
         </LineChart>
       </ResponsiveContainer>
