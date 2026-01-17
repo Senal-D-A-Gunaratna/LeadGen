@@ -39,8 +39,10 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
   clearLogs: async () => {
     const { user } = useAuthStore.getState();
-    const role = user?.role || 'guest';
     set({ logs: [] });
-    await clearAuthLogsAction(role);
+    // Only call clearAuthLogsAction when we have a valid role (admin/moderator/dev)
+    if (user?.role) {
+      await clearAuthLogsAction(user.role);
+    }
   },
 }));

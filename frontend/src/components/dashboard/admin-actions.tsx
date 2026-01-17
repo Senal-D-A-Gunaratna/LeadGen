@@ -42,7 +42,7 @@ export function AdminActions() {
     setAuthDialogOpen(true);
   };
 
-  const handleAuthorizedAction = async () => {
+  const handleAuthorizedAction = async (password?: string) => {
     if (actionToConfirm === 'delete-history') {
       await actions.deleteEntireHistory();
       addActionLog('[Admin] Deleted all attendance history.');

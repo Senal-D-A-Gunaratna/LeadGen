@@ -14,10 +14,13 @@ import {
 import { format } from 'date-fns';
 import { useActionLogStore } from './use-action-log-store';
 import { useAuthStore } from './use-auth-store';
-import { produce } from 'immer';
+import { produce, enableMapSet } from 'immer';
 import { devtools } from 'zustand/middleware';
 import { wsClient } from '@/lib/websocket-client';
 import { shrinkStudentForList } from '@/lib/utils';
+
+// Enable Immer MapSet plugin
+enableMapSet();
 
 const getCurrentTime = async (get: () => StudentStore): Promise<Date> => {
     const store = get();
@@ -66,6 +69,7 @@ export const useStudentStore = create<StudentStore>()(
       return {
         students: [],
         fullRoster: [],
+        studentSummaries: new Map(),
         isLoading: true,
         scannedStudent: null,
         recentScans: [],
@@ -77,6 +81,8 @@ export const useStudentStore = create<StudentStore>()(
         roleFilter: 'all',
         selectedDate: undefined,
         fakeDate: null,
+        // Local cache for pending manual attendance changes (studentId -> { status, checkInTime })
+        pendingAttendanceChanges: {},
         
         actions: {
           fetchAndSetStudents,
@@ -210,17 +216,32 @@ export const useStudentStore = create<StudentStore>()(
           },
           updateBulkAttendance: async (date, changes) => {
             const dateString = format(date, 'yyyy-MM-dd');
-            // This operation will be server-centric. We just need to save the changes.
+            // changes may map studentId -> AttendanceStatus OR -> { status, checkInTime }
             const studentsToUpdate = await getFilteredStudentsAction({ date: dateString });
             const updatedStudents = studentsToUpdate.map(student => {
-              if (changes[student.id]) {
-                const newStatus = changes[student.id];
+              const change = changes[student.id];
+              if (change) {
                 const history = [...student.attendanceHistory];
                 const recordIndex = history.findIndex(h => h.date === dateString);
+                // Normalize incoming change
+                let newStatus: any = null;
+                let checkInTime: string | undefined = undefined;
+                if (typeof change === 'string') {
+                  newStatus = change;
+                } else if (typeof change === 'object' && change !== null) {
+                  newStatus = (change as any).status;
+                  checkInTime = (change as any).checkInTime;
+                }
+
                 if (recordIndex !== -1) {
                   history[recordIndex] = { ...history[recordIndex], status: newStatus };
+                  if (checkInTime !== undefined) {
+                    history[recordIndex].checkInTime = checkInTime;
+                  }
                 } else {
-                  history.unshift({ date: dateString, status: newStatus });
+                  const newRecord: any = { date: dateString, status: newStatus };
+                  if (checkInTime !== undefined) newRecord.checkInTime = checkInTime;
+                  history.unshift(newRecord);
                 }
                 history.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 return { ...student, attendanceHistory: history };
@@ -230,6 +251,45 @@ export const useStudentStore = create<StudentStore>()(
 
             await saveAttendanceAction(updatedStudents);
             get().actions.fetchAndSetStudents(); // Refetch to show updated data
+          },
+          // Manage a local cache of pending attendance changes so the UI can batch them
+          addPendingAttendanceChange: (studentId: number, change: any) => {
+            set(produce((state: StudentStore) => {
+              state.pendingAttendanceChanges = {
+                ...(state.pendingAttendanceChanges || {}),
+                [studentId]: {
+                  ...(state.pendingAttendanceChanges?.[studentId] || {}),
+                  ...change,
+                }
+              };
+            }));
+          },
+          clearPendingAttendanceChanges: () => {
+            set({ pendingAttendanceChanges: {} });
+          },
+          // Clear UI filters (search + grade/class/role/status) and reset selected date to today (or fakeDate if set)
+          clearFilters: () => {
+            const fake = get().fakeDate;
+            const dateToSet = fake ? new Date(fake) : new Date();
+            set({ searchQuery: '', gradeFilter: 'all', classFilter: 'all', roleFilter: 'all', statusFilter: null, selectedDate: dateToSet });
+          },
+          // Reset filters and refetch students for default view (also reset selected date)
+          resetToDefault: async () => {
+            const fake = get().fakeDate;
+            const dateToSet = fake ? new Date(fake) : new Date();
+            set({ searchQuery: '', gradeFilter: 'all', classFilter: 'all', roleFilter: 'all', statusFilter: null, selectedDate: dateToSet });
+            await fetchAndSetStudents();
+          },
+          flushPendingAttendanceChanges: async (date) => {
+            const pending = get().pendingAttendanceChanges || {};
+            if (!date || Object.keys(pending).length === 0) return;
+            try {
+              await get().actions.updateBulkAttendance(date, pending);
+              set({ pendingAttendanceChanges: {} });
+            } catch (err) {
+              console.error("Failed to flush pending attendance changes:", err);
+              throw err;
+            }
           },
           resetDailyData: async () => {
             const now = await get().actions.getCurrentAppTime();
@@ -249,6 +309,13 @@ export const useStudentStore = create<StudentStore>()(
           deleteAllStudentData: async () => {
             await deleteAllStudentDataAction();
             get().actions.fetchAndSetStudents();
+          },
+          updateStudentSummaries: (summaries: { studentId: number; summary: any }[]) => {
+            set(produce((state) => {
+              summaries.forEach(({ studentId, summary }) => {
+                state.studentSummaries.set(studentId, summary);
+              });
+            }));
           }
         },
       }

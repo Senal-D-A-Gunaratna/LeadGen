@@ -101,8 +101,8 @@ function TimeFreeze() {
 
         actions.setFakeDate(newFakeDate);
         toast({
-            title: "Time Frozen",
-            description: `App time is now set to ${format(newFakeDate, "PPP, p")}.`,
+          title: "Time Frozen",
+          description: `App time is now set to ${format(newFakeDate, "PPP, HH:mm")}.`,
         });
     };
     

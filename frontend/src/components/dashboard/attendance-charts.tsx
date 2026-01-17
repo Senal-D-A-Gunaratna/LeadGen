@@ -2,6 +2,7 @@
 "use client";
 
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Pie, PieChart, Cell } from "recharts";
+import { motion } from "framer-motion";
 import {
   Card,
   CardContent,
@@ -10,7 +11,8 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { useStudentStore } from "@/hooks/use-student-store";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { Skeleton } from "../ui/skeleton";
 
 const COLORS = {
@@ -22,6 +24,36 @@ const COLORS = {
 export function AttendanceCharts() {
   const { students, fullRoster } = useStudentStore(state => ({ students: state.students, fullRoster: state.fullRoster }));
   const [isClient, setIsClient] = useState(false);
+
+  const [animateKey, setAnimateKey] = useState(0);
+  const [animateNow, setAnimateNow] = useState(false);
+
+  const activeTab = useUIStateStore(state => state.activeTab);
+  const timerRef = useRef<number | null>(null);
+
+  const triggerAnimation = () => {
+    setAnimateKey((k) => k + 1);
+    setAnimateNow(true);
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setAnimateNow(false), 900);
+  };
+
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") triggerAnimation();
+    };
+    document.addEventListener("visibilitychange", handler);
+    if (typeof document !== "undefined" && document.visibilityState === "visible") triggerAnimation();
+    return () => {
+      document.removeEventListener("visibilitychange", handler);
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "dashboard") triggerAnimation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     setIsClient(true);
@@ -51,7 +83,7 @@ export function AttendanceCharts() {
         if (total === 0) return null; 
         
         const present = gradeStudents.filter(s => s.status === 'on time' || s.status === 'late').length;
-        const percentage = Math.round((present / total) * 100);
+        const percentage = total > 0 ? ((present / total) * 100) : 0;
         
         return {
           name: `${grade}`, // e.g., "6", "7"
@@ -65,7 +97,7 @@ export function AttendanceCharts() {
       .sort((a, b) => a.grade - b.grade);
 
     const presentStudents = onTime + late;
-    const percentage = totalStudents > 0 ? Math.round((presentStudents / totalStudents) * 100) : 0;
+    const percentage = totalStudents > 0 ? ((presentStudents / totalStudents) * 100) : 0;
 
     return { overallAttendanceData: overallData, gradeWiseData: gradeData, totalPercentage: percentage };
   }, [fullRoster]);
@@ -78,10 +110,11 @@ export function AttendanceCharts() {
         <CardDescription>Attendance trends and breakdowns</CardDescription>
       </CardHeader>
       <CardContent className="grid grid-cols-2 gap-4">
-        <div className="relative h-48">
+        <motion.div layout className="relative h-48" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: "easeOut" }}>
            <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
+                key={`pie-${animateKey}`}
                 data={overallAttendanceData}
                 cx="50%"
                 cy="50%"
@@ -90,6 +123,7 @@ export function AttendanceCharts() {
                 innerRadius={60}
                 dataKey="value"
                 stroke="none"
+                isAnimationActive={animateNow}
                 animationDuration={800}
                 animationBegin={0}
               >
@@ -102,17 +136,17 @@ export function AttendanceCharts() {
            <div className="absolute inset-0 flex flex-col items-center justify-center">
             {isClient ? (
               <>
-                <span className="text-3xl font-bold font-headline">{totalPercentage}%</span>
-                <span className="text-sm text-muted-foreground">Present Today</span>
+                <motion.span initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 22 }} className="text-3xl font-bold font-headline">{(Math.round(totalPercentage * 10) / 10).toFixed(1)}%</motion.span>
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.12 }} className="text-sm text-muted-foreground">Present Today</motion.span>
               </>
             ) : (
               <Skeleton className="h-12 w-20" />
             )}
           </div>
-        </div>
-        <div className="h-48">
+        </motion.div>
+        <motion.div layout className="h-48" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45, ease: "easeOut", delay: 0.05 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={gradeWiseData} layout="vertical" margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+              <BarChart key={`bar-${animateKey}`} data={gradeWiseData} layout="vertical" margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
               <YAxis
                 type="category"
                 dataKey="name"
@@ -128,13 +162,13 @@ export function AttendanceCharts() {
                 fontSize={12}
                 tickLine={false}
                 axisLine={false}
-                tickFormatter={(value) => `${value}%`}
+                tickFormatter={(value) => `${(Math.round(value * 10) / 10).toFixed(1)}%`}
                 domain={[0, 100]}
               />
-              <Bar dataKey="percentage" layout="vertical" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} animationDuration={800} animationBegin={0} />
+              <Bar dataKey="percentage" layout="vertical" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
             </BarChart>
           </ResponsiveContainer>
-        </div>
+        </motion.div>
       </CardContent>
     </Card>
   );

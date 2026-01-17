@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -96,7 +96,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
   });
 
   // Keep default values in sync when `nextFingerprintIds` changes
-  useState(() => {
+  useEffect(() => {
     form.reset({
       ...form.getValues(),
       fingerprint1: nextFingerprintIds[0],
@@ -104,7 +104,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
       fingerprint3: nextFingerprintIds[2],
       fingerprint4: nextFingerprintIds[3],
     })
-  }, [nextFingerprintIds, form]);
+  }, [nextFingerprintIds]);
 
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
@@ -121,15 +121,13 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
           },
           specialRoles: values.specialRoles,
           notes: values.notes,
+          fingerprints: [
+            values.fingerprint1 || '',
+            values.fingerprint2 || '',
+            values.fingerprint3 || '',
+            values.fingerprint4 || ''
+          ],
         }
-        
-        // Use the fingerprint values from the form, which are editable for Devs
-        studentData.fingerprints = [
-          values.fingerprint1 || '',
-          values.fingerprint2 || '',
-          values.fingerprint3 || '',
-          values.fingerprint4 || ''
-        ];
 
         await actions.addStudent(studentData);
         toast({

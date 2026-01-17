@@ -245,6 +245,65 @@ def init_database():
             UNIQUE(student_id, date)
         )
     ''')
+    # Ensure `check_in_time` column exists; if not, add it and populate existing rows.
+    # Make migration resilient to busy/locked DB and run multiple retries if necessary.
+    try:
+        cursor_attendance.execute("PRAGMA table_info(attendance_records)")
+        cols = [r[1] for r in cursor_attendance.fetchall()]
+        if 'check_in_time' not in cols:
+            now_iso = datetime.now().isoformat()
+            tried = 0
+            last_err = None
+            import time as _time
+            # Increase attempts to reduce races on busy systems
+            max_attempts = 12
+            while tried < max_attempts:
+                try:
+                    # Ensure PRAGMA settings for this connection
+                    try:
+                        conn_attendance.execute('PRAGMA journal_mode=WAL')
+                        conn_attendance.execute('PRAGMA busy_timeout=20000')
+                    except Exception:
+                        pass
+
+                    cursor_attendance.execute("ALTER TABLE attendance_records ADD COLUMN check_in_time TEXT")
+                    # Populate existing rows with NULL (or timestamp) where appropriate
+                    try:
+                        cursor_attendance.execute("UPDATE attendance_records SET check_in_time = ? WHERE check_in_time IS NULL", (now_iso,))
+                    except Exception:
+                        pass
+                    conn_attendance.commit()
+                    # Re-check to ensure column now present
+                    cursor_attendance.execute("PRAGMA table_info(attendance_records)")
+                    cols_after = [r[1] for r in cursor_attendance.fetchall()]
+                    if 'check_in_time' in cols_after:
+                        break
+                    # If not present despite successful ALTER, try again
+                    tried += 1
+                    _time.sleep(0.1 * tried)
+                except sqlite3.OperationalError as e:
+                    last_err = e
+                    # If DB is locked or busy, wait a bit and retry
+                    errstr = str(e).lower()
+                    if 'locked' in errstr or 'busy' in errstr:
+                        _time.sleep(0.15 * (tried + 1))
+                        tried += 1
+                        continue
+                    # If column already exists due to race, treat as success
+                    if 'duplicate column name' in errstr or 'already exists' in errstr:
+                        break
+                    # Other operational errors - stop retrying
+                    break
+            else:
+                # Exhausted retries; log last error but continue (do not crash server)
+                try:
+                    import sys
+                    print('Warning: failed to add check_in_time column after retries:', last_err, file=sys.stderr)
+                except Exception:
+                    pass
+    except Exception:
+        # If PRAGMA fails, skip migration but keep DB usable
+        pass
     # Legacy JSON-based backups table (kept for compatibility but not used)
     cursor_attendance.execute('''
         CREATE TABLE IF NOT EXISTS backups (

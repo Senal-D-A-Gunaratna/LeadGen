@@ -3,6 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { format } from "date-fns";
+import { getFilteredStudentsAction } from '@/app/actions';
 import {
   Card,
   CardContent,
@@ -30,15 +31,15 @@ import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { cn } from "@/lib/utils";
-import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw } from "lucide-react";
+import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown } from "lucide-react";
 import { RolePasswordDialog } from "../dashboard/role-password-dialog";
 import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 
-type PendingChanges = Record<number, AttendanceStatus>;
+type PendingChanges = Record<number, { status: AttendanceStatus | 'null'; checkInTime?: string | null }>;
 const GRADES = ["6", "7", "8", "9", "10", "11", "12", "13"];
 
 export function ManualAttendanceTab() {
-  const { students, actions, fakeDate, searchQuery, gradeFilter, classFilter, roleFilter, isLoading } = useStudentStore(
+  const { students, actions, fakeDate, searchQuery, gradeFilter, classFilter, roleFilter, isLoading, pendingAttendanceChanges } = useStudentStore(
     state => ({
       students: state.students,
       actions: state.actions,
@@ -48,6 +49,7 @@ export function ManualAttendanceTab() {
       classFilter: state.classFilter,
       roleFilter: state.roleFilter,
       isLoading: state.isLoading,
+      pendingAttendanceChanges: state.pendingAttendanceChanges,
     })
   );
   const { user } = useAuthStore();
@@ -56,9 +58,101 @@ export function ManualAttendanceTab() {
   const { setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, selectStudent, setSelectedDate, fetchAndSetStudents } = actions;
   
   const selectedDate = useStudentStore(state => state.selectedDate);
-  const [pendingChanges, setPendingChanges] = useState<PendingChanges>({});
+  // pendingAttendanceChanges now lives in the central store so multiple components
+  // can modify attendance and it will be flushed in one go.
   const [isSaving, setIsSaving] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  // Small combo control: editable input + popover two-column picker (hours/minutes)
+  function TimeCombo({ studentId, value, onChange }: { studentId: number; value: string; onChange: (v: string | null) => void }) {
+    const [open, setOpen] = useState(false);
+    const [selectedHour, setSelectedHour] = useState<string | null>(null);
+
+    const HOURS = Array.from({ length: 24 }).map((_, i) => String(i).padStart(2, '0'));
+    const MINUTES = Array.from({ length: 60 }).map((_, i) => String(i).padStart(2, '0'));
+
+    const handleHourClick = (h: string) => {
+      setSelectedHour(h);
+    };
+
+    const handleMinuteClick = (m: string) => {
+      const hh = selectedHour ?? (value ? value.split(':')[0] : '07');
+      const newVal = `${hh}:${m}`;
+      setSelectedHour(null);
+      setOpen(false);
+      onChange(newVal);
+    };
+
+    const handleInputChange = (e: any) => {
+      onChange(e.target.value || null);
+    };
+
+    const handleInputBlur = (e: any) => {
+      const v = e.target.value || '';
+      if (!v) {
+        onChange(null);
+        return;
+      }
+      // Allow HH:mm only
+      if (!/^\d{2}:\d{2}$/.test(v)) {
+        onChange(null);
+        return;
+      }
+      onChange(v);
+    };
+
+    return (
+      <div className="relative">
+        <div className="glassmorphic rounded-md flex items-center w-[140px] pr-1">
+          <input
+            value={value || ''}
+            onChange={handleInputChange}
+            onBlur={handleInputBlur}
+            placeholder="--:--"
+            aria-label={`Check-in time input`}
+            className="bg-transparent border-none outline-none px-3 py-2 w-full"
+          />
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <button
+                aria-label="Open time picker"
+                className="h-8 w-8 flex items-center justify-center text-muted-foreground"
+                style={{ padding: 0 }}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="p-2 w-[260px]">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="max-h-56 overflow-y-auto">
+                {HOURS.map(h => (
+                  <button
+                    key={h}
+                    className={`w-full text-left p-1 ${selectedHour === h ? 'bg-primary text-white' : 'hover:bg-muted/30'}`}
+                    onClick={() => handleHourClick(h)}
+                  >
+                    {h}
+                  </button>
+                ))}
+              </div>
+              <div className="max-h-56 overflow-y-auto">
+                {MINUTES.map(m => (
+                  <button
+                    key={m}
+                    className="w-full text-left p-1 hover:bg-muted/30"
+                    onClick={() => handleMinuteClick(m)}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     setSelectedDate(fakeDate ? new Date(fakeDate) : new Date());
@@ -66,52 +160,112 @@ export function ManualAttendanceTab() {
   
   useEffect(() => {
     // Clear pending changes when the date changes in the store
-    setPendingChanges({});
+    actions.clearPendingAttendanceChanges && actions.clearPendingAttendanceChanges();
   }, [selectedDate]);
+
+  // Global handler clears filters on tab change; no per-tab cleanup here.
 
   // Refetch when any filter changes
   useEffect(() => {
     fetchAndSetStudents();
   }, [searchQuery, gradeFilter, classFilter, roleFilter, selectedDate, fetchAndSetStudents]);
 
+  // Keep a local copy of full student objects (with attendanceHistory) so
+  // the Manual Attendance UI can show per-student `checkInTime` values.
+  const [fullStudents, setFullStudents] = useState<Student[]>([]);
+  useEffect(() => {
+    let mounted = true;
+    const fetchFull = async () => {
+      try {
+        const dateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        const res = await getFilteredStudentsAction({ date: dateStr, searchQuery, statusFilter: null, gradeFilter, classFilter, roleFilter });
+        if (mounted) setFullStudents(res);
+      } catch (e) {
+        console.error('Failed to fetch full students for Manual Attendance', e);
+      }
+    };
+    fetchFull();
+    return () => { mounted = false; };
+  }, [selectedDate, searchQuery, gradeFilter, classFilter, roleFilter]);
+
   const availableGrades = GRADES;
 
-  const studentsWithPendingChanges = useMemo(() => {
-    return students.map(student => ({
-        ...student,
-        status: pendingChanges[student.id] || student.status,
-    }));
-  }, [students, pendingChanges]);
-  
-  const handleStatusChange = (studentId: number, newStatus: AttendanceStatus) => {
-    setPendingChanges(prev => ({
-        ...prev,
-        [studentId]: newStatus
-    }));
+  // We'll compute the display status inline to avoid changing the `Student` type
+  // (so we never pass a non-Student shaped object to `selectStudent`).
+
+  const timeToStatus = (timeStr: string | null | undefined) : AttendanceStatus => {
+    if (!timeStr) return 'absent';
+    try {
+      const [hh, mm] = timeStr.split(':').map(Number);
+      if (Number.isNaN(hh) || Number.isNaN(mm)) return 'absent';
+      const totalMinutes = hh * 60 + mm;
+      const cutoffMinutes = 7 * 60 + 15; // 07:15 -> cutoff between on time and late
+      return totalMinutes <= cutoffMinutes ? 'on time' : 'late';
+    } catch (e) {
+      return 'absent';
+    }
+  };
+
+  const handleStatusChange = (studentId: number, newStatus: AttendanceStatus | 'null') => {
+    // When user sets status directly, update the pending checkInTime accordingly
+    let impliedTime: string | null | undefined = undefined;
+    if (newStatus === 'on time') impliedTime = '07:14';
+    else if (newStatus === 'late') impliedTime = '07:16';
+    else if (newStatus === 'absent') impliedTime = null;
+
+    actions.addPendingAttendanceChange && actions.addPendingAttendanceChange(studentId, { status: newStatus, checkInTime: impliedTime });
+  };
+
+  const handleTimeChange = (studentId: number, timeValue: string | null) => {
+    // When user changes time, auto-calc status from time
+    const derivedStatus = timeToStatus(timeValue ?? null);
+    actions.addPendingAttendanceChange && actions.addPendingAttendanceChange(studentId, { status: derivedStatus, checkInTime: timeValue });
   };
 
   const handleSaveChanges = () => {
-    if (Object.keys(pendingChanges).length === 0) {
-      toast({ title: "No Changes", description: "You haven't made any attendance changes to save." });
+    const pending = pendingAttendanceChanges || {};
+    const validChanges = Object.values(pending).filter((ch: any) => ch && (ch.status !== 'null' || ch.checkInTime !== undefined));
+    if (validChanges.length === 0) {
+      toast({ title: "No Changes", description: "You haven't made any valid attendance changes to save." });
       return;
     }
     setIsAuthOpen(true);
   }
   
-  const handleAuthorizedSave = async () => {
+  const handleAuthorizedSave = async (password?: string) => {
     setIsAuthOpen(false);
     setIsSaving(true);
     try {
         if (!selectedDate) {
             throw new Error("No date selected.");
         }
-        await actions.updateBulkAttendance(selectedDate, pendingChanges);
-        addActionLog(`[${user?.role}] Manually marked attendance for ${format(selectedDate, 'PPP')}.`);
-        toast({
-            title: "Attendance Updated",
-            description: `Manual attendance changes for ${format(selectedDate, 'PPP')} have been saved.`
+        // Build a properly typed changes map from the store pending cache
+        const changesToSave: Record<number, any> = {};
+        const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null;
+        const pending = pendingAttendanceChanges || {};
+        Object.entries(pending).forEach(([k, changeObj]) => {
+          const id = Number(k);
+          if (Number.isNaN(id)) return;
+          const status = changeObj?.status;
+          if (!status || status === 'null') return;
+          if (changeObj.checkInTime && selectedDateStr) {
+            const timePart = changeObj.checkInTime;
+            const iso = `${selectedDateStr}T${timePart}:00`;
+            changesToSave[id] = { status, checkInTime: iso };
+          } else {
+            changesToSave[id] = status;
+          }
         });
-        setPendingChanges({});
+        if (Object.keys(changesToSave).length === 0) {
+          toast({ title: "No Changes", description: "No valid attendance changes to save (null statuses are not saved)." });
+          actions.clearPendingAttendanceChanges && actions.clearPendingAttendanceChanges();
+          setIsSaving(false);
+          return;
+        }
+        await actions.updateBulkAttendance(selectedDate, changesToSave);
+        addActionLog(`[${user?.role}] Manually marked attendance for ${format(selectedDate, 'PPP')}.`);
+        toast({ title: "Attendance Updated", description: `Manual attendance changes for ${format(selectedDate, 'PPP')} have been saved.` });
+        actions.clearPendingAttendanceChanges && actions.clearPendingAttendanceChanges();
     } catch(e) {
         console.error(e);
         toast({ variant: "destructive", title: "Save Failed", description: "An unexpected error occurred while saving." });
@@ -120,11 +274,11 @@ export function ManualAttendanceTab() {
     }
   }
 
-  const hasPendingChanges = Object.keys(pendingChanges).length > 0;
+  const hasPendingChanges = Object.values(pendingAttendanceChanges || {}).some((ch: any) => ch && ch.status !== 'null');
 
   return (
     <>
-      <Card className="glassmorphic glowing-border">
+      <Card className="glassmorphic glowing-border min-h-[750px]">
         <CardHeader>
           <CardTitle className="font-headline text-primary">Manual Attendance Marking</CardTitle>
           <CardDescription>
@@ -212,7 +366,7 @@ export function ManualAttendanceTab() {
             </Select>
           </div>
 
-          <div className="h-[500px] overflow-y-auto rounded-md border border-border/40">
+          <div className="max-h-[600px] overflow-y-auto pr-2">
             {isLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -221,35 +375,79 @@ export function ManualAttendanceTab() {
               <Table>
                 <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur-sm">
                   <TableRow className="hover:bg-transparent">
-                    <TableHead>Name</TableHead>
-                    <TableHead>Grade</TableHead>
-                    <TableHead>Class</TableHead>
-                    <TableHead className="text-right">Status</TableHead>
-                  </TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Grade</TableHead>
+                      <TableHead>Class</TableHead>
+                      <TableHead>Check In Time</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
+                    </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {studentsWithPendingChanges.map(student => (
-                    <TableRow key={student.id} className="border-border/40 hover:bg-muted/60">
-                      <TableCell className="font-medium cursor-pointer" onClick={() => selectStudent(student)}>{student.name}</TableCell>
-                      <TableCell>{student.grade}</TableCell>
-                      <TableCell>{student.className}</TableCell>
-                      <TableCell className="text-right">
-                        <Select 
-                          value={student.status}
-                          onValueChange={(newStatus: AttendanceStatus) => handleStatusChange(student.id, newStatus)}
-                        >
-                          <SelectTrigger className="w-[120px] glassmorphic">
-                            <SelectValue placeholder="Set status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="on time">On Time</SelectItem>
-                            <SelectItem value="late">Late</SelectItem>
-                            <SelectItem value="absent">Absent</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {students.map((student) => {
+                    const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
+                    const fullStudent = fullStudents.find(s => s.id === student.id) as Student | undefined;
+                    const record = (fullStudent?.attendanceHistory || student.attendanceHistory).find(h => h.date === selectedDateStr) as any | undefined;
+
+                    // derive existing time string (HH:mm) from record.checkInTime if present
+                    const existingTime = record && record.checkInTime ? (() => {
+                      // Support multiple formats returned from backend: ISO `YYYY-MM-DDTHH:MM:SS`,
+                      // space-separated `YYYY-MM-DD HH:MM:SS`, or plain `HH:MM(:SS)`.
+                      const raw: string = String(record.checkInTime || '');
+                      // Try to extract HH:MM via regex first
+                      const m = raw.match(/(\d{2}):(\d{2})/);
+                      if (m) return `${m[1]}:${m[2]}`;
+                      // Fallback to Date parsing
+                      try {
+                        const d = new Date(raw);
+                        if (!Number.isNaN(d.getTime())) {
+                          const hh = String(d.getHours()).padStart(2, '0');
+                          const mm = String(d.getMinutes()).padStart(2, '0');
+                          return `${hh}:${mm}`;
+                        }
+                      } catch (e) {}
+                      return '';
+                    })() : '';
+
+                    const pending = (pendingAttendanceChanges || {})[student.id];
+                    const timeValue = pending?.checkInTime !== undefined ? (pending.checkInTime ?? '') : existingTime;
+                    // Determine display status: prefer pending.status if present; otherwise derive from time (pending or existing) or fallback to record.status
+                    const displayStatus: AttendanceStatus = (pending && pending.status && pending.status !== 'null')
+                      ? pending.status as AttendanceStatus
+                      : (pending && pending.checkInTime !== undefined ? timeToStatus(pending.checkInTime) : (existingTime ? timeToStatus(existingTime) : (record ? record.status : 'absent')));
+
+                    return (
+                      <TableRow key={student.id} className="border-border/40 hover:bg-muted/60 transition-all duration-150 ease-out will-change-transform">
+                        <TableCell className="font-medium cursor-pointer" onClick={() => selectStudent(student)}>{student.name}</TableCell>
+                        <TableCell>{student.grade}</TableCell>
+                        <TableCell>{student.className}</TableCell>
+                            <TableCell>
+                              <TimeCombo
+                                studentId={student.id}
+                                value={timeValue}
+                                onChange={(val) => handleTimeChange(student.id, val)}
+                              />
+                            </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Select 
+                              value={displayStatus as unknown as string}
+                              onValueChange={(newStatus: AttendanceStatus | 'null') => handleStatusChange(student.id, newStatus)}
+                            >
+                              <SelectTrigger className="w-[120px] glassmorphic">
+                                <SelectValue placeholder="Set status" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="on time">On Time</SelectItem>
+                                <SelectItem value="late">Late</SelectItem>
+                                <SelectItem value="absent">Absent</SelectItem>
+                                <SelectItem value="null">Null</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -257,7 +455,7 @@ export function ManualAttendanceTab() {
         </CardContent>
         <CardFooter className="justify-end gap-2">
             {hasPendingChanges && (
-                <Button variant="ghost" onClick={() => setPendingChanges({})} disabled={isSaving}>
+              <Button variant="ghost" onClick={() => actions.clearPendingAttendanceChanges && actions.clearPendingAttendanceChanges()} disabled={isSaving}>
                    <RotateCcw className="mr-2 h-4 w-4" />
                    Discard Changes
                 </Button>

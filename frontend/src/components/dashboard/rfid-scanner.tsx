@@ -31,12 +31,12 @@ export function RfidScanner() {
           ) : (
             recentScans.map((student, index) => (
               <div 
-                key={`${student.id}-${student.lastScanTime}`} 
-                className={cn(
-                  "flex items-center gap-4 p-2 rounded-lg glassmorphic transition-all duration-500",
-                  index === 0 && "animate-in fade-in-0 slide-in-from-top-10"
-                )}
-              >
+                  key={`${student.id}-${student.lastScanTime}`} 
+                  className={cn(
+                    "flex items-center gap-4 p-2 rounded-lg glassmorphic transition-all duration-200",
+                    index === 0 && "animate-in fade-in-0 slide-in-from-top-8"
+                  )}
+                >
                 <div className="flex-1 text-left">
                   <p className="font-semibold">{student.name}</p>
                   {student.lastScanTime ? (

@@ -53,7 +53,7 @@ export function PasswordManagement({ onUnlockRequest }: { onUnlockRequest?: () =
   const { toast } = useToast();
   const { addActionLog } = useActionLogStore();
   const [isPending, setIsPending] = useState<Role | null>(null);
-  const [authDialog, setAuthDialog] = useState<{ isOpen: boolean; roleToChange: Role | null, newPass: string | null, authorizer: Role | null }>({ isOpen: false, roleToChange: null, newPass: null, authorizer: null });
+  const [authDialog, setAuthDialog] = useState<{ isOpen: boolean; roleToChange: Role | null, newPass: string | null, authorizer: Role | null, authorizerPassword?: string }>({ isOpen: false, roleToChange: null, newPass: null, authorizer: null });
 
   const form = useForm<PasswordFormValues>({
     resolver: zodResolver(formSchema),
@@ -94,12 +94,12 @@ export function PasswordManagement({ onUnlockRequest }: { onUnlockRequest?: () =
     setAuthDialog({ isOpen: true, roleToChange, newPass: newPassword, authorizer });
   };
 
-  const handleAuthorizedSave = async () => {
+  const handleAuthorizedSave = async (authorizerPassword?: string) => {
     if (!authDialog.roleToChange || !authDialog.newPass || !authDialog.authorizer) return;
     
     setIsPending(authDialog.roleToChange);
     try {
-      await changePasswordForRole(authDialog.roleToChange, authDialog.newPass);
+      await changePasswordForRole(authDialog.roleToChange, authDialog.newPass, authDialog.authorizer, authorizerPassword);
       addActionLog(`[${authDialog.authorizer}] Changed password for ${authDialog.roleToChange}.`);
       toast({
         title: "Password Updated",

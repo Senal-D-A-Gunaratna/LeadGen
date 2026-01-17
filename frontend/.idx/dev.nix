@@ -26,7 +26,7 @@
     workspace = {
       onCreate = {
         default.openFiles = [
-          "src/app/page.tsx"
+          "./src/app/page.tsx"
         ];
       };
     };
@@ -35,7 +35,7 @@
       enable = true;
       previews = {
         web = {
-          command = ["npm" "run" "dev" "--" "--port" "$PORT" "--hostname" "0.0.0.0"];
+          command = ["bash" "-c" "cd ../frontend && npm run dev -- --port $PORT --hostname 0.0.0.0"];
           manager = "web";
         };
       };

@@ -27,6 +27,8 @@ import { Loader2 } from "lucide-react";
 import type { Role } from "@/hooks/use-auth-store";
 import { useLogStore } from "@/hooks/use-log-store";
 import { validatePasswordAction } from "@/app/actions";
+import { wsClient } from "@/lib/websocket-client";
+import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
   password: z.string().min(1, { message: "Password is required." }),
@@ -36,7 +38,7 @@ interface RolePasswordDialogProps {
   role: Role;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: (password?: string) => boolean | void;
+  onSuccess: (password: string) => boolean | Promise<boolean> | void | Promise<void>;
   title?: string;
   description?: string;
   isUnlockAttempt?: boolean;
@@ -45,6 +47,7 @@ interface RolePasswordDialogProps {
 export function RolePasswordDialog({ role, open, onOpenChange, onSuccess, title, description, isUnlockAttempt = false }: RolePasswordDialogProps) {
   const [isPending, setIsPending] = useState(false);
   const { addLog } = useLogStore();
+  const { toast } = useToast();
   const roleName = role.charAt(0).toUpperCase() + role.slice(1);
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -66,13 +69,16 @@ export function RolePasswordDialog({ role, open, onOpenChange, onSuccess, title,
     setIsPending(true);
     
     // For unlock attempts, we pass the password up to the parent component.
-    if(isUnlockAttempt) {
-      const shouldClose = onSuccess(values.password);
-      if(!shouldClose) {
+    if (isUnlockAttempt) {
+      const shouldClose = await onSuccess(values.password);
+      if (!shouldClose) {
         form.setError("password", {
           type: "manual",
           message: "Incorrect password. Please try again.",
         });
+      } else {
+        // Close dialog after successful unlock
+        onOpenChange(false);
       }
       setIsPending(false);
       return;
@@ -82,13 +88,34 @@ export function RolePasswordDialog({ role, open, onOpenChange, onSuccess, title,
     const isValid = await validatePasswordAction(role, values.password);
     
     if (isValid) {
-      onSuccess();
+      // Authenticate WebSocket session
+      try {
+        const wsAuthenticated = await wsClient.authenticate(role, values.password);
+        if (wsAuthenticated) {
+          try {
+            onSuccess(values.password);
+          } finally {
+            // Close dialog after successful authentication
+            onOpenChange(false);
+          }
+        } else {
+          addLog(`WebSocket authentication failed for role: ${role}`);
+          toast({ variant: 'destructive', title: 'Authentication Failed', description: 'WebSocket authentication failed.' });
+          // Close dialog even on failure per requested behavior
+          onOpenChange(false);
+        }
+      } catch (error) {
+        console.error('WebSocket authentication error:', error);
+        addLog(`WebSocket authentication error for role: ${role}`);
+        form.setError("password", {
+          type: "manual",
+          message: "Connection error. Please try again.",
+        });
+      }
     } else {
       addLog(`Failed login attempt for role: ${role}`);
-      form.setError("password", {
-        type: "manual",
-        message: "Incorrect password. Please try again.",
-      });
+      toast({ variant: 'destructive', title: 'Authentication Failed', description: 'Password incorrect.' });
+      onOpenChange(false);
     }
     setIsPending(false);
   }

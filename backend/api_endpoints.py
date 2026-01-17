@@ -2,6 +2,8 @@
 Additional API endpoints for backups, CSV/PDF exports, and logs.
 """
 from flask import request, jsonify, send_file
+import os
+from flask_socketio import emit
 from database import get_db_connection, DatabaseContext, create_db_file_backup
 from datetime import datetime, date
 import json
@@ -11,7 +13,7 @@ import sqlite3
 import time
 from pathlib import Path
 from typing import Dict, Optional
-from reportlab.lib.pagesizes import letter, landscape
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
@@ -52,107 +54,58 @@ def register_endpoints(app, socketio, helpers):
     Args:
         app: Flask app instance
         socketio: SocketIO instance
-        helpers: Dict with helper functions (get_all_students_with_history, get_student_by_id, get_attendance_summary, broadcast_data_change)
+        helpers: Dict with helper functions (get_all_students_with_history, get_student_by_id, get_attendance_summary, broadcast_data_change, broadcast_summary_update, emit)
     """
     get_all_students_with_history = helpers['get_all_students_with_history']
     get_student_by_id = helpers['get_student_by_id']
     get_attendance_summary = helpers['get_attendance_summary']
     broadcast_data_change = helpers['broadcast_data_change']
-    
-    # ==================== BACKUP ENDPOINTS ====================
-    
-    @app.route('/api/create-backup', methods=['POST'])
-    def create_backup():
-        """Create a backup of student or attendance data."""
-        data = request.json
-        data_type = data.get('dataType')  # 'students' or 'attendance'
-        timestamp = data.get('timestamp')
-        is_frozen = data.get('isFrozen', False)
-        
-        if data_type == 'students':
-            # Create relational backup of current students table
-            conn_students = get_db_connection('students')
-            cursor_students = conn_students.cursor()
-            filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
-            
-            # Create backup set
-            cursor_students.execute('''
-                INSERT INTO student_backup_sets (filename, is_frozen)
-                VALUES (?, ?)
-            ''', (filename, 1 if is_frozen else 0))
-            backup_id = cursor_students.lastrowid
-            
-            # Copy all students into backup items
-            cursor_students.execute('''
-                SELECT id, name, grade, className, role, email, phone,
-                       fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                       specialRoles, notes
-                FROM students
-            ''')
-            for row in cursor_students.fetchall():
-                cursor_students.execute('''
-                    INSERT INTO student_backup_items (
-                        backup_id, student_id, name, grade, className, role,
-                        email, phone,
-                        fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                        specialRoles, notes
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    backup_id,
-                    row['id'], row['name'], row['grade'], row['className'], row['role'],
-                    row['email'], row['phone'],
-                    row['fingerprint1'], row['fingerprint2'], row['fingerprint3'], row['fingerprint4'],
-                    row['specialRoles'], row['notes']
-                ))
-            
-            conn_students.commit()
-            conn_students.close()
-        else:  # attendance
-            conn_attendance = get_db_connection('attendance')
-            cursor_attendance = conn_attendance.cursor()
-            
-            filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
-            # Create backup set
-            cursor_attendance.execute('''
-                INSERT INTO attendance_backup_sets (filename, is_frozen)
-                VALUES (?, ?)
-            ''', (filename, 1 if is_frozen else 0))
-            backup_id = cursor_attendance.lastrowid
-            
-            # Copy all attendance records into backup items
-            cursor_attendance.execute('''
-                SELECT student_id, date, status FROM attendance_records
-                ORDER BY student_id, date DESC
-            ''')
-            for record in cursor_attendance.fetchall():
-                cursor_attendance.execute('''
-                    INSERT INTO attendance_backup_items (backup_id, student_id, date, status)
-                    VALUES (?, ?, ?, ?)
-                ''', (backup_id, record['student_id'], record['date'], record['status']))
-            
-            conn_attendance.commit()
-            conn_attendance.close()
-        
-        # Also create a filesystem-level .db backup for the relevant database
-        try:
-            create_db_file_backup(data_type, timestamp)
-        except Exception:
-            # Do not fail the API if file backup fails; logical backup already succeeded
-            pass
+    broadcast_summary_update = helpers['broadcast_summary_update']
+    emit = helpers['emit']
+    authenticated_sessions = helpers['authenticated_sessions']
+    # Allow forcing insecure HTTP for development (set to '1' to bypass HTTPS checks)
+    FORCE_ALLOW_INSECURE_HTTP = os.environ.get('FORCE_ALLOW_INSECURE_HTTP') == '1'
+    # Helper to determine whether the incoming request is from a local/LAN address
+    def _get_forwarded_ip():
+        xff = request.headers.get('X-Forwarded-For', '')
+        if xff:
+            # may contain a comma-separated list
+            return xff.split(',')[0].strip()
+        return request.remote_addr or ''
 
-        filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
-        
-        return jsonify({'filename': filename})
+    def _is_local_request():
+        try:
+            host_no_port = (request.host or '').split(':')[0].lower()
+            remote = _get_forwarded_ip()
+            if host_no_port.startswith('127.') or 'localhost' in host_no_port:
+                return True
+            if remote in ('127.0.0.1', '::1'):
+                return True
+            # Private IPv4 ranges
+            if remote.startswith('192.168.') or remote.startswith('10.'):
+                return True
+            if remote.startswith('172.'):
+                parts = remote.split('.')
+                if len(parts) > 1:
+                    try:
+                        second = int(parts[1])
+                        if 16 <= second <= 31:
+                            return True
+                    except Exception:
+                        pass
+            return False
+        except Exception:
+            return False
     
-    @app.route('/api/list-backups', methods=['GET'])
-    def list_backups():
-        """
-        List all available backups by reading the server backup directories.
+    # ==================== WEBSOCKET HANDLERS ====================
+    
+    @socketio.on('list_backups')
+    def handle_list_backups():
+        """List all available backups via WebSocket."""
+        if request.sid not in authenticated_sessions:  # type: ignore
+            emit('list_backups_response', {'success': False, 'message': 'Not authenticated'})
+            return
         
-        This makes the filesystem (the actual .db backup files) the single
-        source of truth instead of any cached data on the frontend.
-        """
         backups_root = Path(__file__).parent / 'backups'
         students_dir = backups_root / 'students'
         attendance_dir = backups_root / 'attendance'
@@ -169,236 +122,444 @@ def register_endpoints(app, socketio, helpers):
             reverse=True,
         )
 
-        return jsonify({'students': student_backups, 'attendance': attendance_backups})
-    
-    @app.route('/api/restore-backup', methods=['POST'])
-    def restore_backup():
-        """Restore a backup."""
-        data = request.json
+        emit('list_backups_response', {'success': True, 'students': student_backups, 'attendance': attendance_backups})
+
+    @socketio.on('restore_backup')
+    def handle_restore_backup(data):
+        """Restore a backup via WebSocket."""
+        if request.sid not in authenticated_sessions:  # type: ignore
+            emit('restore_backup_response', {'success': False, 'message': 'Not authenticated'})
+            return
+        
         data_type = data.get('dataType')
         filename = data.get('filename')
         
+        if not data_type or not filename:
+            emit('restore_backup_response', {'success': False, 'message': 'Missing dataType or filename'})
+            return
+        
+        backups_root = Path(__file__).parent / 'backups'
+        
         if data_type == 'students':
-            # Restore students from relational backup tables
-            conn_students = get_db_connection('students')
-            cursor_students = conn_students.cursor()
-            cursor_students.execute('SELECT id FROM student_backup_sets WHERE filename = ?', (filename,))
-            row = cursor_students.fetchone()
-            if not row:
-                conn_students.close()
-                return jsonify({'error': 'Backup not found'}), 404
-            backup_id = row['id']
+            file_path = backups_root / 'students' / filename
+            if not file_path.exists():
+                emit('restore_backup_response', {'success': False, 'message': 'Backup file not found'})
+                return
+
+            # Replace the main students database file with the backup
+            main_db_path = Path(__file__).parent / 'data' / 'students.db'
+            import shutil
+            shutil.copy2(file_path, main_db_path)
             
-            # Load backup items
-            cursor_students.execute('''
-                SELECT student_id, name, grade, className, role, email, phone,
-                       fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                       specialRoles, notes
-                FROM student_backup_items
-                WHERE backup_id = ?
-            ''', (backup_id,))
-            backup_rows = cursor_students.fetchall()
-            
-            # Clear current students
-            cursor_students.execute('DELETE FROM students')
-            cursor_students.execute('DELETE FROM student_fingerprints_id')
-            
-            # Re-insert from backup
-            for student in backup_rows:
-                fingerprints = [
-                    student['fingerprint1'],
-                    student['fingerprint2'],
-                    student['fingerprint3'],
-                    student['fingerprint4']
-                ]
-                cursor_students.execute('''
-                    INSERT INTO students (id, name, grade, className, role, email, phone,
-                                        fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                                        specialRoles, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    student['student_id'],
-                    student['name'],
-                    student['grade'],
-                    student['className'],
-                    student['role'],
-                    student['email'],
-                    student['phone'],
-                    fingerprints[0] or '',
-                    fingerprints[1] or '',
-                    fingerprints[2] or '',
-                    fingerprints[3] or '',
-                    student['specialRoles'],
-                    student['notes']
-                ))
-                # Also restore normalized fingerprints
-                for position, fp in enumerate(fingerprints, start=1):
-                    if fp:
-                        cursor_students.execute('''
-                            INSERT OR IGNORE INTO student_fingerprints_id (student_id, fingerprint, position)
-                            VALUES (?, ?, ?)
-                        ''', (student['student_id'], fp, position))
-            
-            conn_students.commit()
-            conn_students.close()
-        else:
-            # Restore attendance from relational backup tables
-            conn_attendance = get_db_connection('attendance')
-            cursor_attendance = conn_attendance.cursor()
-            cursor_attendance.execute('SELECT id FROM attendance_backup_sets WHERE filename = ?', (filename,))
-            row = cursor_attendance.fetchone()
-            if not row:
-                conn_attendance.close()
-                return jsonify({'error': 'Backup not found'}), 404
-            backup_id = row['id']
-            
-            # Load backup items
-            cursor_attendance.execute('''
-                SELECT student_id, date, status
-                FROM attendance_backup_items
-                WHERE backup_id = ?
-            ''', (backup_id,))
-            records = cursor_attendance.fetchall()
-            
-            # Clear current attendance
-            cursor_attendance.execute('DELETE FROM attendance_records')
-            
-            # Re-insert from backup
-            for record in records:
-                cursor_attendance.execute('''
-                    INSERT OR REPLACE INTO attendance_records (student_id, date, status)
-                    VALUES (?, ?, ?)
-                ''', (record['student_id'], record['date'], record['status']))
-            
-            conn_attendance.commit()
-            conn_attendance.close()
+        elif data_type == 'attendance':
+            file_path = backups_root / 'attendance' / filename
+            if not file_path.exists():
+                emit('restore_backup_response', {'success': False, 'message': 'Backup file not found'})
+                return
+
+            # Replace the main attendance database file with the backup
+            main_db_path = Path(__file__).parent / 'data' / 'attendance.db'
+            import shutil
+            shutil.copy2(file_path, main_db_path)
         
         broadcast_data_change('backup_restored')
-        return jsonify({'success': True})
+        # Notify clients and attempt to broadcast summaries. If broadcasting fails
+        # treat the restore as failed and inform the caller (do not conceal errors).
+        try:
+            broadcast_summary_update()  # Emit all summaries after restore
+        except sqlite3.OperationalError as e:
+            emit('restore_backup_response', {'success': False, 'message': 'Failed to restore backup', 'error': str(e)})
+            return
+        except Exception as e:
+            emit('restore_backup_response', {'success': False, 'message': 'Failed to restore backup', 'error': str(e)})
+            return
+
+        emit('restore_backup_response', {'success': True})
+
+    @socketio.on('get_action_logs')
+    def handle_get_action_logs():
+        """Get action logs via WebSocket."""
+        if request.sid not in authenticated_sessions:  # type: ignore
+            emit('get_action_logs_response', {'success': False, 'message': 'Not authenticated'})
+            return
+        
+        conn_logs = get_db_connection('logs')
+        cursor_logs = conn_logs.cursor()
+        cursor_logs.execute('SELECT timestamp, action FROM action_logs ORDER BY created_at DESC LIMIT 200')
+        logs = [{'timestamp': r['timestamp'], 'action': r['action']} for r in cursor_logs.fetchall()]
+        conn_logs.close()
+        emit('get_action_logs_response', {'success': True, 'logs': logs})
+
+    @socketio.on('get_student_summary')
+    def handle_get_student_summary(data):
+        """Get attendance summary for a single student via WebSocket."""
+        # Allow unauthenticated access for student details
+        
+        student_id = data.get('studentId')
+        student = get_student_by_id(student_id)
+        if not student:
+            emit('get_student_summary_response', {'success': False, 'message': 'Student not found'})
+            return
+
+        students = get_all_students_with_history()
+        summary = get_attendance_summary(student, students)
+        emit('get_student_summary_response', {'success': True, 'studentId': student_id, 'summary': summary})
+
+    @socketio.on('get_all_students_summaries')
+    def handle_get_all_students_summaries():
+        """Get attendance summaries for all students via WebSocket."""
+        # Allow unauthenticated access for dashboard stats
+        
+        students = get_all_students_with_history()
+        summaries = []
+        for student in students:
+            summary = get_attendance_summary(student, students)
+            summaries.append({
+                'studentId': student['id'],
+                'name': student['name'],
+                'grade': student['grade'],
+                'className': student['className'],
+                'summary': summary
+            })
+
+        emit('get_all_students_summaries_response', {'success': True, 'summaries': summaries})
+
+    @socketio.on('append_action_log')
+    def handle_append_action_log(data):
+        """Append an action log entry via WebSocket."""
+        if request.sid not in authenticated_sessions:  # type: ignore
+            emit('append_action_log_response', {'success': False, 'message': 'Not authenticated'})
+            return
+        
+        timestamp = data.get('timestamp')
+        action = data.get('action')
+        
+        # Validate required fields
+        if not timestamp or not action:
+            emit('append_action_log_response', {'success': False, 'message': 'Missing timestamp or action'})
+            return
+        
+        try:
+            with DatabaseContext('logs') as conn:
+                cursor = conn.cursor()
+                cursor.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (timestamp, action))
+                conn.commit()
+                emit('append_action_log_response', {'success': True})
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e).lower():
+                # Retry once after a short delay
+                time.sleep(0.1)
+                try:
+                    with DatabaseContext('logs') as conn:
+                        cursor = conn.cursor()
+                        cursor.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (timestamp, action))
+                        conn.commit()
+                        emit('append_action_log_response', {'success': True})
+                except Exception as retry_error:
+                    emit('append_action_log_response', {'success': False, 'message': f'Database busy: {str(retry_error)}'})
+            emit('append_action_log_response', {'success': False, 'message': str(e)})
+        except Exception as e:
+            emit('append_action_log_response', {'success': False, 'message': str(e)})
+
+    @socketio.on('clear_action_logs')
+    def handle_clear_action_logs(data):
+        """Clear all action logs via WebSocket."""
+        if request.sid not in authenticated_sessions:  # type: ignore
+            emit('clear_action_logs_response', {'success': False, 'message': 'Not authenticated'})
+            return
+        
+        role = data.get('role') or 'unknown'
+        
+        conn_logs = get_db_connection('logs')
+        cursor_logs = conn_logs.cursor()
+        
+        # Clear existing action logs
+        cursor_logs.execute('DELETE FROM action_logs')
+        
+        # Record the deletion itself as the first new entry
+        cursor_logs.execute('''
+            INSERT INTO action_logs (timestamp, action)
+            VALUES (?, ?)
+        ''', (datetime.now().isoformat(), f'[{role}] Cleared all action logs.'))
+        
+        conn_logs.commit()
+        conn_logs.close()
+        emit('clear_action_logs_response', {'success': True})
+
+    @socketio.on('get_auth_logs')
+    def handle_get_auth_logs():
+        """Get authentication logs via WebSocket."""
+        if request.sid not in authenticated_sessions:  # type: ignore
+            emit('get_auth_logs_response', {'success': False, 'message': 'Not authenticated'})
+            return
+        
+        conn_logs = get_db_connection('logs')
+        cursor_logs = conn_logs.cursor()
+        cursor_logs.execute('SELECT timestamp, message FROM auth_logs ORDER BY created_at DESC LIMIT 200')
+        logs = [{'timestamp': r['timestamp'], 'message': r['message']} for r in cursor_logs.fetchall()]
+        conn_logs.close()
+        emit('get_auth_logs_response', {'success': True, 'logs': logs})
+
+    # ==================== BACKUP ENDPOINTS ====================
+    
+    @app.route('/api/create-backup', methods=['POST'])
+    def create_backup():
+        """Create a backup of student or attendance data."""
+        # SECURITY: Prefer HTTPS for backups, but allow on localhost/LAN or when
+        # ALLOW_INSECURE_BACKUPS=1 or FORCE_ALLOW_INSECURE_HTTP is set (development convenience).
+        allow_insecure = os.environ.get('ALLOW_INSECURE_BACKUPS') == '1'
+        dev_force = os.environ.get('DEV_FORCE_FULL_ACCESS') == '1'
+        # treat DEV_FORCE_FULL_ACCESS as a developer override for backup ops
+        if dev_force:
+            allow_insecure = True
+        is_local = _is_local_request()
+        if not request.is_secure and not (allow_insecure or is_local or FORCE_ALLOW_INSECURE_HTTP):
+            # Debug information to help the client and developer diagnose why the request was rejected
+            remote = _get_forwarded_ip()
+            host_no_port = (request.host or '').split(':')[0]
+            print(f"create_backup: forbidden secure={request.is_secure} allow_insecure={allow_insecure} dev_force={dev_force} is_local={is_local} host={host_no_port} remote={remote} xff={request.headers.get('X-Forwarded-For')}")
+            return jsonify({'error': 'Backup operations must use HTTPS', 'debug': {'is_secure': request.is_secure, 'allow_insecure': allow_insecure, 'dev_force': dev_force, 'is_local': is_local, 'host': host_no_port, 'remote': remote}}), 403
+
+        try:
+            data = request.get_json(force=True)
+        except Exception as e:
+            print('create_backup: invalid request body', repr(e))
+            return jsonify({'error': 'Invalid request body'}), 400
+
+        data_type = data.get('dataType')  # 'students' or 'attendance'
+        timestamp = data.get('timestamp')
+        is_frozen = data.get('isFrozen', False)
+
+        if data_type not in ('students', 'attendance'):
+            return jsonify({'error': 'Invalid dataType'}), 400
+
+        try:
+            if data_type == 'students':
+                conn_students = get_db_connection('students')
+                cursor_students = conn_students.cursor()
+                filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
+
+                # Create backup set
+                cursor_students.execute('''
+                    INSERT INTO student_backup_sets (filename, is_frozen)
+                    VALUES (?, ?)
+                ''', (filename, 1 if is_frozen else 0))
+                backup_id = cursor_students.lastrowid
+
+                # Copy all students into backup items
+                cursor_students.execute('''
+                    SELECT id, name, grade, className, role, email, phone,
+                           fingerprint1, fingerprint2, fingerprint3, fingerprint4,
+                           specialRoles, notes
+                    FROM students
+                ''')
+                for row in cursor_students.fetchall():
+                    cursor_students.execute('''
+                        INSERT INTO student_backup_items (
+                            backup_id, student_id, name, grade, className, role,
+                            email, phone,
+                            fingerprint1, fingerprint2, fingerprint3, fingerprint4,
+                            specialRoles, notes
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        backup_id,
+                        row['id'], row['name'], row['grade'], row['className'], row['role'],
+                        row['email'], row['phone'],
+                        row['fingerprint1'], row['fingerprint2'], row['fingerprint3'], row['fingerprint4'],
+                        row['specialRoles'], row['notes']
+                    ))
+
+                conn_students.commit()
+                conn_students.close()
+            else:  # attendance
+                conn_attendance = get_db_connection('attendance')
+                cursor_attendance = conn_attendance.cursor()
+
+                filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
+                # Create backup set
+                cursor_attendance.execute('''
+                    INSERT INTO attendance_backup_sets (filename, is_frozen)
+                    VALUES (?, ?)
+                ''', (filename, 1 if is_frozen else 0))
+                backup_id = cursor_attendance.lastrowid
+
+                # Copy all attendance records into backup items
+                cursor_attendance.execute('''
+                    SELECT student_id, date, status FROM attendance_records
+                    ORDER BY student_id, date DESC
+                ''')
+                for record in cursor_attendance.fetchall():
+                    cursor_attendance.execute('''
+                        INSERT INTO attendance_backup_items (backup_id, student_id, date, status)
+                        VALUES (?, ?, ?, ?)
+                    ''', (backup_id, record['student_id'], record['date'], record['status']))
+
+                conn_attendance.commit()
+                conn_attendance.close()
+
+            # Also create a filesystem-level .db backup for the relevant database
+            try:
+                create_db_file_backup(data_type, timestamp)
+            except Exception as e:
+                print('create_backup: filesystem backup failed', repr(e))
+                # Do not fail the API if file backup fails; logical backup already succeeded
+                pass
+
+            filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
+            return jsonify({'filename': filename})
+        except Exception as e:
+            print('create_backup: unexpected error', repr(e))
+            return jsonify({'error': 'Failed to create backup', 'detail': str(e)}), 500
     
     @app.route('/api/download-backup', methods=['POST'])
     def download_backup():
-        """Download a backup file."""
-        data = request.json
-        filename = data.get('filename')
-        data_type = data.get('dataType')
-        
+        """Download a backup file (SQLite DB)."""
+        # Accept authorizer headers (for authorized clients over HTTP)
+        try:
+            data = request.get_json(force=True)
+        except Exception:
+            data = {}
+
+        # Check headers for authorizer (preferred) or JSON body fallback
+        header_role = request.headers.get('X-Authorizer-Role')
+        header_pass = request.headers.get('X-Authorizer-Password')
+
+        filename = (data.get('filename') if isinstance(data, dict) else None) or request.args.get('filename')
+        data_type = (data.get('dataType') if isinstance(data, dict) else None) or request.args.get('dataType')
+
+        # Security: require filename and dataType
+        if not filename or not data_type:
+            return jsonify({'error': 'Missing filename or dataType'}), 400
+
+        # Security: prevent directory traversal
+        filename = Path(filename).name
+
+        backups_root = Path(__file__).parent / 'backups'
         if data_type == 'students':
-            # Build JSON from relational student backup tables
-            conn_students = get_db_connection('students')
-            cursor_students = conn_students.cursor()
-            cursor_students.execute('SELECT id FROM student_backup_sets WHERE filename = ?', (filename,))
-            row = cursor_students.fetchone()
-            if not row:
-                conn_students.close()
-                return jsonify({'error': 'Backup not found'}), 404
-            backup_id = row['id']
-            
-            cursor_students.execute('''
-                SELECT student_id, name, grade, className, role, email, phone,
-                       fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                       specialRoles, notes
-                FROM student_backup_items
-                WHERE backup_id = ?
-            ''', (backup_id,))
-            students = []
-            for s in cursor_students.fetchall():
-                fingerprints = [
-                    s['fingerprint1'],
-                    s['fingerprint2'],
-                    s['fingerprint3'],
-                    s['fingerprint4']
-                ]
-                students.append({
-                    'id': s['student_id'],
-                    'name': s['name'],
-                    'grade': s['grade'],
-                    'className': s['className'],
-                    'role': s['role'],
-                    'specialRoles': s['specialRoles'],
-                    'notes': s['notes'],
-                    'fingerprints': fingerprints,
-                    'contact': {
-                        'email': s['email'],
-                        'phone': s['phone']
-                    }
-                })
-            
-            conn_students.close()
-            content = json.dumps({'students': students})
+            file_path = backups_root / 'students' / filename
+        elif data_type == 'attendance':
+            file_path = backups_root / 'attendance' / filename
         else:
-            # Build JSON from relational attendance backup tables
-            conn_attendance = get_db_connection('attendance')
-            cursor_attendance = conn_attendance.cursor()
-            cursor_attendance.execute('SELECT id FROM attendance_backup_sets WHERE filename = ?', (filename,))
-            row = cursor_attendance.fetchone()
-            if not row:
-                conn_attendance.close()
-                return jsonify({'error': 'Backup not found'}), 404
-            backup_id = row['id']
-            
-            cursor_attendance.execute('''
-                SELECT student_id, date, status
-                FROM attendance_backup_items
-                WHERE backup_id = ?
-                ORDER BY student_id, date DESC
-            ''', (backup_id,))
-            attendance_data = {}
-            for r in cursor_attendance.fetchall():
-                sid = str(r['student_id'])
-                if sid not in attendance_data:
-                    attendance_data[sid] = []
-                attendance_data[sid].append({
-                    'date': r['date'],
-                    'status': r['status']
-                })
-            
-            conn_attendance.close()
-            content = json.dumps(attendance_data)
-        
-        return jsonify({'content': content})
+            return jsonify({'error': 'Invalid dataType'}), 400
+
+        if not file_path.exists():
+            return jsonify({'error': 'Backup file not found'}), 404
+
+        # Authorization: allow if local, dev flags, or valid authorizer credentials provided
+        allow_insecure = os.environ.get('ALLOW_INSECURE_BACKUPS') == '1'
+        dev_force = os.environ.get('DEV_FORCE_FULL_ACCESS') == '1'
+        if dev_force:
+            allow_insecure = True
+
+        # If headers provided, validate them
+        authorizer_valid = False
+        if header_role and header_pass:
+            try:
+                authorizer_valid = validate_password(header_role, header_pass)
+            except Exception as e:
+                print('download_backup: password validation error', repr(e))
+
+        # Also accept credentials in JSON body for backward compatibility
+        body_role = None
+        body_pass = None
+        if isinstance(data, dict):
+            body_role = data.get('authorizerRole')
+            body_pass = data.get('authorizerPassword')
+            if body_role and body_pass and not authorizer_valid:
+                try:
+                    authorizer_valid = validate_password(body_role, body_pass)
+                except Exception as e:
+                    print('download_backup: password validation error (body)', repr(e))
+
+        is_local = _is_local_request()
+        # If not secure and not allowed, reject with debug info
+        if not request.is_secure and not (allow_insecure or is_local or FORCE_ALLOW_INSECURE_HTTP or authorizer_valid):
+            remote = _get_forwarded_ip()
+            host_no_port = (request.host or '').split(':')[0]
+            print(f"download_backup: forbidden secure={request.is_secure} allow_insecure={allow_insecure} dev_force={dev_force} is_local={is_local} authorizer_valid={authorizer_valid} host={host_no_port} remote={remote} xff={request.headers.get('X-Forwarded-For')}")
+            return jsonify({'error': 'Backup operations must use HTTPS or valid authorizer headers', 'debug': {'is_secure': request.is_secure, 'allow_insecure': allow_insecure, 'dev_force': dev_force, 'is_local': is_local, 'authorizer_valid': authorizer_valid, 'host': host_no_port, 'remote': remote}}), 403
+
+        # Authorized — stream the file directly to client
+        try:
+            return send_file(
+                file_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype='application/x-sqlite3'
+            )
+        except Exception as e:
+            print('download_backup: send_file failed', repr(e))
+            return jsonify({'error': 'Failed to send backup file', 'detail': str(e)}), 500
     
     @app.route('/api/delete-backup', methods=['POST'])
     def delete_backup():
         """Delete a single backup (DB metadata and filesystem file)."""
-        data = request.json
+        # SECURITY: Prefer HTTPS for backups, but allow on localhost/LAN or when
+        # ALLOW_INSECURE_BACKUPS=1 or FORCE_ALLOW_INSECURE_HTTP is set (dev only).
+        allow_insecure = os.environ.get('ALLOW_INSECURE_BACKUPS') == '1'
+        dev_force = os.environ.get('DEV_FORCE_FULL_ACCESS') == '1'
+        if dev_force:
+            allow_insecure = True
+        is_local = _is_local_request()
+        if not request.is_secure and not (allow_insecure or is_local or FORCE_ALLOW_INSECURE_HTTP):
+            remote = _get_forwarded_ip()
+            host_no_port = (request.host or '').split(':')[0]
+            print(f"delete_backup: forbidden secure={request.is_secure} allow_insecure={allow_insecure} dev_force={dev_force} is_local={is_local} host={host_no_port} remote={remote} xff={request.headers.get('X-Forwarded-For')}")
+            return jsonify({'error': 'Backup operations must use HTTPS', 'debug': {'is_secure': request.is_secure, 'allow_insecure': allow_insecure, 'dev_force': dev_force, 'is_local': is_local, 'host': host_no_port, 'remote': remote}}), 403
+
+        try:
+            data = request.get_json(force=True)
+        except Exception as e:
+            print('delete_backup: invalid request body', repr(e))
+            return jsonify({'error': 'Invalid request body'}), 400
+
         filename = data.get('filename')
         data_type = data.get('dataType')
-        
-        if data_type == 'students':
-            conn_students = get_db_connection('students')
-            cursor_students = conn_students.cursor()
-            cursor_students.execute('SELECT id FROM student_backup_sets WHERE filename = ?', (filename,))
-            row = cursor_students.fetchone()
-            if row:
-                backup_id = row['id']
-                cursor_students.execute('DELETE FROM student_backup_items WHERE backup_id = ?', (backup_id,))
-                cursor_students.execute('DELETE FROM student_backup_sets WHERE id = ?', (backup_id,))
-                conn_students.commit()
-            conn_students.close()
-        else:
-            conn_attendance = get_db_connection('attendance')
-            cursor_attendance = conn_attendance.cursor()
-            cursor_attendance.execute('SELECT id FROM attendance_backup_sets WHERE filename = ?', (filename,))
-            row = cursor_attendance.fetchone()
-            if row:
-                backup_id = row['id']
-                cursor_attendance.execute('DELETE FROM attendance_backup_items WHERE backup_id = ?', (backup_id,))
-                cursor_attendance.execute('DELETE FROM attendance_backup_sets WHERE id = ?', (backup_id,))
-                conn_attendance.commit()
-            conn_attendance.close()
-        
-        # Also remove matching filesystem-level .db file if it exists
+
+        if not filename or not data_type:
+            return jsonify({'error': 'Missing filename or dataType'}), 400
+
         try:
-            backups_root = Path(__file__).parent / 'backups'
-            dir_name = 'students' if data_type == 'students' else 'attendance'
-            file_path = backups_root / dir_name / filename
-            if file_path.exists():
-                file_path.unlink()
-        except Exception:
-            pass
-        
-        return jsonify({'success': True})
+            if data_type == 'students':
+                conn_students = get_db_connection('students')
+                cursor_students = conn_students.cursor()
+                cursor_students.execute('SELECT id FROM student_backup_sets WHERE filename = ?', (filename,))
+                row = cursor_students.fetchone()
+                if row:
+                    backup_id = row['id']
+                    cursor_students.execute('DELETE FROM student_backup_items WHERE backup_id = ?', (backup_id,))
+                    cursor_students.execute('DELETE FROM student_backup_sets WHERE id = ?', (backup_id,))
+                    conn_students.commit()
+                conn_students.close()
+            else:
+                conn_attendance = get_db_connection('attendance')
+                cursor_attendance = conn_attendance.cursor()
+                cursor_attendance.execute('SELECT id FROM attendance_backup_sets WHERE filename = ?', (filename,))
+                row = cursor_attendance.fetchone()
+                if row:
+                    backup_id = row['id']
+                    cursor_attendance.execute('DELETE FROM attendance_backup_items WHERE backup_id = ?', (backup_id,))
+                    cursor_attendance.execute('DELETE FROM attendance_backup_sets WHERE id = ?', (backup_id,))
+                    conn_attendance.commit()
+                conn_attendance.close()
+
+            # Also remove matching filesystem-level .db file if it exists
+            try:
+                backups_root = Path(__file__).parent / 'backups'
+                dir_name = 'students' if data_type == 'students' else 'attendance'
+                file_path = backups_root / dir_name / filename
+                if file_path.exists():
+                    file_path.unlink()
+            except Exception as e:
+                print('delete_backup: filesystem unlink failed', repr(e))
+                # ignore filesystem failures
+                pass
+
+            return jsonify({'success': True})
+        except Exception as e:
+            print('delete_backup: unexpected error', repr(e))
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     @app.route('/api/delete-all-backups', methods=['POST'])
     def delete_all_backups():
@@ -408,39 +569,56 @@ def register_endpoints(app, socketio, helpers):
         The frontend is responsible for immediately creating one new safety
         backup for students and one for attendance after this call completes.
         """
-        # ---------- Delete all existing backups from metadata tables ----------
-        # Student backups
-        conn_students = get_db_connection('students')
-        cursor_students = conn_students.cursor()
-        cursor_students.execute('DELETE FROM student_backup_items')
-        cursor_students.execute('DELETE FROM student_backup_sets')
-        conn_students.commit()
-        conn_students.close()
-        
-        # Attendance backups
-        conn_attendance = get_db_connection('attendance')
-        cursor_attendance = conn_attendance.cursor()
-        cursor_attendance.execute('DELETE FROM attendance_backup_items')
-        cursor_attendance.execute('DELETE FROM attendance_backup_sets')
-        conn_attendance.commit()
-        conn_attendance.close()
-        
-        # ---------- Delete all filesystem-level .db backup files ----------
+        # SECURITY: Prefer HTTPS for backups, but allow on localhost/LAN or when
+        # ALLOW_INSECURE_BACKUPS=1 is set (development convenience).
+        allow_insecure = os.environ.get('ALLOW_INSECURE_BACKUPS') == '1'
+        dev_force = os.environ.get('DEV_FORCE_FULL_ACCESS') == '1'
+        if dev_force:
+            allow_insecure = True
+        is_local = _is_local_request()
+        if not request.is_secure and not (allow_insecure or is_local or FORCE_ALLOW_INSECURE_HTTP):
+            remote = _get_forwarded_ip()
+            host_no_port = (request.host or '').split(':')[0]
+            print(f"delete_all_backups: forbidden secure={request.is_secure} allow_insecure={allow_insecure} dev_force={dev_force} is_local={is_local} host={host_no_port} remote={remote} xff={request.headers.get('X-Forwarded-For')}")
+            return jsonify({'error': 'Backup operations must use HTTPS', 'debug': {'is_secure': request.is_secure, 'allow_insecure': allow_insecure, 'dev_force': dev_force, 'is_local': is_local, 'host': host_no_port, 'remote': remote}}), 403
         try:
-            backups_root = Path(__file__).parent / 'backups'
-            for sub in ['students', 'attendance']:
-                subdir = backups_root / sub
-                if subdir.exists():
-                    for db_file in subdir.glob('*.db'):
-                        try:
-                            db_file.unlink()
-                        except Exception:
-                            # Ignore failures on individual files
-                            pass
-        except Exception:
-            pass
-        
-        return jsonify({'success': True})
+            # ---------- Delete all existing backups from metadata tables ----------
+            # Student backups
+            conn_students = get_db_connection('students')
+            cursor_students = conn_students.cursor()
+            cursor_students.execute('DELETE FROM student_backup_items')
+            cursor_students.execute('DELETE FROM student_backup_sets')
+            conn_students.commit()
+            conn_students.close()
+
+            # Attendance backups
+            conn_attendance = get_db_connection('attendance')
+            cursor_attendance = conn_attendance.cursor()
+            cursor_attendance.execute('DELETE FROM attendance_backup_items')
+            cursor_attendance.execute('DELETE FROM attendance_backup_sets')
+            conn_attendance.commit()
+            conn_attendance.close()
+
+            # ---------- Delete all filesystem-level .db backup files ----------
+            try:
+                backups_root = Path(__file__).parent / 'backups'
+                for sub in ['students', 'attendance']:
+                    subdir = backups_root / sub
+                    if subdir.exists():
+                        for db_file in subdir.glob('*.db'):
+                            try:
+                                db_file.unlink()
+                            except Exception:
+                                # Ignore failures on individual files
+                                pass
+            except Exception as e:
+                print('delete_all_backups: filesystem cleanup error', repr(e))
+                pass
+
+            return jsonify({'success': True})
+        except Exception as e:
+            print('delete_all_backups: unexpected error', repr(e))
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     # ==================== CSV/JSON EXPORT ENDPOINTS ====================
     
@@ -455,8 +633,8 @@ def register_endpoints(app, socketio, helpers):
         # Write header
         writer.writerow([
             'ID', 'Name', 'Grade', 'Class_Name', 'Role',
-            'Phone_Number', 'Email_Adderss',
-            'Speciai_Roles', 'Notes',
+            'Phone_Number', 'Email_Address',
+            'Special_Roles', 'Notes',
             'Fingerprint_1', 'Fingerprint_2', 'Fingerprint_3', 'Fingerprint_4'
         ])
         
@@ -486,22 +664,13 @@ def register_endpoints(app, socketio, helpers):
         )
         return response
     
-    @app.route('/api/download-student-data-json', methods=['GET'])
-    def download_student_data_json():
-        """Download student data as JSON."""
-        students = get_all_students_with_history()
-        # Remove computed fields for export
-        export_students = []
-        for student in students:
-            export_student = {k: v for k, v in student.items() 
-                            if k not in ['status', 'hasScannedToday', 'attendanceHistory']}
-            export_students.append(export_student)
-        
-        return jsonify({'students': export_students})
-    
     @app.route('/api/upload-student-data-csv', methods=['POST'])
     def upload_student_data_csv():
         """Upload student data from CSV."""
+        # SECURITY: Only allow data import operations over HTTPS
+        if not request.is_secure:
+            return jsonify({'error': 'Data import operations must use HTTPS'}), 403
+        
         data = request.json
         csv_content = data.get('csvContent')
         timestamp = data.get('timestamp')
@@ -523,102 +692,6 @@ def register_endpoints(app, socketio, helpers):
             return jsonify({'success': True, 'message': 'CSV uploaded successfully'})
         except Exception as e:
             return jsonify({'success': False, 'message': str(e)}), 400
-    
-    @app.route('/api/upload-student-data-json', methods=['POST'])
-    def upload_student_data_json():
-        """Upload student data from JSON."""
-        data = request.json
-        json_content = data.get('jsonContent')
-        timestamp = data.get('timestamp')
-        is_frozen = data.get('isFrozen', False)
-        authorizer_role = data.get('authorizerRole')
-        authorizer_password = data.get('authorizerPassword')
-        
-        # Validate authorizer
-        if not validate_password(authorizer_role, authorizer_password):
-            return jsonify({'success': False, 'message': 'Unauthorized'}), 401
-        
-        try:
-            student_data = json.loads(json_content)
-            if 'students' not in student_data or not isinstance(student_data['students'], list):
-                return jsonify({'success': False, 'message': 'Invalid JSON format'}), 400
-            
-            # Create backup first
-            # ... (backup code)
-            
-            # Clear existing data
-            with DatabaseContext('students') as conn_students:
-                cursor_students = conn_students.cursor()
-                cursor_students.execute('DELETE FROM students')
-                cursor_students.execute('DELETE FROM student_fingerprints_id')
-                
-                # Import new data
-                for student in student_data['students']:
-                    fingerprints = student.get('fingerprints', ['', '', '', ''])
-                    cursor_students.execute('''
-                        INSERT INTO students (id, name, grade, className, role, email, phone,
-                                            fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                                            specialRoles, notes)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        student['id'],
-                        student['name'],
-                        student['grade'],
-                        student['className'],
-                        student.get('role'),
-                        student['contact']['email'],
-                        student['contact']['phone'],
-                        fingerprints[0] if len(fingerprints) > 0 else '',
-                        fingerprints[1] if len(fingerprints) > 1 else '',
-                        fingerprints[2] if len(fingerprints) > 2 else '',
-                        fingerprints[3] if len(fingerprints) > 3 else '',
-                        student.get('specialRoles', ''),
-                        student.get('notes', '')
-                    ))
-                    
-                    # Also write to normalized fingerprints table
-                    for position, fp in enumerate(fingerprints, start=1):
-                        if fp:
-                            cursor_students.execute('''
-                                INSERT OR IGNORE INTO student_fingerprints_id (student_id, fingerprint, position)
-                                VALUES (?, ?, ?)
-                            ''', (student['id'], fp, position))
-                conn_students.commit()
-            
-            # Also clear attendance records
-            with DatabaseContext('attendance') as conn_attendance:
-                cursor_attendance = conn_attendance.cursor()
-                cursor_attendance.execute('DELETE FROM attendance_records')
-                conn_attendance.commit()
-            
-            broadcast_data_change('students_uploaded')
-            return jsonify({'success': True, 'message': 'Student data uploaded successfully'})
-        except Exception as e:
-            return jsonify({'success': False, 'message': str(e)}), 400
-    
-    @app.route('/api/download-attendance-history-json', methods=['GET'])
-    def download_attendance_history_json():
-        """Download attendance history as JSON."""
-        conn_attendance = get_db_connection('attendance')
-        cursor_attendance = conn_attendance.cursor()
-        cursor_attendance.execute('''
-            SELECT student_id, date, status FROM attendance_records
-            ORDER BY student_id, date DESC
-        ''')
-        records = cursor_attendance.fetchall()
-        conn_attendance.close()
-        
-        attendance_data = {}
-        for record in records:
-            student_id = str(record['student_id'])
-            if student_id not in attendance_data:
-                attendance_data[student_id] = []
-            attendance_data[student_id].append({
-                'date': record['date'],
-                'status': record['status']
-            })
-        
-        return jsonify(attendance_data)
     
     @app.route('/api/download-detailed-attendance-history-csv', methods=['GET'])
     def download_detailed_attendance_history_csv():
@@ -737,7 +810,7 @@ def register_endpoints(app, socketio, helpers):
         students = get_all_students_with_history()
         
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
         elements = []
         
         styles = getSampleStyleSheet()
@@ -745,7 +818,7 @@ def register_endpoints(app, socketio, helpers):
         elements.append(Spacer(1, 12))
         
         # Create table
-        data = [['ID', 'Name', 'Grade', 'Class', 'Role', 'Phone', 'Email']]
+        data = [['ID', 'Name', 'Grade', 'Class', 'Role', 'Phone', 'Email', 'Special Roles', 'Notes']]
         for student in students:
             data.append([
                 str(student['id']),
@@ -754,19 +827,26 @@ def register_endpoints(app, socketio, helpers):
                 student['className'],
                 student.get('role', 'N/A'),
                 student['contact']['phone'],
-                student['contact']['email'] or 'N/A'
+                student['contact']['email'] or 'N/A',
+                student.get('specialRoles', ''),
+                student.get('notes', '')
             ])
         
         table = Table(data)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3B82C4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.HexColor('#3B82C4')),
+            ('LINEBELOW', (0, 1), (-1, -1), 0.5, colors.lightgrey),
+            ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
+            ('ALIGN', (1, 1), (1, -1), 'LEFT'), # Name
+            ('ALIGN', (3, 1), (3, -1), 'LEFT'), # Class
         ]))
         elements.append(table)
         
@@ -786,7 +866,7 @@ def register_endpoints(app, socketio, helpers):
         students = get_all_students_with_history()
         
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
         elements = []
         
         styles = getSampleStyleSheet()
@@ -815,14 +895,19 @@ def register_endpoints(app, socketio, helpers):
         
         table = Table(data)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#3B82C4")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.HexColor('#3B82C4')),
+            ('LINEBELOW', (0, 1), (-1, -1), 0.5, colors.lightgrey),
+            ('ALIGN', (0, 1), (-1, -1), 'CENTER'),
+            ('ALIGN', (1, 1), (1, -1), 'LEFT'), # Name
+            ('ALIGN', (3, 1), (3, -1), 'LEFT'), # Class
         ]))
         elements.append(table)
         
@@ -850,7 +935,7 @@ def register_endpoints(app, socketio, helpers):
         summary = get_attendance_summary(student, students)
         
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter)
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
         elements = []
         
         styles = getSampleStyleSheet()
@@ -874,13 +959,17 @@ def register_endpoints(app, socketio, helpers):
         
         table = Table(summary_data)
         table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3B82C4')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 14),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+            ('LINEBELOW', (0, 0), (-1, 0), 1.5, colors.HexColor('#3B82C4')),
+            ('LINEBELOW', (0, 1), (-1, -1), 0.5, colors.lightgrey),
+            ('ALIGN', (0, 1), (-1, -1), 'LEFT'),
         ]))
         elements.append(table)
         
@@ -895,16 +984,6 @@ def register_endpoints(app, socketio, helpers):
         )
     
     # ==================== LOG ENDPOINTS ====================
-    
-    @app.route('/api/get-action-logs', methods=['GET'])
-    def get_action_logs():
-        """Get action logs."""
-        conn_logs = get_db_connection('logs')
-        cursor_logs = conn_logs.cursor()
-        cursor_logs.execute('SELECT timestamp, action FROM action_logs ORDER BY created_at DESC LIMIT 200')
-        logs = [{'timestamp': r['timestamp'], 'action': r['action']} for r in cursor_logs.fetchall()]
-        conn_logs.close()
-        return jsonify(logs)
     
     @app.route('/api/append-action-log', methods=['POST'])
     def append_action_log():
@@ -939,38 +1018,6 @@ def register_endpoints(app, socketio, helpers):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
     
-    @app.route('/api/clear-action-logs', methods=['POST'])
-    def clear_action_logs():
-        """Clear all action logs and record who performed the action."""
-        data = request.json or {}
-        role = data.get('role') or 'unknown'
-        
-        conn_logs = get_db_connection('logs')
-        cursor_logs = conn_logs.cursor()
-        
-        # Clear existing action logs
-        cursor_logs.execute('DELETE FROM action_logs')
-        
-        # Record the deletion itself as the first new entry
-        cursor_logs.execute('''
-            INSERT INTO action_logs (timestamp, action)
-            VALUES (?, ?)
-        ''', (datetime.now().isoformat(), f'[{role}] Cleared all action logs.'))
-        
-        conn_logs.commit()
-        conn_logs.close()
-        return jsonify({'success': True})
-    
-    @app.route('/api/get-auth-logs', methods=['GET'])
-    def get_auth_logs():
-        """Get authentication logs."""
-        conn_logs = get_db_connection('logs')
-        cursor_logs = conn_logs.cursor()
-        cursor_logs.execute('SELECT timestamp, message FROM auth_logs ORDER BY created_at DESC LIMIT 200')
-        logs = [{'timestamp': r['timestamp'], 'message': r['message']} for r in cursor_logs.fetchall()]
-        conn_logs.close()
-        return jsonify(logs)
-    
     @app.route('/api/append-auth-log', methods=['POST'])
     def append_auth_log():
         """Append an auth log entry."""
@@ -990,28 +1037,27 @@ def register_endpoints(app, socketio, helpers):
                 return jsonify({'success': True})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
-    
+
     @app.route('/api/clear-auth-logs', methods=['POST'])
     def clear_auth_logs():
-        """Clear all auth logs and record who performed the action in action_logs."""
+        """Clear authentication logs via REST endpoint.
+
+        Expects JSON body: { role: string }
+        """
         data = request.json or {}
-        role = data.get('role') or 'unknown'
-        
-        conn_logs = get_db_connection('logs')
-        cursor_logs = conn_logs.cursor()
-        
-        # Clear existing auth logs
-        cursor_logs.execute('DELETE FROM auth_logs')
-        
-        # Record the deletion in the action log table
-        cursor_logs.execute('''
-            INSERT INTO action_logs (timestamp, action)
-            VALUES (?, ?)
-        ''', (datetime.now().isoformat(), f'[{role}] Cleared all auth logs.'))
-        
-        conn_logs.commit()
-        conn_logs.close()
-        return jsonify({'success': True})
+        role = data.get('role', 'unknown')
+
+        try:
+            conn_logs = get_db_connection('logs')
+            cursor_logs = conn_logs.cursor()
+            cursor_logs.execute('DELETE FROM auth_logs')
+            cursor_logs.execute('INSERT INTO auth_logs (timestamp, message) VALUES (?, ?)',
+                               (datetime.now().isoformat(), f'[{role}] Cleared all auth logs.'))
+            conn_logs.commit()
+            conn_logs.close()
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     # ==================== DELETE ENDPOINTS ====================
     
@@ -1025,6 +1071,7 @@ def register_endpoints(app, socketio, helpers):
         conn_attendance.close()
         
         broadcast_data_change('history_deleted')
+        broadcast_summary_update()  # Emit all summaries after history deletion
         return jsonify({'success': True})
     
     @app.route('/api/delete-all-student-data', methods=['POST'])
@@ -1043,5 +1090,5 @@ def register_endpoints(app, socketio, helpers):
         conn_attendance.close()
         
         broadcast_data_change('all_data_deleted')
+        broadcast_summary_update()  # Emit all summaries after all data deletion
         return jsonify({'success': True})
-

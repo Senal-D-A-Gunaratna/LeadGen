@@ -1,32 +1,45 @@
 /**
  * API client for Flask backend.
  * Replaces Next.js server actions with HTTP requests to Flask.
+ * Now uses WebSocket for most operations, keeping REST for file downloads/uploads.
  */
-// Get backend URL - automatically detects hostname for LAN access
-function getBackendUrl(): string {
+import { wsClient } from './websocket-client';
+
+// Get backend URL from Node.js server API endpoint
+async function getBackendUrlFromServer(): Promise<string> {
   if (typeof window === 'undefined') {
     return 'http://localhost:5000';
   }
   
-  // Use environment variable if set
-  if (process.env.NEXT_PUBLIC_BACKEND_URL) {
-    return process.env.NEXT_PUBLIC_BACKEND_URL;
+  try {
+    const response = await fetch('/api/config');
+    if (!response.ok) {
+      throw new Error(`API config request failed: ${response.status}`);
+    }
+    const data = await response.json();
+    const backendUrl = data.backendURL;
+    console.debug('Backend URL from server:', backendUrl);
+    return backendUrl;
+  } catch (error) {
+    console.error('Failed to fetch backend URL from server:', error);
+    // Fallback to localhost
+    return 'http://localhost:5000';
   }
-  
-  // Automatically detect hostname from current page URL (works for LAN access)
-  let hostname = window.location.hostname;
-  // Normalize dev host 0.0.0.0 to localhost so browsers can reach it
-  if (hostname === '0.0.0.0') {
-    hostname = 'localhost';
-  }
-  return `http://${hostname}:5000`;
 }
 
-const BACKEND_URL = getBackendUrl();
+let BACKEND_URL: string | null = null;
+
+async function ensureBackendUrl(): Promise<string> {
+  if (!BACKEND_URL) {
+    BACKEND_URL = await getBackendUrlFromServer();
+  }
+  return BACKEND_URL;
+}
 
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
+  const backendUrl = await ensureBackendUrl();
   try {
-    const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+    const response = await fetch(`${backendUrl}${endpoint}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -65,7 +78,7 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   } catch (error: any) {
     // Better error handling for network issues
     if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-      throw new Error(`Cannot connect to backend at ${BACKEND_URL}. Make sure the Flask backend is running on port 5000.`);
+      throw new Error(`Cannot connect to backend. Make sure the Flask backend is running on port 5000.`);
     }
     // Re-throw the error if it's already an Error with a message
     if (error instanceof Error) {
@@ -85,67 +98,41 @@ export async function getFilteredStudents(filters: {
   classFilter?: string | null;
   roleFilter?: string | null;
 }) {
-  return fetchAPI('/api/get-filtered-students', {
-    method: 'POST',
-    body: JSON.stringify(filters),
-  });
+  return wsClient.getFilteredStudents(filters);
 }
 
 export async function getStudentById(studentId: number) {
-  return fetchAPI(`/api/get-student-by-id/${studentId}`);
+  return wsClient.getStudentById(studentId);
 }
 
 export async function saveAttendance(students: any[]) {
-  return fetchAPI('/api/save-attendance', {
-    method: 'POST',
-    body: JSON.stringify(students),
-  });
+  return wsClient.saveAttendance(students);
 }
 
-export async function addStudent(newStudent: any) {
-  return fetchAPI('/api/add-student', {
-    method: 'POST',
-    body: JSON.stringify(newStudent),
-  });
+export async function addStudent(studentData: any) {
+  return wsClient.addStudent(studentData);
 }
 
 export async function removeStudent(studentId: number) {
-  return fetchAPI(`/api/remove-student/${studentId}`, {
-    method: 'DELETE',
-  });
+  return wsClient.removeStudent(studentId);
 }
 
-export async function updateStudent(studentId: number, updatedDetails: any) {
-  return fetchAPI(`/api/update-student/${studentId}`, {
-    method: 'PUT',
-    body: JSON.stringify(updatedDetails),
-  });
+export async function updateStudent(studentId: number, data: any) {
+  return wsClient.updateStudent(studentId, data);
 }
 
 // Authentication
 export async function validatePassword(role: string, password: string) {
-  const result = await fetchAPI('/api/validate-password', {
-    method: 'POST',
-    body: JSON.stringify({ role, password }),
-  });
-  return result.valid;
+  return wsClient.validatePassword(role, password);
 }
 
 export async function updatePasswords(passwordsToUpdate: Record<string, string>, authorizerRole: string, authorizerPassword: string) {
-  return fetchAPI('/api/update-passwords', {
-    method: 'POST',
-    body: JSON.stringify({
-      passwords: passwordsToUpdate,
-      authorizerRole,
-      authorizerPassword,
-    }),
-  });
+  return wsClient.updatePasswords(passwordsToUpdate, authorizerRole, authorizerPassword);
 }
 
-// Time
 export async function getCurrentTime() {
-  const result = await fetchAPI('/api/get-current-time');
-  return new Date(result.time);
+  const timeString = await wsClient.getCurrentTime();
+  return new Date(timeString);
 }
 
 // Backups
@@ -158,22 +145,36 @@ export async function createBackup(dataType: 'students' | 'attendance', timestam
 }
 
 export async function listBackups() {
-  return fetchAPI('/api/list-backups');
+  return wsClient.listBackups();
 }
 
 export async function restoreBackup(dataType: 'students' | 'attendance', filename: string) {
-  return fetchAPI('/api/restore-backup', {
-    method: 'POST',
-    body: JSON.stringify({ dataType, filename }),
-  });
+  return wsClient.restoreBackup(dataType, filename);
 }
 
-export async function downloadBackup(dataType: 'students' | 'attendance', filename: string) {
-  const result = await fetchAPI('/api/download-backup', {
+export async function downloadBackup(dataType: 'students' | 'attendance', filename: string, authorizerRole?: string, authorizerPassword?: string) {
+  // Downloads a binary sqlite file. Return a Blob of the file.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authorizerRole && authorizerPassword) {
+    headers['X-Authorizer-Role'] = authorizerRole;
+    headers['X-Authorizer-Password'] = authorizerPassword;
+  }
+
+  const response = await fetch(`${BACKEND_URL}/api/download-backup`, {
     method: 'POST',
+    headers,
     body: JSON.stringify({ dataType, filename }),
   });
-  return result.content;
+  if (!response.ok) {
+    let err = 'Download failed';
+    try {
+      const text = await response.text();
+      err = text || err;
+    } catch {}
+    throw new Error(err);
+  }
+  const blob = await response.blob();
+  return blob;
 }
 
 export async function deleteBackup(dataType: 'students' | 'attendance', filename: string) {
@@ -238,6 +239,15 @@ export async function downloadStudentAttendanceSummaryAsCsv(student: any): Promi
   return response.text();
 }
 
+export async function getStudentSummary(studentId: number) {
+  const result = await wsClient.getStudentSummary(studentId);
+  return result;
+}
+
+export async function getAllStudentsSummaries() {
+  return wsClient.getAllStudentsSummaries();
+}
+
 // PDF exports
 export async function downloadStudentDataAsPdf(): Promise<string> {
   const response = await fetch(`${BACKEND_URL}/api/download-student-data-pdf`);
@@ -287,7 +297,7 @@ export async function downloadStudentAttendanceSummaryAsPdf(student: any): Promi
 
 // Logs
 export async function getActionLogs() {
-  return fetchAPI('/api/get-action-logs');
+  return wsClient.getActionLogs();
 }
 
 export async function appendToActionLog(timestamp: string, action: string) {
@@ -298,10 +308,8 @@ export async function appendToActionLog(timestamp: string, action: string) {
   }
   
   try {
-    return await fetchAPI('/api/append-action-log', {
-      method: 'POST',
-      body: JSON.stringify({ timestamp, action }),
-    });
+    await wsClient.appendActionLog(timestamp, action);
+    return { success: true };
   } catch (error) {
     console.error('Failed to append action log:', error);
     // Don't throw - action logs are not critical
@@ -310,14 +318,11 @@ export async function appendToActionLog(timestamp: string, action: string) {
 }
 
 export async function clearActionLogs(role: string) {
-  return fetchAPI('/api/clear-action-logs', {
-    method: 'POST',
-    body: JSON.stringify({ role }),
-  });
+  return wsClient.clearActionLogs(role);
 }
 
 export async function getAuthLogs() {
-  return fetchAPI('/api/get-auth-logs');
+  return wsClient.getAuthLogs();
 }
 
 export async function appendToAuthLog(timestamp: string, message: string) {

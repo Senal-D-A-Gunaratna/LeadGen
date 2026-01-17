@@ -21,6 +21,9 @@ import { wsClient } from '@/lib/websocket-client';
 
 // Dynamically import heavy tab components
 const AttendanceHistoryTab = dynamic(() => import('@/components/tabs/attendance-history-tab').then(mod => mod.AttendanceHistoryTab), {
+  loading: () => null,
+});
+const LineGraphTab = dynamic(() => import('@/components/tabs/line-graph-tab').then(mod => mod.LineGraphTab), {
   loading: () => <Skeleton className="h-[400px] w-full" />,
 });
 const ManualAttendanceTab = dynamic(() => import('@/components/tabs/manual-attendance-tab').then(mod => mod.ManualAttendanceTab), {
@@ -33,6 +36,9 @@ const AdminTab = dynamic(() => import('@/components/tabs/admin-tab').then(mod =>
   loading: () => <Skeleton className="h-[400px] w-full" />,
 });
 const DevTab = dynamic(() => import('@/components/tabs/dev-tab').then(mod => mod.DevTab), {
+  loading: () => <Skeleton className="h-[400px] w-full" />,
+});
+const ServerTab = dynamic(() => import('@/components/tabs/server-tab').then(mod => mod.ServerTab), {
   loading: () => <Skeleton className="h-[400px] w-full" />,
 });
 
@@ -97,15 +103,6 @@ export default function Home() {
       window.addEventListener('beforeunload', handleBeforeUnload);
     }
 
-    return () => {
-      wsClient.off('data_changed', handleDataChange);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-      }
-      // Do not disconnect the global WebSocket here — keep connections open per-tab as requested
-    };
-
     const dayCheckIntervalId = setInterval(async () => {
         const currentAppTime = await getCurrentAppTime();
         const currentAppDay = format(currentAppTime, 'yyyy-MM-dd');
@@ -118,7 +115,13 @@ export default function Home() {
 
     return () => {
       clearInterval(dayCheckIntervalId);
-    }
+      wsClient.off('data_changed', handleDataChange);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('beforeunload', handleBeforeUnload);
+      }
+      // Do not disconnect the global WebSocket here — keep connections open per-tab as requested
+    };
   }, []);
 
   useEffect(() => {
@@ -137,11 +140,8 @@ export default function Home() {
   }, [fakeDate]); 
 
   const handleTabChange = (value: string) => {
-    setSearchQuery('');
-    setStatusFilter(null);
-    setGradeFilter('all');
-    setClassFilter('all');
-    setRoleFilter('all');
+    // Use centralized clearFilters to reset filters and selected date (today)
+    useStudentStore.getState().actions.clearFilters();
     setActiveTab(value);
   };
 
@@ -153,9 +153,11 @@ export default function Home() {
           <TabsList>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="attendance-history">Attendance History</TabsTrigger>
+            <TabsTrigger value="line-graph">Line Graph</TabsTrigger>
             {(isAdmin || isDev) && <TabsTrigger value="manual-attendance">Manual Attendance Marking</TabsTrigger>}
             {(isAdmin || isModerator || isDev) && <TabsTrigger value="manage-prefects">Manage Students</TabsTrigger>}
             {isAdmin && <TabsTrigger value="admin-settings">Admin</TabsTrigger>}
+            {(isAdmin || isDev) && <TabsTrigger value="server">Server</TabsTrigger>}
             {isDev && <TabsTrigger value="dev-tools">Dev Tools</TabsTrigger>}
           </TabsList>
           <TabsContent value="dashboard" className="space-y-4">
@@ -175,6 +177,9 @@ export default function Home() {
           <TabsContent value="attendance-history">
             <AttendanceHistoryTab />
           </TabsContent>
+          <TabsContent value="line-graph">
+            <LineGraphTab />
+          </TabsContent>
           {(isAdmin || isDev) && (
             <TabsContent value="manual-attendance">
               <ManualAttendanceTab />
@@ -188,6 +193,11 @@ export default function Home() {
            {isAdmin && (
             <TabsContent value="admin-settings">
               <AdminTab />
+            </TabsContent>
+          )}
+           {(isAdmin || isDev) && (
+            <TabsContent value="server">
+              <ServerTab />
             </TabsContent>
           )}
            {isDev && (

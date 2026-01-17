@@ -18,6 +18,7 @@ import { RolePasswordDialog } from "./role-password-dialog";
 import type { Role } from "@/hooks/use-auth-store";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
+import { wsClient } from "@/lib/websocket-client";
 
 
 export function Authentication() {
@@ -37,6 +38,7 @@ export function Authentication() {
 
   const handleSignOut = () => {
     logout();
+    wsClient.disconnect();
     setActiveTab('dashboard');
   };
 
@@ -94,7 +96,7 @@ export function Authentication() {
                 role={dialogRole}
                 open={!!dialogRole}
                 onOpenChange={(isOpen) => !isOpen && setDialogRole(null)}
-                onSuccess={() => handleSuccessfulLogin(dialogRole)}
+                onSuccess={(password) => handleSuccessfulLogin(dialogRole)}
                 title={`Sign In as ${dialogRole.charAt(0).toUpperCase() + dialogRole.slice(1)}`}
                 description="Please enter the password to access this role."
             />

@@ -1,5 +1,5 @@
 {
-  "name": "leadgen-studio",
+  "name": "leadgen-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -14,7 +14,5 @@
     "install-backend": "cd backend && pip3 install -r requirements.txt",
     "install-all": "npm run install && npm run install-backend"
   },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
-  }
+  
 }

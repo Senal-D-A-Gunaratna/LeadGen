@@ -39,14 +39,10 @@ export function CreditsDialog() {
             <p className="text-muted-foreground">W A Dilshan Sethmina</p>
           </div>
           <Separator />
-          <div>
-            <h3 className="font-semibold text-accent-foreground">Supervised by</h3>
-            <p className="text-muted-foreground">Eng. MR Mihiraj Ranaweera (Teacher In charge of R.V.C Robotics Club)</p>
-          </div>
-          <Separator />
            <div>
             <h3 className="font-semibold text-accent-foreground">Supported by</h3>
             <p className="text-muted-foreground">MR. Nishanta (Vice Principal)</p>
+            <p className="text-muted-foreground">Eng. MR Mihiraj Ranaweera (Teacher In charge of R.V.C Robotics Club)</p>
             <p className="text-muted-foreground">MR. Asanka (Teacher In Charge Of R.V.C Prefect Board)</p>
             <p className="text-muted-foreground">Dulina Dinsara (Juniour Prefect)</p>
           </div>
@@ -64,7 +60,7 @@ export function CreditsDialog() {
           </div>
           <Separator />
            <div className="text-center pt-2">
-              <p className="text-xs text-muted-foreground">Built with Next.js, ShadCN, Tailwind CSS, and a local server backend.</p>
+              <p className="text-xs text-muted-foreground">Built with Next.js, Python, ShadCN, Tailwind CSS, and a local server backend.</p>
               <p className="text-xs text-muted-foreground">This application was brought to you by the power of AI.</p>
            </div>
         </div>

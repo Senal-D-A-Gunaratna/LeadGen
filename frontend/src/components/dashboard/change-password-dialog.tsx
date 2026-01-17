@@ -45,7 +45,7 @@ interface ChangePasswordDialogProps {
 
 export function ChangePasswordDialog({ role, open, onOpenChange }: ChangePasswordDialogProps) {
   const [isPending, setIsPending] = useState(false);
-  const { changePassword } = useAuthStore();
+  const { changePasswordForRole, user } = useAuthStore();
   const { toast } = useToast();
   const roleName = role.charAt(0).toUpperCase() + role.slice(1);
 
@@ -80,7 +80,7 @@ export function ChangePasswordDialog({ role, open, onOpenChange }: ChangePasswor
     }
     
     try {
-      await changePassword(role, values.newPassword);
+      await changePasswordForRole(role, values.newPassword, user!.role, values.oldPassword);
       toast({
         title: "Password Updated",
         description: `Your password has been changed successfully.`,

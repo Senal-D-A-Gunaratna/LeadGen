@@ -5,10 +5,13 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import { StudentProfileDialog } from "./student-profile-dialog";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
+import { useEffect } from "react";
+import { wsClient } from "@/lib/websocket-client";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const selectedStudent = useStudentStore((state) => state.selectedStudent);
   const selectStudent = useStudentStore((state) => state.actions.selectStudent);
+  const updateStudentSummaries = useStudentStore((state) => state.actions.updateStudentSummaries);
   const { user } = useAuthStore();
   const { activeTab } = useUIStateStore();
 
@@ -16,6 +19,19 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const canEdit = isPrivilegedUser && activeTab === 'manage-prefects';
   const canDelete = !!user && (user.role === 'admin' || user.role === 'dev');
   const canDownload = !!user && (user.role === 'moderator' || user.role === 'admin' || user.role === 'dev');
+
+  useEffect(() => {
+    // Listen for summary updates from WebSocket
+    const handleSummaryUpdate = (data: { summaries: any[] }) => {
+      updateStudentSummaries(data.summaries);
+    };
+
+    wsClient.on('summary_update', handleSummaryUpdate);
+
+    return () => {
+      wsClient.off('summary_update', handleSummaryUpdate);
+    };
+  }, [updateStudentSummaries]);
 
   return (
     <>

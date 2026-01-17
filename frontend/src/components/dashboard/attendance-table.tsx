@@ -132,7 +132,7 @@ export function AttendanceTable() {
               </TableHeader>
               <TableBody>
                 {filteredStudents.map((student) => (
-                  <TableRow key={student.id} onClick={() => selectStudent(student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-all duration-300 hover:scale-[1.01]">
+                  <TableRow key={student.id} onClick={() => selectStudent(student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-transform duration-150 ease-out hover:scale-[1.01] will-change-transform">
                     <TableCell>
                       <div className="font-medium">{student.name}</div>
                     </TableCell>

@@ -36,7 +36,7 @@ const TabsTrigger = React.forwardRef<
     )}
     {...props}
   >
-    {props["data-state"] === "active" && (
+    {(props as any)["data-state"] === "active" && (
       <motion.div
         layoutId="active-tab-indicator"
         className="absolute inset-0 z-0 rounded-sm bg-background/80 backdrop-blur-sm shadow"

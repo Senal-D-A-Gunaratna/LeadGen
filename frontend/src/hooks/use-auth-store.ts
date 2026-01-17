@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { updatePasswordsAction, validatePasswordAction } from '@/app/actions';
 import { useStudentStore } from './use-student-store';
 import { useLogStore } from './use-log-store';
+import { useActionLogStore } from './use-action-log-store';
 import { useUIStateStore } from './use-ui-state-store';
 
 export type Role = 'admin' | 'moderator' | 'dev';
@@ -36,6 +37,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         const { addLog } = useLogStore.getState();
         addLog(`User signed in as: ${role}`);
         set({ user: { role } });
+        // After login, re-run initialization for admin-only stores so they
+        // fetch protected data (auth/action logs) without requiring a page reload.
+        try {
+            useLogStore.getState().initialize();
+            useActionLogStore.getState().initialize();
+        } catch (e) {
+            // Non-fatal: if initialization fails, the UI remains usable.
+            console.error('Failed to initialize admin stores after login:', e);
+        }
     },
     logout: () => {
         const { user } = get();

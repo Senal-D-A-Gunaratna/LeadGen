@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import { useLogStore } from "@/hooks/use-log-store";
 import { validatePasswordAction } from "@/app/actions";
+import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
   password: z.string().min(1, { message: "Password is required." }),
@@ -34,12 +35,13 @@ const formSchema = z.object({
 interface DevAuthDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: (password: string) => void;
 }
 
 export function DevAuthDialog({ open, onOpenChange, onSuccess }: DevAuthDialogProps) {
   const [isPending, setIsPending] = useState(false);
   const { addLog } = useLogStore();
+  const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -62,13 +64,17 @@ export function DevAuthDialog({ open, onOpenChange, onSuccess }: DevAuthDialogPr
     const isValid = await validatePasswordAction('dev', values.password);
 
     if (isValid) {
-      onSuccess();
+      try {
+        onSuccess(values.password);
+      } finally {
+        // Close dialog after the attempt regardless of parent handling
+        onOpenChange(false);
+      }
     } else {
       addLog('Failed dev authorization attempt.');
-      form.setError("password", {
-        type: "manual",
-        message: "Incorrect developer password. Authorization failed.",
-      });
+      // Show a short toast and close the dialog to let the parent show result popup
+      toast({ variant: 'destructive', title: 'Authorization Failed', description: 'Developer password incorrect.' });
+      onOpenChange(false);
     }
     setIsPending(false);
   }

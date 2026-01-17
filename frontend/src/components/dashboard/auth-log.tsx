@@ -61,7 +61,7 @@ export function AuthLog() {
                   <div className="flex-1">
                     <p className="text-foreground">{log.message}</p>
                     <p className="text-xs text-muted-foreground">
-                      {format(log.timestamp, "PPP, p")}
+                      {format(log.timestamp, "PPP, HH:mm")}
                     </p>
                   </div>
                 </div>

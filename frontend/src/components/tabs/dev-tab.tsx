@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useStudentStore } from "@/hooks/use-student-store";
 import {
   Card,
   CardContent,
@@ -10,7 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "../ui/button";
-import { useStudentStore } from "@/hooks/use-student-store";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -29,16 +29,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { CalendarIcon, RotateCcw, Clock, Lock, Unlock } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { BackupManagement } from "../dashboard/backup-management";
-import { AuthLog } from "../dashboard/auth-log";
-import { ActionLog } from "../dashboard/action-log";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { RolePasswordDialog } from "../dashboard/role-password-dialog";
 import { useLogStore } from "@/hooks/use-log-store";
 
 function DevLocker({ title, onUnlock }: { title: string, onUnlock: () => void }) {
-  const { isDevUnlocked } = useAuthStore();
+  const { isDevUnlocked, unlockDevMode } = useAuthStore();
   return (
     <Button variant="ghost" size="icon" onClick={onUnlock} className="h-6 w-6">
       {isDevUnlocked ? <Unlock className="text-green-500" /> : <Lock className="text-red-500" />}
@@ -87,7 +84,7 @@ function CurrentAppTime() {
 }
 
 function TimeFreeze({ onUnlockRequest }: { onUnlockRequest: () => void }) {
-    const { actions, fakeDate } = useStudentStore();
+  const { actions, fakeDate } = useStudentStore();
     const { addActionLog } = useActionLogStore();
     const { isDevUnlocked } = useAuthStore();
     const [date, setDate] = useState<Date | undefined>(fakeDate ? new Date(fakeDate) : undefined);
@@ -116,11 +113,11 @@ function TimeFreeze({ onUnlockRequest }: { onUnlockRequest: () => void }) {
         newFakeDate.setHours(hours, minutes, 0, 0);
 
         actions.setFakeDate(newFakeDate);
-        const formattedDate = format(newFakeDate, "PPP, p");
+        const formattedDate = format(newFakeDate, "PPP, HH:mm");
         addActionLog(`[Dev] Froze time to ${formattedDate}.`);
         toast({
-            title: "Time Frozen",
-            description: `App time is now set to ${formattedDate}.`,
+          title: "Time Frozen",
+          description: `App time is now set to ${formattedDate}.`,
         });
     };
     
@@ -245,7 +242,7 @@ function DebugActions({ onUnlockRequest }: { onUnlockRequest: () => void }) {
     }
   };
   
-  const handleAuthorizedAction = async () => {
+  const handleAuthorizedAction = async (password?: string) => {
     if (!actionToConfirm) return;
     
     // Close any open dialogs
@@ -379,6 +376,8 @@ function DebugActions({ onUnlockRequest }: { onUnlockRequest: () => void }) {
 }
 
 
+// Global handler clears filters on tab change; no per-tab cleanup here.
+
 export function DevTab() {
   const [isAuthDialogOpen, setIsAuthDialogOpen] = useState(false);
   const { isDevUnlocked, unlockDevMode, lockDevMode } = useAuthStore();
@@ -396,8 +395,8 @@ export function DevTab() {
     }
   }
 
-  const handleUnlockAttempt = (password: string) => {
-    const success = unlockDevMode(password);
+  const handleUnlockAttempt = async (password: string) => {
+    const success = await unlockDevMode(password);
     if(success) {
       addActionLog("[Dev] Unlocked developer mode.");
       toast({ title: "Developer Mode Unlocked", description: "Sensitive actions are now enabled." });
@@ -414,13 +413,6 @@ export function DevTab() {
     <>
       <div className="space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <ActionLog />
-            <AuthLog />
-        </div>
-
-        <BackupManagement />
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <CurrentAppTime />
             <TimeFreeze onUnlockRequest={handleUnlockRequest}/>
         </div>
@@ -435,9 +427,18 @@ export function DevTab() {
         role="dev"
         open={isAuthDialogOpen}
         onOpenChange={setIsAuthDialogOpen}
-        onSuccess={(password) => {
+        onSuccess={async (password) => {
           if (password) {
-            return handleUnlockAttempt(password)
+            const success = await unlockDevMode(password);
+            if (success) {
+              addActionLog("[Dev] Unlocked developer mode.");
+              toast({ title: "Developer Mode Unlocked", description: "Sensitive actions are now enabled." });
+              setIsAuthDialogOpen(false);
+              return true;
+            } else {
+              addLog("Failed dev authorization attempt.");
+              return false;
+            }
           }
           return true;
         }}

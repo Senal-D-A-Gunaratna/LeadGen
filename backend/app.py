@@ -15,14 +15,25 @@ from database import get_db_connection, init_database, migrate_json_to_sqlite, D
 import csv
 import io
 import base64
-from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# SSL Configuration for HTTPS
+# Prefer project-local certs stored in backend/certificates (localhost.pem/localhost-key.pem).
+from pathlib import Path as _Path
+_repo_root = _Path(__file__).parent.parent
+_cert_dir = _repo_root / 'backend' / 'certificates'
+_cert_file = _cert_dir / 'localhost.pem'
+_key_file = _cert_dir / 'localhost-key.pem'
+if _cert_file.exists() and _key_file.exists():
+    ssl_context = (str(_cert_file), str(_key_file))
+else:
+    # Fall back to no SSL if certs are not available (dev only).
+    ssl_context = None
+    print('SSL certificates not found in backend/certificates. Starting without TLS (HTTP).')
+
 # Use threading mode instead of eventlet (eventlet incompatible with Python 3.14)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
@@ -65,14 +76,58 @@ def validate_password(role: str, password: str) -> bool:
 
 # Store authenticated WebSocket sessions
 authenticated_sessions = {}
+# Track all connected socket session IDs (unauthenticated + authenticated)
+connected_sids = set()
+
+# Development mode: force full client access (bypass auth checks)
+if os.environ.get('DEV_FORCE_FULL_ACCESS') == '1':
+    class DevSessions(dict):
+        def __contains__(self, key):
+            return True
+    authenticated_sessions = DevSessions()
+    print('WARNING: DEV_FORCE_FULL_ACCESS=1 -> bypassing WebSocket auth checks')
 
 # Broadcast data changes to all connected clients
-def broadcast_data_change(event_type: str, data: dict = None):
+def broadcast_data_change(event_type: str, data: Optional[dict] = None):
     """Broadcast data changes to all authenticated WebSocket clients."""
     socketio.emit('data_changed', {
         'type': event_type,
         'data': data or {}
     }, namespace='/')
+
+def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
+    """Broadcast updated attendance summaries for affected students or all if None."""
+    if affected_student_ids is None:
+        # Emit all summaries
+        students = get_all_students_with_history()
+        summaries = []
+        for student in students:
+            summary = get_attendance_summary(student, students)
+            summaries.append({
+                'studentId': student['id'],
+                'name': student['name'],
+                'grade': student['grade'],
+                'className': student['className'],
+                'summary': summary
+            })
+        socketio.emit('summary_update', {'summaries': summaries}, namespace='/')
+    else:
+        # Emit summaries for specific students
+        students = get_all_students_with_history()
+        summaries = []
+        for sid in affected_student_ids:
+            student = next((s for s in students if s['id'] == sid), None)
+            if student:
+                summary = get_attendance_summary(student, students)
+                summaries.append({
+                    'studentId': sid,
+                    'name': student['name'],
+                    'grade': student['grade'],
+                    'className': student['className'],
+                    'summary': summary
+                })
+        if summaries:
+            socketio.emit('summary_update', {'summaries': summaries}, namespace='/')
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -106,13 +161,24 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
     # Get attendance history from attendance database
     conn_attendance = get_db_connection('attendance')
     cursor_attendance = conn_attendance.cursor()
-    cursor_attendance.execute('''
-        SELECT date, status FROM attendance_records
-        WHERE student_id = ?
-        ORDER BY date DESC
-    ''', (student_id,))
-    
-    history = [{'date': r['date'], 'status': r['status']} for r in cursor_attendance.fetchall()]
+    # Detect whether the attendance_records table has a check_in_time column.
+    cursor_attendance.execute("PRAGMA table_info(attendance_records)")
+    cols = [r['name'] for r in cursor_attendance.fetchall()]
+    if 'check_in_time' in cols:
+        cursor_attendance.execute('''
+            SELECT date, status, check_in_time FROM attendance_records
+            WHERE student_id = ?
+            ORDER BY date DESC
+        ''', (student_id,))
+    else:
+        # Older DBs may not have the column yet; return NULL for compatibility.
+        cursor_attendance.execute('''
+            SELECT date, status, NULL as check_in_time FROM attendance_records
+            WHERE student_id = ?
+            ORDER BY date DESC
+        ''', (student_id,))
+
+    history = [{'date': r['date'], 'status': r['status'], 'checkInTime': r['check_in_time']} for r in cursor_attendance.fetchall()]
     conn_attendance.close()
     
     # Get today's status
@@ -149,10 +215,20 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
     # Get all attendance records in one query for efficiency
     conn_attendance = get_db_connection('attendance')
     cursor_attendance = conn_attendance.cursor()
-    cursor_attendance.execute('''
-        SELECT student_id, date, status FROM attendance_records
-        ORDER BY student_id, date DESC
-    ''')
+    # Detect whether the attendance_records table has a check_in_time column.
+    cursor_attendance.execute("PRAGMA table_info(attendance_records)")
+    cols = [r['name'] for r in cursor_attendance.fetchall()]
+    if 'check_in_time' in cols:
+        cursor_attendance.execute('''
+            SELECT student_id, date, status, check_in_time FROM attendance_records
+            ORDER BY student_id, date DESC
+        ''')
+    else:
+        # Older DBs may not have the column yet; select NULL to keep schema stable.
+        cursor_attendance.execute('''
+            SELECT student_id, date, status, NULL as check_in_time FROM attendance_records
+            ORDER BY student_id, date DESC
+        ''')
     attendance_records = cursor_attendance.fetchall()
     conn_attendance.close()
     
@@ -164,7 +240,8 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
             attendance_by_student[student_id] = []
         attendance_by_student[student_id].append({
             'date': record['date'],
-            'status': record['status']
+            'status': record['status'],
+            'checkInTime': record['check_in_time']
         })
     
     # Preload all fingerprints from normalized table
@@ -248,10 +325,12 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
     present_days = on_time_days + late_days
     absent_days = total_school_days - present_days
     
-    presence_percentage = round((present_days / total_school_days) * 100) if total_school_days > 0 else 0
-    absence_percentage = 100 - presence_percentage
-    on_time_percentage = round((on_time_days / present_days) * 100) if present_days > 0 else 0
-    late_percentage = round((late_days / present_days) * 100) if present_days > 0 else 0
+    presence_percentage = round((present_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
+    absence_percentage = round((absent_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
+    # Compute on-time/late as percentage of total school days to keep
+    # metrics comparable with presence/absence percentages.
+    on_time_percentage = round((on_time_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
+    late_percentage = round((late_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
     
     return {
         'totalSchoolDays': total_school_days,
@@ -265,32 +344,198 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
         'latePercentage': late_percentage
     }
 
+
+@app.route('/api/attendance/history', methods=['GET'])
+def api_attendance_history():
+    """Return aggregated attendance percentage per day for a date range.
+
+    Query params:
+      - start: ISO date (YYYY-MM-DD)
+      - end: ISO date (YYYY-MM-DD)
+      - grade: grade number as string or 'all'
+    """
+    from datetime import timedelta
+
+    start = request.args.get('start')
+    end = request.args.get('end')
+    grade = request.args.get('grade', 'all')
+
+    try:
+        if end:
+            end_date = date.fromisoformat(end)
+        else:
+            end_date = None
+
+        if start:
+            start_date = date.fromisoformat(start)
+        else:
+            start_date = None
+    except Exception:
+        return jsonify({'success': False, 'message': 'Invalid date format'}), 400
+
+    # If start or end not provided, compute full available range from DB
+    conn_att = get_db_connection('attendance')
+    cursor_att = conn_att.cursor()
+    if start_date is None or end_date is None:
+        # If filtering by grade, join students; otherwise simple min/max
+        if grade and grade != 'all':
+            cursor_att.execute('''
+                SELECT MIN(ar.date) as min_date, MAX(ar.date) as max_date
+                FROM attendance_records ar
+                JOIN students s ON s.id = ar.student_id
+                WHERE s.grade = ?
+            ''', (int(grade),))
+        else:
+            cursor_att.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
+        row = cursor_att.fetchone()
+        conn_att.close()
+        if row and row['min_date'] and row['max_date']:
+            if start_date is None:
+                start_date = date.fromisoformat(row['min_date'])
+            if end_date is None:
+                end_date = date.fromisoformat(row['max_date'])
+        else:
+            # No records — fallback to last 7 days
+            if end_date is None:
+                end_date = date.today()
+            if start_date is None:
+                start_date = end_date - timedelta(days=6)
+    else:
+        conn_att.close()
+
+    # Normalize range
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    # At this point we have start_date and end_date set
+
+    params: List = [start_date.isoformat(), end_date.isoformat()]
+    join_students = False
+    grade_filter_sql = ''
+    if grade and grade != 'all':
+        join_students = True
+        grade_filter_sql = 'AND s.grade = ?'
+        params.append(int(grade))
+
+    # Determine denominator: number of students in scope (filtered by grade if requested)
+    conn_students = get_db_connection('students')
+    cursor_students = conn_students.cursor()
+    if grade and grade != 'all':
+        cursor_students.execute('SELECT COUNT(*) as cnt FROM students WHERE grade = ?', (int(grade),))
+    else:
+        cursor_students.execute('SELECT COUNT(*) as cnt FROM students')
+    row_cnt = cursor_students.fetchone()
+    student_count = row_cnt['cnt'] if row_cnt else 0
+    conn_students.close()
+
+    # Fetch present counts per date (present = status != 'absent')
+    if grade and grade != 'all':
+        cursor_att = get_db_connection('attendance').cursor()
+        cursor_att.execute('''
+            SELECT ar.date as date, SUM(CASE WHEN ar.status != 'absent' THEN 1 ELSE 0 END) as present
+            FROM attendance_records ar
+            JOIN students s ON s.id = ar.student_id
+            WHERE ar.date BETWEEN ? AND ? AND s.grade = ?
+            GROUP BY ar.date
+            ORDER BY ar.date ASC
+        ''', (start_date.isoformat(), end_date.isoformat(), int(grade)))
+    else:
+        cursor_att = get_db_connection('attendance').cursor()
+        cursor_att.execute('''
+            SELECT date, SUM(CASE WHEN status != 'absent' THEN 1 ELSE 0 END) as present
+            FROM attendance_records
+            WHERE date BETWEEN ? AND ?
+            GROUP BY date
+            ORDER BY date ASC
+        ''', (start_date.isoformat(), end_date.isoformat()))
+
+    rows = cursor_att.fetchall()
+
+    # Map present counts by date
+    results_by_date = {r['date']: (r['present'] or 0) for r in rows}
+
+    # Build full day series using student_count as denominator
+    day = start_date
+    series = []
+    while day <= end_date:
+        iso = day.isoformat()
+        present = results_by_date.get(iso, 0)
+        if student_count > 0:
+            percent = round((present / student_count) * 100, 1)
+        else:
+            percent = 0
+        series.append({'date': iso, 'percent': percent})
+        day = day + timedelta(days=1)
+
+    return jsonify({'success': True, 'data': series})
+
 # ==================== WEBSOCKET HANDLERS ====================
 
 @socketio.on('connect')
 def handle_connect():
     """Handle WebSocket connection."""
-    print(f'Client connected: {request.sid}')
+    try:
+        sid = request.sid  # type: ignore
+        connected_sids.add(sid)
+    except Exception:
+        pass
+    print(f'Client connected: {request.sid}')  # type: ignore
+    # Emit current connection counts to all clients
+    try:
+        socketio.emit('connection_count', {
+            'total': len(connected_sids),
+            'authenticated': len(authenticated_sessions)
+        }, namespace='/')
+    except Exception:
+        pass
+
 
 @socketio.on('disconnect')
-def handle_disconnect():
+def handle_disconnect(*args):
     """Handle WebSocket disconnection."""
-    if request.sid in authenticated_sessions:
-        del authenticated_sessions[request.sid]
-    print(f'Client disconnected: {request.sid}')
+    try:
+        # Use pop to avoid KeyError if session not present
+        try:
+            authenticated_sessions.pop(request.sid, None)  # type: ignore
+        except Exception:
+            pass
+    except Exception:
+        # Defensive: ignore any errors during disconnect handling
+        pass
+    try:
+        # Remove from connected set and emit updated counts
+        try:
+            sid = request.sid  # type: ignore
+            connected_sids.discard(sid)
+        except Exception:
+            pass
+        print(f'Client disconnected: {request.sid}')  # type: ignore
+        try:
+            socketio.emit('connection_count', {
+                'total': len(connected_sids),
+                'authenticated': len(authenticated_sessions)
+            }, namespace='/')
+        except Exception:
+            pass
+    except Exception:
+        pass
 
 @socketio.on('authenticate')
 def handle_authentication(data):
     """Handle authentication via WebSocket."""
+    print(f"Authentication attempt: role={data.get('role')}, password_provided={bool(data.get('password'))}, secure={request.is_secure}, sid={request.sid}")  # type: ignore
+    # NOTE: Authentication allowed over HTTP in LAN/HTTP-only deployments.
+    
     role = data.get('role')
     password = data.get('password')
     
     if not role or not password:
+        print("Authentication failed: missing role or password")
         emit('auth_response', {'success': False, 'message': 'Missing role or password'})
         return
     
     if validate_password(role, password):
-        authenticated_sessions[request.sid] = role
+        print("Password validated successfully")
+        authenticated_sessions[request.sid] = role  # type: ignore
         emit('auth_response', {'success': True, 'role': role, 'message': 'Authentication successful'})
         
         # Log authentication
@@ -302,13 +547,22 @@ def handle_authentication(data):
         ''', (datetime.now().isoformat(), f'User signed in as: {role}'))
         conn_logs.commit()
         conn_logs.close()
+        # Emit updated connection counts (some connected clients now authenticated)
+        try:
+            socketio.emit('connection_count', {
+                'total': len(connected_sids),
+                'authenticated': len(authenticated_sessions)
+            }, namespace='/')
+        except Exception:
+            pass
     else:
+        print("Password validation failed")
         emit('auth_response', {'success': False, 'message': 'Invalid credentials'})
 
 @socketio.on('scan_student')
 def handle_scan(data):
     """Handle student scan via WebSocket."""
-    if request.sid not in authenticated_sessions:
+    if request.sid not in authenticated_sessions:  # type: ignore
         emit('scan_response', {'success': False, 'message': 'Not authenticated'})
         return
     
@@ -349,7 +603,17 @@ def handle_scan(data):
     
     existing = cursor_attendance.fetchone()
     if existing and existing['status'] != 'absent':
-        # Already scanned, just update last scan time
+        # Already scanned — update last scan time
+        try:
+            cursor_attendance.execute('''
+                UPDATE attendance_records
+                SET check_in_time = ?, updated_at = ?
+                WHERE student_id = ? AND date = ?
+            ''', (datetime.now().isoformat(), datetime.now().isoformat(), student_id, today))
+            conn_attendance.commit()
+        except Exception:
+            # ignore update failures
+            pass
         conn_attendance.close()
         student_data = get_student_by_id(student_id)
         emit('scan_response', {'success': True, 'student': student_data, 'alreadyScanned': True})
@@ -363,9 +627,9 @@ def handle_scan(data):
     
     # Update or insert attendance record
     cursor_attendance.execute('''
-        INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at)
-        VALUES (?, ?, ?, ?)
-    ''', (student_id, today, status, datetime.now().isoformat()))
+        INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (student_id, today, status, datetime.now().isoformat(), datetime.now().isoformat()))
     
     conn_attendance.commit()
     conn_attendance.close()
@@ -374,12 +638,11 @@ def handle_scan(data):
     emit('scan_response', {'success': True, 'student': student_data})
     broadcast_data_change('scan', {'studentId': student_id})
 
-# ==================== REST API ENDPOINTS ====================
-
-@app.route('/api/get-filtered-students', methods=['POST'])
-def get_filtered_students():
-    """Get filtered students matching criteria."""
-    filters = request.json or {}
+@socketio.on('get_filtered_students')
+def handle_get_filtered_students(data):
+    """Get filtered students matching criteria via WebSocket."""
+    # Allow unauthenticated access for basic viewing
+    filters = data or {}
     target_date = filters.get('date') or date.today().isoformat()
     
     all_students = get_all_students_with_history(target_date)
@@ -411,20 +674,33 @@ def get_filtered_students():
     # Sort by name
     filtered.sort(key=lambda x: x['name'])
     
-    return jsonify(filtered)
+    emit('filtered_students_response', {'success': True, 'students': filtered})
 
-@app.route('/api/get-student-by-id/<int:student_id>', methods=['GET'])
-def get_student_by_id_endpoint(student_id):
-    """Get a single student by ID."""
+@socketio.on('get_student_by_id')
+def handle_get_student_by_id(data):
+    """Get a single student by ID via WebSocket."""
+    # Allow unauthenticated access for viewing student profiles
+    
+    student_id = data.get('studentId')
+    if not student_id:
+        emit('student_by_id_response', {'success': False, 'message': 'Missing studentId'})
+        return
+    
     student = get_student_by_id(student_id)
     if not student:
-        return jsonify({'error': 'Student not found'}), 404
-    return jsonify(student)
+        emit('student_by_id_response', {'success': False, 'message': 'Student not found'})
+        return
+    
+    emit('student_by_id_response', {'success': True, 'student': student})
 
-@app.route('/api/save-attendance', methods=['POST'])
-def save_attendance():
-    """Save attendance records for students."""
-    students = request.json or []
+@socketio.on('save_attendance')
+def handle_save_attendance(data):
+    """Save attendance records for students via WebSocket."""
+    if request.sid not in authenticated_sessions:  # type: ignore
+        emit('save_attendance_response', {'success': False, 'message': 'Not authenticated'})
+        return
+    
+    students = data.get('students', [])
     
     conn_attendance = get_db_connection('attendance')
     cursor_attendance = conn_attendance.cursor()
@@ -432,23 +708,33 @@ def save_attendance():
     for student in students:
         student_id = student['id']
         for record in student.get('attendanceHistory', []):
+            # Allow clients to supply an explicit check-in time (ISO string). If not provided, use now().
+            supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
+            check_in_time = supplied_check_in if supplied_check_in else datetime.now().isoformat()
             cursor_attendance.execute('''
-                INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at)
-                VALUES (?, ?, ?, ?)
-            ''', (student_id, record['date'], record['status'], datetime.now().isoformat()))
+                INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (student_id, record['date'], record['status'], datetime.now().isoformat(), check_in_time))
     
     conn_attendance.commit()
     conn_attendance.close()
     
     broadcast_data_change('attendance_updated')
-    return jsonify({'success': True})
+    # Broadcast summary updates for affected students
+    affected_ids = [student['id'] for student in students]
+    broadcast_summary_update(affected_ids)
+    emit('save_attendance_response', {'success': True})
 
-@app.route('/api/add-student', methods=['POST'])
-def add_student():
-    """Add a new student."""
-    data = request.json
+@socketio.on('add_student')
+def handle_add_student(data):
+    """Add a new student via WebSocket."""
+    if request.sid not in authenticated_sessions:  # type: ignore
+        emit('add_student_response', {'success': False, 'message': 'Not authenticated'})
+        return
+    
     if not data:
-        return jsonify({'error': 'No data provided'}), 400
+        emit('add_student_response', {'success': False, 'message': 'No data provided'})
+        return
     
     conn_students = get_db_connection('students')
     cursor_students = conn_students.cursor()
@@ -494,11 +780,21 @@ def add_student():
     
     student = get_student_by_id(next_id)
     broadcast_data_change('student_added', {'studentId': next_id})
-    return jsonify(student)
+    broadcast_summary_update([next_id])
+    emit('add_student_response', {'success': True, 'student': student})
 
-@app.route('/api/remove-student/<int:student_id>', methods=['DELETE'])
-def remove_student(student_id):
-    """Remove a student."""
+@socketio.on('remove_student')
+def handle_remove_student(data):
+    """Remove a student via WebSocket."""
+    if request.sid not in authenticated_sessions:  # type: ignore
+        emit('remove_student_response', {'success': False, 'message': 'Not authenticated'})
+        return
+    
+    student_id = data.get('studentId')
+    if not student_id:
+        emit('remove_student_response', {'success': False, 'message': 'Missing studentId'})
+        return
+    
     conn_students = get_db_connection('students')
     cursor_students = conn_students.cursor()
     
@@ -514,14 +810,21 @@ def remove_student(student_id):
     conn_attendance.close()
     
     broadcast_data_change('student_removed', {'studentId': student_id})
-    return jsonify({'success': True})
+    broadcast_summary_update()  # Emit all summaries since student removed
+    emit('remove_student_response', {'success': True})
 
-@app.route('/api/update-student/<int:student_id>', methods=['PUT'])
-def update_student(student_id):
-    """Update a student's information."""
-    data = request.json
-    if not data:
-        return jsonify({'error': 'No data provided'}), 400
+@socketio.on('update_student')
+def handle_update_student(data):
+    """Update a student's information via WebSocket."""
+    if request.sid not in authenticated_sessions:  # type: ignore
+        emit('update_student_response', {'success': False, 'message': 'Not authenticated'})
+        return
+    
+    student_id = data.get('studentId')
+    update_data = data.get('data')
+    if not student_id or not update_data:
+        emit('update_student_response', {'success': False, 'message': 'Missing studentId or data'})
+        return
     
     conn_students = get_db_connection('students')
     cursor_students = conn_students.cursor()
@@ -531,21 +834,22 @@ def update_student(student_id):
     existing = cursor_students.fetchone()
     if not existing:
         conn_students.close()
-        return jsonify({'error': 'Student not found'}), 404
+        emit('update_student_response', {'success': False, 'message': 'Student not found'})
+        return
     
     existing_dict = dict(existing)
     
     # Update fields
-    name = data.get('name', existing_dict['name'])
-    grade = data.get('grade', existing_dict['grade'])
-    className = data.get('className', existing_dict['className'])
-    role = data.get('role', existing_dict['role'])
-    email = data.get('contact', {}).get('email', existing_dict['email'])
-    phone = data.get('contact', {}).get('phone', existing_dict['phone'])
-    specialRoles = data.get('specialRoles', existing_dict.get('specialRoles', ''))
-    notes = data.get('notes', existing_dict.get('notes', ''))
+    name = update_data.get('name', existing_dict['name'])
+    grade = update_data.get('grade', existing_dict['grade'])
+    className = update_data.get('className', existing_dict['className'])
+    role = update_data.get('role', existing_dict['role'])
+    email = update_data.get('contact', {}).get('email', existing_dict['email'])
+    phone = update_data.get('contact', {}).get('phone', existing_dict['phone'])
+    specialRoles = update_data.get('specialRoles', existing_dict.get('specialRoles', ''))
+    notes = update_data.get('notes', existing_dict.get('notes', ''))
     
-    fingerprints = data.get('fingerprints')
+    fingerprints = update_data.get('fingerprints')
     if fingerprints is None:
         # If not provided, derive from existing normalized table or legacy columns
         cursor_students.execute('''
@@ -569,7 +873,7 @@ def update_student(student_id):
             ]
     
     # Handle role removal
-    if 'role' in data and data['role'] is None:
+    if 'role' in update_data and update_data['role'] is None:
         role = None
     
     cursor_students.execute('''
@@ -602,36 +906,41 @@ def update_student(student_id):
     
     student = get_student_by_id(student_id)
     broadcast_data_change('student_updated', {'studentId': student_id})
-    return jsonify(student)
+    broadcast_summary_update([student_id])
+    emit('update_student_response', {'success': True, 'student': student})
 
-@app.route('/api/validate-password', methods=['POST'])
-def validate_password_endpoint():
-    """Validate a password for a role."""
-    data = request.json
+@socketio.on('validate_password')
+def handle_validate_password(data):
+    """Validate a password for a role via WebSocket."""
     role = data.get('role')
     password = data.get('password')
     
     if not role or not password:
-        return jsonify({'valid': False})
+        emit('validate_password_response', {'valid': False})
+        return
     
     try:
         valid = validate_password(role, password)
-        return jsonify({'valid': valid})
+        emit('validate_password_response', {'valid': valid})
     except Exception as e:
         print(f"Error validating password: {e}")
-        return jsonify({'valid': False})
+        emit('validate_password_response', {'valid': False})
 
-@app.route('/api/update-passwords', methods=['POST'])
-def update_passwords():
-    """Update passwords for roles."""
-    data = request.json
+@socketio.on('update_passwords')
+def handle_update_passwords(data):
+    """Update passwords for roles via WebSocket."""
+    if request.sid not in authenticated_sessions:  # type: ignore
+        emit('update_passwords_response', {'success': False, 'message': 'Not authenticated'})
+        return
+    
     passwords_to_update = data.get('passwords', {})
     authorizer_role = data.get('authorizerRole')
     authorizer_password = data.get('authorizerPassword')
     
     # Validate authorizer
     if not validate_password(authorizer_role, authorizer_password):
-        return jsonify({'error': 'Unauthorized'}), 401
+        emit('update_passwords_response', {'success': False, 'message': 'Unauthorized'})
+        return
     
     # Update passwords
     current_passwords = get_passwords()
@@ -642,12 +951,439 @@ def update_passwords():
     save_passwords(current_passwords)
     
     broadcast_data_change('passwords_updated')
-    return jsonify({'success': True})
+    emit('update_passwords_response', {'success': True})
 
-@app.route('/api/get-current-time', methods=['GET'])
-def get_current_time():
-    """Get current server time."""
-    return jsonify({'time': datetime.now().isoformat()})
+@socketio.on('get_current_time')
+def handle_get_current_time():
+    """Get current server time via WebSocket."""
+    # Allow unauthenticated access
+    emit('current_time_response', {'time': datetime.now().isoformat()})
+
+
+@socketio.on('request_attendance_aggregate')
+def handle_request_attendance_aggregate(data):
+    """Compute attendance aggregates for Day/Week/Month/Year and emit response.
+
+    Expects data: { range: 'day'|'week'|'month'|'year', grade: 'all' or grade number }
+    Emits: 'attendance_aggregate_response' with { success, range, grade, points: [{label, percent}] }
+    """
+    rng = (data or {}).get('range', 'week')
+    grade = (data or {}).get('grade', 'all')
+    status = (data or {}).get('status', 'overview')
+
+    # Default SQL case expression for single-series queries. This ensures
+    # `case_expr` is always defined for all code paths (avoids static analysis warnings).
+    case_expr = "SUM(CASE WHEN ar.status != 'absent' THEN 1 ELSE 0 END) as present"
+    from datetime import timedelta
+
+    # Denominator: number of students in scope
+    conn_students = get_db_connection('students')
+    cursor_students = conn_students.cursor()
+    try:
+        if grade and grade != 'all':
+            cursor_students.execute('SELECT COUNT(*) as cnt FROM students WHERE grade = ?', (int(grade),))
+        else:
+            cursor_students.execute('SELECT COUNT(*) as cnt FROM students')
+        student_count = cursor_students.fetchone()['cnt']
+    except Exception:
+        student_count = 0
+    finally:
+        conn_students.close()
+
+    today = date.today()
+    points = []
+
+    conn_att = None
+    try:
+        conn_att = get_db_connection('attendance')
+        cur = conn_att.cursor()
+
+        if rng == 'day':
+            target = today.isoformat()
+            if status in ('overview', 'attendance'):
+                # return three-series: on_time, late, absent counts per hour
+                if grade and grade != 'all':
+                    cur.execute('''
+                        SELECT strftime('%H', check_in_time) as hour,
+                               SUM(CASE WHEN ar.status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records ar
+                        JOIN students s ON s.id = ar.student_id
+                        WHERE ar.date = ? AND s.grade = ?
+                        GROUP BY hour
+                    ''', (target, int(grade)))
+                else:
+                    cur.execute('''
+                        SELECT strftime('%H', check_in_time) as hour,
+                               SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records
+                        WHERE date = ?
+                        GROUP BY hour
+                    ''', (target,))
+                rows = {r['hour']: {'on_time': (r['on_time'] or 0), 'late': (r['late'] or 0), 'absent': (r['absent'] or 0)} for r in cur.fetchall()}
+                for h in range(24):
+                    key = f"{h:02d}"
+                    counts = rows.get(key, {'on_time': 0, 'late': 0, 'absent': 0})
+                    if student_count > 0:
+                        on_p = round((counts['on_time'] / student_count) * 100, 1)
+                        late_p = round((counts['late'] / student_count) * 100, 1)
+                        absent_p = round((counts['absent'] / student_count) * 100, 1)
+                    else:
+                        on_p = late_p = absent_p = 0
+                    points.append({'label': f'{key}:00', 'on_time': on_p, 'late': late_p, 'absent': absent_p})
+            else:
+                # fallback to single-series behavior
+                if status in ('ontime', 'on time', 'on_time'):
+                    case_expr = "SUM(CASE WHEN ar.status = 'on time' THEN 1 ELSE 0 END) as present"
+                elif status == 'late':
+                    case_expr = "SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) as present"
+                elif status == 'absent':
+                    case_expr = "SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) as present"
+                else:
+                    case_expr = "SUM(CASE WHEN ar.status != 'absent' THEN 1 ELSE 0 END) as present"
+
+                if grade and grade != 'all':
+                    sql = f"SELECT strftime('%H', check_in_time) as hour, {case_expr} FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE ar.date = ? AND s.grade = ? GROUP BY hour"
+                    cur.execute(sql, (target, int(grade)))
+                else:
+                    sql = f"SELECT strftime('%H', check_in_time) as hour, {case_expr} FROM attendance_records ar WHERE ar.date = ? GROUP BY hour"
+                    cur.execute(sql, (target,))
+                rows = {r['hour']: (r['present'] or 0) for r in cur.fetchall()}
+                for h in range(24):
+                    key = f"{h:02d}"
+                    present = rows.get(key, 0)
+                    percent = round((present / student_count) * 100, 1) if student_count > 0 else 0
+                    points.append({'label': f'{key}:00', 'percent': percent})
+
+        elif rng == 'week':
+            end_date = today
+            start_date = end_date - timedelta(days=6)
+            if status in ('overview', 'attendance'):
+                # fetch three series per date
+                if grade and grade != 'all':
+                    cur.execute('''
+                        SELECT ar.date as date,
+                               SUM(CASE WHEN ar.status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records ar
+                        JOIN students s ON s.id = ar.student_id
+                        WHERE ar.date BETWEEN ? AND ? AND s.grade = ?
+                        GROUP BY ar.date
+                        ORDER BY ar.date ASC
+                    ''', (start_date.isoformat(), end_date.isoformat(), int(grade)))
+                else:
+                    cur.execute('''
+                        SELECT date,
+                               SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records
+                        WHERE date BETWEEN ? AND ?
+                        GROUP BY date
+                        ORDER BY date ASC
+                    ''', (start_date.isoformat(), end_date.isoformat()))
+                rows = {r['date']: {'on_time': (r['on_time'] or 0), 'late': (r['late'] or 0), 'absent': (r['absent'] or 0)} for r in cur.fetchall()}
+                day = start_date
+                while day <= end_date:
+                    iso = day.isoformat()
+                    counts = rows.get(iso, {'on_time': 0, 'late': 0, 'absent': 0})
+                    if student_count > 0:
+                        on_p = round((counts['on_time'] / student_count) * 100, 1)
+                        late_p = round((counts['late'] / student_count) * 100, 1)
+                        absent_p = round((counts['absent'] / student_count) * 100, 1)
+                    else:
+                        on_p = late_p = absent_p = 0
+                    points.append({'label': iso, 'on_time': on_p, 'late': late_p, 'absent': absent_p})
+                    day = day + timedelta(days=1)
+            else:
+                # single-series fallback
+                if status in ('ontime', 'on time', 'on_time'):
+                    case_expr = "SUM(CASE WHEN ar.status = 'on time' THEN 1 ELSE 0 END) as present"
+                elif status == 'late':
+                    case_expr = "SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) as present"
+                elif status == 'absent':
+                    case_expr = "SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) as present"
+                else:
+                    case_expr = "SUM(CASE WHEN ar.status != 'absent' THEN 1 ELSE 0 END) as present"
+
+                if grade and grade != 'all':
+                    sql = f"SELECT ar.date as date, {case_expr} FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE ar.date BETWEEN ? AND ? AND s.grade = ? GROUP BY ar.date ORDER BY ar.date ASC"
+                    cur.execute(sql, (start_date.isoformat(), end_date.isoformat(), int(grade)))
+                else:
+                    sql = f"SELECT date, {case_expr} FROM attendance_records WHERE date BETWEEN ? AND ? GROUP BY date ORDER BY date ASC"
+                    cur.execute(sql, (start_date.isoformat(), end_date.isoformat()))
+                rows = {r['date']: (r['present'] or 0) for r in cur.fetchall()}
+                day = start_date
+                while day <= end_date:
+                    iso = day.isoformat()
+                    present = rows.get(iso, 0)
+                    percent = round((present / student_count) * 100, 1) if student_count > 0 else 0
+                    points.append({'label': iso, 'percent': percent})
+                    day = day + timedelta(days=1)
+
+        elif rng == 'month':
+            end_date = today
+            start_date = end_date - timedelta(days=29)
+            # month uses same logic as week but longer range
+            if status in ('overview', 'attendance'):
+                if grade and grade != 'all':
+                    cur.execute('''
+                        SELECT ar.date as date,
+                               SUM(CASE WHEN ar.status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records ar
+                        JOIN students s ON s.id = ar.student_id
+                        WHERE ar.date BETWEEN ? AND ? AND s.grade = ?
+                        GROUP BY ar.date
+                        ORDER BY ar.date ASC
+                    ''', (start_date.isoformat(), end_date.isoformat(), int(grade)))
+                else:
+                    cur.execute('''
+                        SELECT date,
+                               SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records
+                        WHERE date BETWEEN ? AND ?
+                        GROUP BY date
+                        ORDER BY date ASC
+                    ''', (start_date.isoformat(), end_date.isoformat()))
+                rows = {r['date']: {'on_time': (r['on_time'] or 0), 'late': (r['late'] or 0), 'absent': (r['absent'] or 0)} for r in cur.fetchall()}
+                day = start_date
+                while day <= end_date:
+                    iso = day.isoformat()
+                    counts = rows.get(iso, {'on_time': 0, 'late': 0, 'absent': 0})
+                    if student_count > 0:
+                        on_p = round((counts['on_time'] / student_count) * 100, 1)
+                        late_p = round((counts['late'] / student_count) * 100, 1)
+                        absent_p = round((counts['absent'] / student_count) * 100, 1)
+                    else:
+                        on_p = late_p = absent_p = 0
+                    points.append({'label': iso, 'on_time': on_p, 'late': late_p, 'absent': absent_p})
+                    day = day + timedelta(days=1)
+            else:
+                if grade and grade != 'all':
+                    sql = f"SELECT ar.date as date, {case_expr} FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE ar.date BETWEEN ? AND ? AND s.grade = ? GROUP BY ar.date ORDER BY ar.date ASC"
+                    cur.execute(sql, (start_date.isoformat(), end_date.isoformat(), int(grade)))
+                else:
+                    sql = f"SELECT date, {case_expr} FROM attendance_records WHERE date BETWEEN ? AND ? GROUP BY date ORDER BY date ASC"
+                    cur.execute(sql, (start_date.isoformat(), end_date.isoformat()))
+                rows = {r['date']: (r['present'] or 0) for r in cur.fetchall()}
+                day = start_date
+                while day <= end_date:
+                    iso = day.isoformat()
+                    present = rows.get(iso, 0)
+                    percent = round((present / student_count) * 100, 1) if student_count > 0 else 0
+                    points.append({'label': iso, 'percent': percent})
+                    day = day + timedelta(days=1)
+
+        elif rng == 'year':
+            # last 12 months aggregated by YYYY-MM
+            end_month = today.replace(day=1)
+            def month_shift(dt, delta):
+                m = dt.month - 1 + delta
+                y = dt.year + m // 12
+                mm = m % 12 + 1
+                return dt.replace(year=y, month=mm, day=1)
+
+            months = [month_shift(end_month, -i) for i in range(11, -1, -1)]
+            ym_start = months[0].strftime('%Y-%m')
+            ym_end = months[-1].strftime('%Y-%m')
+            # year aggregation by month using case_expr or three-series for overview
+            if status in ('overview', 'attendance'):
+                if grade and grade != 'all':
+                    cur.execute('''
+                        SELECT substr(ar.date,1,7) as ym,
+                               SUM(CASE WHEN ar.status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN ar.status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN ar.status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records ar
+                        JOIN students s ON s.id = ar.student_id
+                        WHERE substr(ar.date,1,7) BETWEEN ? AND ? AND s.grade = ?
+                        GROUP BY ym
+                    ''', (ym_start, ym_end, int(grade)))
+                else:
+                    cur.execute('''
+                        SELECT substr(date,1,7) as ym,
+                               SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                               SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                               SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent
+                        FROM attendance_records
+                        WHERE substr(date,1,7) BETWEEN ? AND ?
+                        GROUP BY ym
+                    ''', (ym_start, ym_end))
+                rows = {r['ym']: {'on_time': (r['on_time'] or 0), 'late': (r['late'] or 0), 'absent': (r['absent'] or 0)} for r in cur.fetchall()}
+                for m in months:
+                    label = m.strftime('%Y-%m')
+                    counts = rows.get(label, {'on_time': 0, 'late': 0, 'absent': 0})
+                    if student_count > 0:
+                        on_p = round((counts['on_time'] / student_count) * 100, 1)
+                        late_p = round((counts['late'] / student_count) * 100, 1)
+                        absent_p = round((counts['absent'] / student_count) * 100, 1)
+                    else:
+                        on_p = late_p = absent_p = 0
+                    points.append({'label': label, 'on_time': on_p, 'late': late_p, 'absent': absent_p})
+            else:
+                if grade and grade != 'all':
+                    sql = f"SELECT substr(ar.date,1,7) as ym, {case_expr} FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE substr(ar.date,1,7) BETWEEN ? AND ? AND s.grade = ? GROUP BY ym"
+                    cur.execute(sql, (ym_start, ym_end, int(grade)))
+                else:
+                    sql = f"SELECT substr(date,1,7) as ym, {case_expr} FROM attendance_records WHERE substr(date,1,7) BETWEEN ? AND ? GROUP BY ym"
+                    cur.execute(sql, (ym_start, ym_end))
+                rows = {r['ym']: (r['present'] or 0) for r in cur.fetchall()}
+                for m in months:
+                    label = m.strftime('%Y-%m')
+                    present = rows.get(label, 0)
+                    percent = round((present / student_count) * 100, 1) if student_count > 0 else 0
+                    points.append({'label': label, 'percent': percent})
+
+        else:
+            emit('attendance_aggregate_response', {'success': False, 'message': 'Invalid range'})
+            return
+
+        # Debug log: report sample of points and context to help frontend mapping issues
+        try:
+            print(f"attendance_aggregate_response -> range={rng} grade={grade} status={status} student_count={student_count} total_points={len(points)} sample_points={points[:3]}")
+        except Exception:
+            pass
+        emit('attendance_aggregate_response', {'success': True, 'range': rng, 'grade': grade, 'points': points})
+    except Exception as e:
+        emit('attendance_aggregate_response', {'success': False, 'message': str(e)})
+    finally:
+        try:
+            if conn_att:
+                conn_att.close()
+        except Exception:
+            pass
+
+
+@socketio.on('request_attendance_trend')
+def handle_request_attendance_trend(data):
+    """Compute per-day attendance counts for a single student for a given month.
+
+    Expects: { studentId: int, year: int, month: int }
+    Emits: 'attendance_trend_response' with { success, studentId, year, month, points: [{date, on_time, late, absent}] }
+    """
+    try:
+        print(f"handle_request_attendance_trend called with: {data}")
+        print(f"request_attendance_trend received: {data}")
+        student_id = (data or {}).get('studentId')
+        year = (data or {}).get('year')
+        month = (data or {}).get('month')
+        if not student_id or not year or not month:
+            emit('attendance_trend_response', {'success': False, 'message': 'Missing parameters'})
+            return
+
+        # Normalize month/year
+        try:
+            year = int(year)
+            month = int(month)
+            if month < 1 or month > 12:
+                raise ValueError('Invalid month')
+        except Exception:
+            emit('attendance_trend_response', {'success': False, 'message': 'Invalid year/month'})
+            return
+
+        import calendar as _cal
+        from datetime import timedelta as _td
+
+        last_day = _cal.monthrange(year, month)[1]
+        start_date = date(year, month, 1)
+        end_date = date(year, month, last_day)
+
+        conn_att = get_db_connection('attendance')
+        cur = conn_att.cursor()
+
+        # Detect whether attendance_records has a check_in_time column
+        cur.execute("PRAGMA table_info(attendance_records)")
+        cols = [r['name'] for r in cur.fetchall()]
+        has_check_in = 'check_in_time' in cols
+
+        if has_check_in:
+            # Select counts plus earliest check_in_time (ISO string) per date
+            cur.execute('''
+                SELECT date,
+                       SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                       SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                       SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
+                       MIN(check_in_time) as arrival_iso
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                GROUP BY date
+                ORDER BY date ASC
+            ''', (int(student_id), start_date.isoformat(), end_date.isoformat()))
+        else:
+            # Older DBs may not have the column; return counts and no arrival
+            cur.execute('''
+                SELECT date,
+                       SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                       SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                       SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
+                       NULL as arrival_iso
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                GROUP BY date
+                ORDER BY date ASC
+            ''', (int(student_id), start_date.isoformat(), end_date.isoformat()))
+
+        fetched = cur.fetchall()
+        rows = {}
+        for r in fetched:
+            arrival_iso = r['arrival_iso']
+            arrival_ts = None
+            arrival_local = None
+            arrival_minutes = None
+            if arrival_iso:
+                try:
+                    # Parse ISO string using server local time and emit epoch seconds
+                    arrival_dt = datetime.fromisoformat(arrival_iso)
+                    arrival_ts = int(arrival_dt.timestamp())
+                    # Provide a server-local human string (HH:MM) and minutes-since-midnight
+                    arrival_local = arrival_dt.strftime('%H:%M')
+                    arrival_minutes = arrival_dt.hour * 60 + arrival_dt.minute
+                except Exception:
+                    arrival_ts = None
+                    arrival_local = None
+                    arrival_minutes = None
+            rows[r['date']] = {
+                'on_time': (r['on_time'] or 0),
+                'late': (r['late'] or 0),
+                'absent': (r['absent'] or 0),
+                'arrival_ts': arrival_ts,
+                'arrival_local': arrival_local,
+                'arrival_minutes': arrival_minutes,
+            }
+
+        # Only include days with actual attendance records (school days)
+        points = []
+        for iso_date in sorted(rows.keys()):
+            counts = rows[iso_date]
+            points.append({
+                'date': iso_date,
+                'on_time': int(counts.get('on_time', 0)),
+                'late': int(counts.get('late', 0)),
+                'absent': int(counts.get('absent', 0)),
+                'arrival_ts': counts.get('arrival_ts'),
+                'arrival_local': counts.get('arrival_local'),
+                'arrival_minutes': counts.get('arrival_minutes')
+            })
+
+        conn_att.close()
+        print(f"attendance_trend_response -> student={student_id} year={year} month={month} points={len(points)}")
+        emit('attendance_trend_response', {'success': True, 'studentId': int(student_id), 'year': year, 'month': month, 'points': points})
+    except Exception as e:
+        try:
+            emit('attendance_trend_response', {'success': False, 'message': str(e)})
+        except Exception:
+            pass
+
+# ==================== REST API ENDPOINTS ====================
+# File-related endpoints kept as REST for downloads/uploads
 
 # Import additional endpoints
 from api_endpoints import register_endpoints
@@ -657,13 +1393,15 @@ register_endpoints(app, socketio, {
     'get_all_students_with_history': get_all_students_with_history,
     'get_student_by_id': get_student_by_id,
     'get_attendance_summary': get_attendance_summary,
-    'broadcast_data_change': broadcast_data_change
+    'broadcast_data_change': broadcast_data_change,
+    'broadcast_summary_update': broadcast_summary_update,
+    'emit': emit,
+    'authenticated_sessions': authenticated_sessions
 })
 
 if __name__ == '__main__':
     init_database()
     migrate_json_to_sqlite()
     print("Flask backend starting on http://0.0.0.0:5000")
-    print("WebSocket support enabled (using threading mode)")
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)
-
+    print("WebSocket support enabled (HTTP, threading mode)")
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)

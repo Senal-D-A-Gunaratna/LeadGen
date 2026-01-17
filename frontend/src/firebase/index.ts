@@ -10,7 +10,6 @@ export const initializeFirebase = () => {
 
 export {
   FirebaseProvider,
-  FirebaseClientProvider,
   useFirebaseApp,
   useAuth,
   useFirestore,

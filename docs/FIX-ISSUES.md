@@ -1,54 +1,58 @@
-# Fixing Current Issues
+# Troubleshooting & Setup Guide
 
-Based on the errors you're seeing, here's how to fix them:
+This document outlines solutions for common environment and dependency issues encountered in the project.
 
-## Issue 1: Concurrently Module Error
+## 🚀 Quick Fix (Recommended)
 
-**Error:** `Error: Cannot find module '../src/defaults'` from concurrently
+If you are experiencing module errors, the fastest solution is to run the automated fix script. This handles both frontend and backend dependencies.
 
-**Fix:**
 ```bash
 cd /home/Senal/leadgen/studio-main
-
-# Remove corrupted concurrently installation
-rm -rf node_modules/.bin/concurrently
-rm -rf node_modules/concurrently
-
-# Reinstall it
-npm install concurrently@^8.2.2 --save-dev
-
-# Or use the fix script:
 bash fix-setup.sh
 ```
 
-## Issue 1b: Next.js Module Error
+After running the script, start the development server:
 
-**Error:** `Error: Cannot find module '../server/require-hook'` from next
-
-**Fix:**
 ```bash
-cd /home/Senal/leadgen/studio-main
-
-# Remove corrupted Next.js installation
-rm -rf node_modules/.bin/next
-rm -rf node_modules/next
-
-# Reinstall Next.js
-npm install next@14.2.4 --save
-
-# Or use the fix script:
-bash fix-nextjs.sh
+npm run dev
 ```
 
-## Issue 2: Requirements.txt Not Found
+---
 
-**Error:** `ERROR: Could not open requirements file: [Errno 2] No such file or directory: 'requirements.txt'`
+## 🛠 Manual Troubleshooting
+
+If you prefer to fix issues individually, follow the steps below for specific errors.
+
+### 1. Frontend Dependency Errors
+
+#### Issue: `concurrently` module not found
+**Error:** `Error: Cannot find module '../src/defaults'`
 
 **Fix:**
-The `requirements.txt` file is in the `backend/` directory, not the root. Run:
+```bash
+rm -rf node_modules/.bin/concurrently node_modules/concurrently
+npm install concurrently@^8.2.2 --save-dev
+```
+
+#### Issue: `next` module not found
+**Error:** `Error: Cannot find module '../server/require-hook'`
+
+**Fix:**
+```bash
+rm -rf node_modules/.bin/next node_modules/next
+npm install next@14.2.4 --save
+```
+
+### 2. Backend Dependency Errors
+
+#### Issue: `requirements.txt` not found
+**Error:** `[Errno 2] No such file or directory: 'requirements.txt'`
+
+**Fix:**
+The backend dependencies must be installed from the `backend/` directory.
 
 ```bash
-cd /home/Senal/leadgen/studio-main/backend
+cd backend
 pip3 install -r requirements.txt
 cd ..
 ```

@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Search, UserPlus, Upload, Loader2, Download, FileJson, FileText, History, Users, X, File as FileIcon } from "lucide-react";
+import { Search, UserPlus, Upload, Loader2, Download, Database, FileText, History, Users, X, File as FileIcon } from "lucide-react";
 import { useStudentStore } from "@/hooks/use-student-store";
 import type { Student } from "@/lib/types";
 import { Badge } from "../ui/badge";
@@ -29,15 +29,14 @@ import { Avatar, AvatarFallback } from "../ui/avatar";
 import { 
   uploadStudentDataFromCsvAction, 
   downloadStudentDataAsCsvAction,
-  uploadStudentDataFromJsonAction,
-  downloadStudentDataAsJsonAction,
-  uploadAttendanceHistoryFromJsonAction,
-  downloadAttendanceHistoryAsJsonAction,
   uploadAttendanceHistoryFromCsvAction,
   downloadAttendanceSummaryAsCsvAction,
   downloadDetailedAttendanceHistoryAsCsvAction,
   downloadStudentDataAsPdfAction,
   downloadAttendanceSummaryAsPdfAction,
+  createBackupAction,
+  downloadBackupAction,
+  restoreBackupAction,
 } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -47,8 +46,8 @@ import { format } from "date-fns";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 import { UploadAuthDialog } from "../dashboard/upload-auth-dialog";
 
-type UploadType = 'student-json' | 'student-csv' | 'attendance-json' | 'attendance-csv';
-type DownloadType = 'student-json' | 'student-csv' | 'student-pdf' | 'attendance-summary-csv' | 'attendance-json' | 'attendance-detailed-csv' | 'attendance-summary-pdf';
+type UploadType = 'student-db' | 'student-csv' | 'attendance-db' | 'attendance-csv';
+type DownloadType = 'student-db' | 'student-csv' | 'student-pdf' | 'attendance-summary-csv' | 'attendance-db' | 'attendance-detailed-csv' | 'attendance-summary-pdf';
 
 const GRADES = ["6", "7", "8", "9", "10", "11", "12", "13"];
 
@@ -92,6 +91,8 @@ export function ManagePrefectsTab() {
     fetchAndSetStudents();
   }, []);
 
+  // Global handler clears filters on tab change; no per-tab cleanup here.
+
 
   const filteredStudents = students;
 
@@ -111,56 +112,59 @@ export function ManagePrefectsTab() {
     if (!file || !uploadType || !user?.role) return;
 
     setIsUploading(true);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        const content = e.target?.result;
-        if (typeof content === 'string') {
-            try {
-                const now = await getCurrentAppTime();
-                const timestamp = format(now, "yyyy-MM-dd'T'HH-mm-ss");
-                let result;
-                
-                switch (uploadType) {
-                    case 'student-csv':
-                        result = await uploadStudentDataFromCsvAction(content, timestamp, !!fakeDate, user.role, password);
-                        break;
-                    case 'student-json':
-                        result = await uploadStudentDataFromJsonAction(content, timestamp, !!fakeDate, user.role, password);
-                        break;
-                    case 'attendance-json':
-                        result = await uploadAttendanceHistoryFromJsonAction(content, timestamp, !!fakeDate, user.role, password);
-                        break;
-                    case 'attendance-csv':
-                        result = await uploadAttendanceHistoryFromCsvAction(content, timestamp, !!fakeDate, user.role, password);
-                        break;
-                    default:
-                        throw new Error("Invalid upload type");
-                }
 
-                if (result.success) {
-                    addActionLog(`[${user?.role}] Uploaded ${uploadType} file: ${file.name}`);
-                    toast({
-                        title: "Upload Successful",
-                        description: result.message,
-                    });
-                    fetchAndSetStudents();
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error: any) {
-                toast({
-                    variant: "destructive",
-                    title: "Upload Failed",
-                    description: error.message || "Could not process the uploaded file.",
-                });
-            } finally {
-                setIsUploading(false);
-                setUploadType(null);
-                if (fileInputRef.current) fileInputRef.current.value = ''; // Reset file input
-            }
+    try {
+      if (uploadType === 'student-db' || uploadType === 'attendance-db') {
+        // Handle DB Upload (Binary)
+        const dataType = uploadType === 'student-db' ? 'students' : 'attendance';
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('dataType', dataType);
+
+        const response = await fetch('/api/upload-backup', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) throw new Error('Upload failed');
+        const data = await response.json();
+
+        if (data.success && data.filename) {
+          await restoreBackupAction(dataType, data.filename);
+          addActionLog(`[${user?.role}] Restored ${dataType} from upload: ${file.name}`);
+          toast({ title: "Restore Successful", description: "Database restored from uploaded file." });
+          fetchAndSetStudents();
+        } else {
+          throw new Error(data.error || 'Upload failed');
         }
-    };
-    reader.readAsText(file);
+      } else {
+        // Handle CSV Upload (Text)
+        const content = await file.text();
+        const now = await getCurrentAppTime();
+        const timestamp = format(now, "yyyy-MM-dd'T'HH-mm-ss");
+        let result;
+
+        if (uploadType === 'student-csv') {
+          result = await uploadStudentDataFromCsvAction(content, timestamp, !!fakeDate, user.role, password);
+        } else if (uploadType === 'attendance-csv') {
+          result = await uploadAttendanceHistoryFromCsvAction(content, timestamp, !!fakeDate, user.role, password);
+        }
+
+        if (result?.success) {
+          addActionLog(`[${user?.role}] Uploaded ${uploadType}: ${file.name}`);
+          toast({ title: "Upload Successful", description: result.message });
+          fetchAndSetStudents();
+        } else {
+          throw new Error(result?.message || "Invalid upload type or failure");
+        }
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Upload Failed", description: error.message });
+    } finally {
+      setIsUploading(false);
+      setUploadType(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
 
@@ -174,10 +178,13 @@ export function ManagePrefectsTab() {
   const handleDownloadClick = async (type: DownloadType) => {
     setIsDownloading(true);
     try {
-      let data: string | Buffer;
+      let data: any;
       let filename: string;
       let mimeType: string;
       let isPdf = false;
+      
+      const now = await getCurrentAppTime();
+      const timestamp = format(now, "yyyy-MM-dd'T'HH-mm-ss");
       
       switch (type) {
         case 'student-csv':
@@ -185,10 +192,10 @@ export function ManagePrefectsTab() {
           filename = 'student-data.csv';
           mimeType = 'text/csv;charset=utf-8;';
           break;
-        case 'student-json':
-          data = await downloadStudentDataAsJsonAction();
-          filename = 'student-data.json';
-          mimeType = 'application/json;charset=utf-8;';
+        case 'student-db':
+          filename = await createBackupAction('students', timestamp, !!fakeDate);
+          data = await downloadBackupAction('students', filename);
+          mimeType = 'application/x-sqlite3';
           break;
         case 'student-pdf':
           data = await downloadStudentDataAsPdfAction();
@@ -196,10 +203,10 @@ export function ManagePrefectsTab() {
           mimeType = 'application/pdf';
           isPdf = true;
           break;
-        case 'attendance-json':
-          data = await downloadAttendanceHistoryAsJsonAction();
-          filename = 'attendance-history.json';
-          mimeType = 'application/json;charset=utf-8;';
+        case 'attendance-db':
+          filename = await createBackupAction('attendance', timestamp, !!fakeDate);
+          data = await downloadBackupAction('attendance', filename);
+          mimeType = 'application/x-sqlite3';
           break;
         case 'attendance-summary-csv':
           data = await downloadAttendanceSummaryAsCsvAction();
@@ -250,7 +257,7 @@ export function ManagePrefectsTab() {
 
   return (
     <>
-    <Card className="glassmorphic glowing-border">
+    <Card className="glassmorphic glowing-border min-h-[750px]">
       <CardHeader>
         <div className="flex justify-between items-start">
             <div>
@@ -284,9 +291,9 @@ export function ManagePrefectsTab() {
                             <span>CSV File</span>
                           </DropdownMenuItem>
                           {isAdminOrDev && (
-                            <DropdownMenuItem onClick={() => handleDownloadClick('student-json')}>
-                              <FileJson className="mr-2 h-4 w-4" />
-                              <span>JSON File</span>
+                            <DropdownMenuItem onClick={() => handleDownloadClick('student-db')}>
+                              <Database className="mr-2 h-4 w-4" />
+                              <span>SQLite File</span>
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuSubContent>
@@ -312,9 +319,9 @@ export function ManagePrefectsTab() {
                                 <FileText className="mr-2 h-4 w-4" />
                                 <span>CSV File</span>
                               </DropdownMenuItem>
-                             <DropdownMenuItem onClick={() => handleDownloadClick('attendance-json')}>
-                                <FileJson className="mr-2 h-4 w-4" />
-                                <span>JSON File</span>
+                             <DropdownMenuItem onClick={() => handleDownloadClick('attendance-db')}>
+                                <Database className="mr-2 h-4 w-4" />
+                                <span>SQLite File</span>
                              </DropdownMenuItem>
                             </>
                            )}
@@ -330,7 +337,7 @@ export function ManagePrefectsTab() {
                       ref={fileInputRef}
                       className="hidden"
                       onChange={handleFileChange}
-                      accept={uploadType?.includes('csv') ? '.csv' : '.json'}
+                      accept={uploadType?.includes('csv') ? '.csv' : '.db,.sqlite'}
                       key={uploadType} // Force re-render to apply accept attribute
                     />
 
@@ -348,9 +355,9 @@ export function ManagePrefectsTab() {
                              <span>Student Data</span>
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
-                            <DropdownMenuItem onClick={() => handleUploadClick('student-json')}>
-                              <FileJson className="mr-2 h-4 w-4" />
-                              <span>JSON File</span>
+                            <DropdownMenuItem onClick={() => handleUploadClick('student-db')}>
+                              <Database className="mr-2 h-4 w-4" />
+                              <span>SQLite File</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleUploadClick('student-csv')}>
                               <FileText className="mr-2 h-4 w-4" />
@@ -365,9 +372,9 @@ export function ManagePrefectsTab() {
                               <span>Attendance History</span>
                            </DropdownMenuSubTrigger>
                            <DropdownMenuSubContent>
-                             <DropdownMenuItem onClick={() => handleUploadClick('attendance-json')}>
-                                <FileJson className="mr-2 h-4 w-4" />
-                                <span>JSON File</span>
+                             <DropdownMenuItem onClick={() => handleUploadClick('attendance-db')}>
+                                <Database className="mr-2 h-4 w-4" />
+                                <span>SQLite File</span>
                              </DropdownMenuItem>
                              <DropdownMenuItem onClick={() => handleUploadClick('attendance-csv')}>
                                 <FileText className="mr-2 h-4 w-4" />
@@ -474,8 +481,7 @@ export function ManagePrefectsTab() {
                           </TableCell>
                           <TableCell>{student.grade} - {student.className}</TableCell>
                           <TableCell>
-                              <div className="text-sm font-medium">{student.contact.phone}</div>
-                              <div className="text-xs text-muted-foreground">{student.contact.email || 'N/A'}</div>
+                              <div className="font-medium">{student.contact.phone || 'N/A'}</div>
                           </TableCell>
                           <TableCell>
                             {student.role ? (

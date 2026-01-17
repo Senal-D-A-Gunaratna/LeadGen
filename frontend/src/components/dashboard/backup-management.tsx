@@ -41,7 +41,7 @@ export function BackupManagement() {
   const { toast } = useToast();
   const { addActionLog } = useActionLogStore();
   const { user } = useAuthStore();
-  const { actions: { initializeStudents, getCurrentAppTime }, fakeDate } = useStudentStore();
+  const { actions: { fetchAndSetStudents, getCurrentAppTime }, fakeDate } = useStudentStore();
   const [backups, setBackups] = useState<{ students: string[], attendance: string[] }>({ students: [], attendance: [] });
   const [isLoading, setIsLoading] = useState(true);
   const [isActioning, setIsActioning] = useState<string | null>(null);
@@ -107,8 +107,32 @@ export function BackupManagement() {
     setIsActioning(actionKey);
     try {
       const fileContent = await downloadBackupAction(dataType, fileName);
-      const blob = new Blob([fileContent], { type: "application/json;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
+      // fileContent may be a Blob (preferred) or ArrayBuffer/string; normalize to Blob
+      let fileBlob: Blob;
+      const isBlob = (v: any): v is Blob => v && typeof v === 'object' && typeof (v as any).arrayBuffer === 'function';
+      const isArrayBuffer = (v: any): v is ArrayBuffer => v && (v instanceof ArrayBuffer || (v && typeof v.byteLength === 'number' && typeof v.slice === 'function'));
+
+      if (isBlob(fileContent)) {
+        fileBlob = fileContent;
+      } else if (isArrayBuffer(fileContent)) {
+        // fallback: assume base64 string (older behavior) and decode
+        fileBlob = new Blob([fileContent], { type: "application/x-sqlite3" });
+      } else if (typeof fileContent === 'string') {
+        try {
+          const binary = atob(fileContent);
+          const len = binary.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+          fileBlob = new Blob([bytes], { type: "application/x-sqlite3" });
+        } catch (e) {
+          throw new Error('Downloaded data is not a valid binary file');
+        }
+      } else {
+        // last-resort: stringify and save as text (not ideal)
+        fileBlob = new Blob([String(fileContent)], { type: "application/x-sqlite3" });
+      }
+
+      const url = URL.createObjectURL(fileBlob);
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", fileName);
@@ -123,12 +147,28 @@ export function BackupManagement() {
     }
   };
 
+  const handleRestoreBackup = async (dataType: DataType, fileName: string) => {
+    const actionKey = `restore-${dataType}-${fileName}`;
+    setIsActioning(actionKey);
+    const authorizerRole = user?.role || 'user';
+    
+    try {
+      await restoreBackupAction(dataType, fileName);
+      addActionLog(`[${authorizerRole}] Restored backup: ${fileName}`);
+      toast({ title: "Restore Successful", description: `${fileName} was restored.` });
+      await fetchAndSetStudents();
+    } catch (error) {
+      toast({ variant: "destructive", title: "Restore Failed", description: "Could not restore the backup." });
+    } finally {
+      setIsActioning(null);
+    }
+  };
 
   const handleRequestAuth = (dataType: DataType | null, fileName: string | null, actionType: AuthActionType) => {
     setAuthDialog({ isOpen: true, dataType, fileName, actionType });
   };
   
-  const handleAuthorizedAction = async () => {
+  const handleAuthorizedAction = async (password?: string) => {
     if (!authDialog.actionType) return;
 
     const { dataType, fileName, actionType } = authDialog;
@@ -141,7 +181,7 @@ export function BackupManagement() {
         await restoreBackupAction(dataType, fileName);
         addActionLog(`[${authorizerRole}] Restored backup: ${fileName}`);
         toast({ title: "Restore Successful", description: `${fileName} was restored.` });
-        await initializeStudents();
+        await fetchAndSetStudents();
 
       } else if (actionType === 'delete' && dataType && fileName) {
         const willBeEmpty = backups[dataType].length === 1;
@@ -201,9 +241,11 @@ export function BackupManagement() {
                 {type === 'students' ? <Database /> : <History />}
                 {type === 'students' ? 'Student Data Backups' : 'Attendance History Backups'}
             </h4>
-            <Button size="sm" onClick={() => handleCreateBackup(type)} disabled={!!isActioning}>
-                {isActioning === `create-${type}-all` ? <Loader2 className="animate-spin" /> : 'Create Backup'}
-            </Button>
+            <div className="flex gap-2">
+                <Button size="sm" onClick={() => handleCreateBackup(type)} disabled={!!isActioning}>
+                    {isActioning === `create-${type}-all` ? <Loader2 className="animate-spin" /> : 'Create Backup'}
+                </Button>
+            </div>
         </div>
         <ScrollArea className="h-48 pr-4 border rounded-md">
             <div className="p-2 space-y-2">
@@ -241,8 +283,8 @@ export function BackupManagement() {
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
-                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                            <AlertDialogAction onClick={() => handleRequestAuth(type, file, 'restore')}>Continue</AlertDialogAction>
+                                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                          <AlertDialogAction onClick={() => handleRequestAuth(type, file, 'restore')}>Continue</AlertDialogAction>
                                         </AlertDialogFooter>
                                     </AlertDialogContent>
                                 </AlertDialog>

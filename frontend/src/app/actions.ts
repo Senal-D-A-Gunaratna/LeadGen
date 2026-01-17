@@ -50,9 +50,9 @@ export async function getActionLogsAction(): Promise<ActionLogEntry[]> {
   const logs = await apiGetActionLogs();
   // Backend returns { timestamp: string, action: string }
   // Frontend expects { timestamp: Date, message: string }
-  return logs.map(log => ({
+  return logs.map((log: { timestamp: string; action: string }) => ({
     timestamp: new Date(log.timestamp),
-    message: log.action || log.message || ''
+    message: log.action
   }));
 }
 
@@ -76,7 +76,7 @@ export async function appendToActionLogAction(logEntry: ActionLogEntry): Promise
   }
 }
 
-export async function clearActionLogsAction(role: Role): Promise<void> {
+export async function clearActionLogsAction(role: string): Promise<void> {
   await apiClearActionLogs(role);
 }
 
@@ -86,7 +86,10 @@ export async function getAuthLogsAction(): Promise<LogEntry[]> {
 }
 
 export async function appendToAuthLogAction(logEntry: LogEntry): Promise<void> {
-  await apiAppendToAuthLog(logEntry.timestamp, logEntry.message);
+  const timestamp = logEntry.timestamp instanceof Date 
+    ? logEntry.timestamp.toISOString() 
+    : new Date(logEntry.timestamp).toISOString();
+  await apiAppendToAuthLog(timestamp, logEntry.message);
 }
 
 export async function clearAuthLogsAction(role: Role): Promise<void> {
@@ -111,7 +114,7 @@ export async function deleteBackupAction(dataType: 'students' | 'attendance', fi
   await apiDeleteBackup(dataType, fileName);
 }
 
-export async function downloadBackupAction(dataType: 'students' | 'attendance', fileName: string): Promise<string> {
+export async function downloadBackupAction(dataType: 'students' | 'attendance', fileName: string): Promise<Blob | ArrayBuffer | string> {
   return apiDownloadBackup(dataType, fileName);
 }
 

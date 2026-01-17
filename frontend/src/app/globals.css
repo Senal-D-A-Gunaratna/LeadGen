@@ -99,6 +99,20 @@
   .glowing-border {
     @apply border;
   }
+
+  /* Attendance calendar day styles */
+  .day-on-time {
+    @apply bg-green-500/20 text-green-700 border-green-500/30;
+  }
+  .day-late {
+    @apply bg-yellow-500/20 text-yellow-700 border-yellow-500/30;
+  }
+  .day-absent {
+    @apply bg-red-500/20 text-red-700 border-red-500/30;
+  }
+  .day-null {
+    @apply bg-gray-500/20 text-gray-700 border-gray-500/30;
+  }
 }
 
 @keyframes pulse-glow {

@@ -12,9 +12,11 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
+import { wsClient } from "@/lib/websocket-client";
 import type { Student, AttendanceStatus, PrefectRole } from "@/lib/types";
-import { Mail, Phone, GraduationCap, Trash2, Loader2, Save, Pencil, UserCheck, Clock, UserX, Edit, Download, FileText, Fingerprint, File as FileIcon } from "lucide-react";
-import { useMemo, useState, useEffect } from "react";
+import { Mail, Phone, GraduationCap, Trash2, Loader2, Save, Pencil, UserCheck, Clock, UserX, Edit, Download, FileText, Fingerprint, File as FileIcon, ChevronLeft, ChevronRight, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
+import MiniTrendChart from "@/components/ui/mini-trend-chart";
+import { useMemo, useState, useEffect, useRef } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,7 +41,9 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../ui/form";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
-import { calculateAttendancePercentage, isWeekday, parseDate } from "@/lib/utils";
+import { isWeekday, parseDate } from "@/lib/utils";
+import { format } from "date-fns";
+import { getStudentSummary } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
 import { downloadStudentAttendanceSummaryAsCsvAction, downloadStudentAttendanceSummaryAsPdfAction } from "@/app/actions";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
@@ -93,7 +97,7 @@ function RemoveStudentButton({ student, onDeleted, canDelete }: { student: Stude
     setIsAuthOpen(true);   // Open password dialog
   }
 
-  const handleAuthorizedRemove = async () => {
+  const handleAuthorizedRemove = async (password?: string) => {
     setIsAuthOpen(false); // Close password dialog
     setIsPending(true);
     try {
@@ -191,7 +195,10 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
         name: values.name,
         grade: values.grade,
         className: values.className,
-        contact: values.contact,
+        contact: {
+          email: values.contact.email || '',
+          phone: values.contact.phone,
+        },
         role: values.role === 'none' ? undefined : (values.role as PrefectRole),
         specialRoles: values.specialRoles,
         notes: values.notes,
@@ -418,11 +425,42 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
   )
 }
 
+// Helpers copied from attendance-history-tab to detect whether a month has any attendance data
+const computeMonthHasDataFromPoints = (points: any[], month: Date) => {
+  if (!points || points.length === 0) return false;
+  const startIso = new Date(month.getFullYear(), month.getMonth(), 1).toISOString().slice(0,10);
+  const endIso = new Date(month.getFullYear(), month.getMonth() + 1, 0).toISOString().slice(0,10);
+  for (const p of points) {
+    const label = p.label || p.date || p[0];
+    if (!label) continue;
+    // labels are often YYYY-MM-DD for month/week ranges
+    if (typeof label === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(label)) {
+      if (label >= startIso && label <= endIso) {
+        // determine if this point contains any attendance (counts or percent)
+        const hasCount = (p.on_time || p.late || p.absent) && ((p.on_time||0) + (p.late||0) + (p.absent||0) > 0);
+        const hasPercent = typeof p.percent === 'number' ? (p.percent > 0) : false;
+        if (hasCount || hasPercent) return true;
+      }
+    }
+  }
+  return false;
+};
+
+const isMonthWithinRange = (month: Date) => {
+  // backend 'month' aggregate covers last ~30 days ending today; consider month has possible data if it overlaps last 30 days
+  const today = new Date();
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(today.getDate() - 29);
+  const monthStart = new Date(month.getFullYear(), month.getMonth(), 1);
+  const monthEnd = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  return monthEnd >= thirtyDaysAgo && monthStart <= today;
+};
 
 export function StudentProfileDialog({ student, open, onOpenChange, canEdit, canDelete, canDownload }: StudentProfileDialogProps) {
   const [isClient, setIsClient] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const { students } = useStudentStore();
+  const { students, studentSummaries, actions } = useStudentStore();
+  const { updateStudentSummaries } = actions;
   const { user } = useAuthStore();
   const { addActionLog } = useActionLogStore();
   const [isDownloading, setIsDownloading] = useState(false);
@@ -433,46 +471,277 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   useEffect(() => {
     if(open) {
       setIsClient(true);
+      setDisplayedMonth(new Date());
     } else {
       setIsEditing(false);
     }
   }, [open]);
 
-  const { attendanceStats, modifiers, modifiersClassNames } = useMemo(() => {
-    if (!student) return { attendanceStats: null, modifiers: {}, modifiersClassNames: {} };
+  const [attendanceStats, setAttendanceStats] = useState<any | null>(null);
 
-    const weekdayRecords = student.attendanceHistory.filter(d => isWeekday(parseDate(d.date)));
-    const onTimeRecords = weekdayRecords.filter(d => d.status === 'on time');
-    const lateRecords = weekdayRecords.filter(d => d.status === 'late');
-    const absentRecords = weekdayRecords.filter(d => d.status === 'absent');
-    
-    const overallPercentage = calculateAttendancePercentage(student, students);
-    const totalWeekdayRecords = weekdayRecords.length;
+  // Month aggregate check state (copied logic from attendance-history-tab)
+  const [displayedMonth, setDisplayedMonth] = useState<Date>(new Date());
+  const [monthHasData, setMonthHasData] = useState<boolean | null>(null); // null = unknown/loading
+  const [fetchError, setFetchError] = useState<boolean>(false);
+  const fetchTimerRef = useRef<number | null>(null);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [monthPickerYear, setMonthPickerYear] = useState<number>(new Date().getFullYear());
+  const monthPickerRef = useRef<HTMLDivElement | null>(null);
+  const monthHeaderRef = useRef<HTMLDivElement | null>(null);
+  // Trend (line chart) state + cache
+  const [showTrend, setShowTrend] = useState<boolean>(false);
+  const [trendLoading, setTrendLoading] = useState<boolean>(false);
+  const [trendError, setTrendError] = useState<boolean>(false);
+  const [attendanceTrend, setAttendanceTrend] = useState<any[] | null>(null);
+  const attendanceTrendCache = useRef<Map<string, any[]>>(new Map());
+  const [wsConnected, setWsConnected] = useState<boolean>(wsClient.isConnected());
 
-    const stats = {
-      onTimeCount: onTimeRecords.length,
-      lateCount: lateRecords.length,
-      absentCount: absentRecords.length,
-      onTimePercentage: totalWeekdayRecords > 0 ? Math.round((onTimeRecords.length / totalWeekdayRecords) * 100) : 0,
-      latePercentage: totalWeekdayRecords > 0 ? Math.round((lateRecords.length / totalWeekdayRecords) * 100) : 0,
-      absentPercentage: totalWeekdayRecords > 0 ? Math.round((absentRecords.length / totalWeekdayRecords) * 100) : 0,
-      overallPercentage,
+  useEffect(() => {
+    const connHandler = (connected: boolean) => setWsConnected(Boolean(connected));
+    wsClient.on('connection', connHandler);
+    return () => wsClient.off('connection', connHandler);
+  }, []);
+
+  const fetchMonthAggregate = async (month: Date) => {
+    if (fetchTimerRef.current) window.clearTimeout(fetchTimerRef.current);
+    return new Promise<void>((resolve) => {
+      fetchTimerRef.current = window.setTimeout(async () => {
+        setMonthHasData(null);
+        setFetchError(false);
+        try {
+          const resp = await wsClient.getAttendanceAggregate('month', 'all', 'overview');
+          const points = resp.points || [];
+          const has = computeMonthHasDataFromPoints(points, month);
+          setMonthHasData(has);
+          setFetchError(false);
+        } catch (err) {
+          console.warn('attendance aggregate fetch failed', err);
+          // Do NOT treat socket failure as "no data". Keep calendar usable but mark fetchError.
+          setFetchError(true);
+          setMonthHasData(true);
+        }
+        resolve();
+      }, 250);
+    });
+  };
+
+  useEffect(() => {
+    if (!isMonthWithinRange(displayedMonth)) {
+      setMonthHasData(false);
+      setFetchError(false);
+      return;
+    }
+    let mounted = true;
+    (async () => {
+      await fetchMonthAggregate(displayedMonth);
+      if (!mounted) return;
+    })();
+    const onDataChanged = () => fetchMonthAggregate(displayedMonth);
+    const onSummaryUpdate = () => fetchMonthAggregate(displayedMonth);
+    try { wsClient.on('data_changed', onDataChanged); wsClient.on('summary_update', onSummaryUpdate); } catch (e) {}
+    return () => {
+      mounted = false;
+      try { wsClient.off('data_changed', onDataChanged); wsClient.off('summary_update', onSummaryUpdate); } catch (e) {}
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayedMonth]);
 
-    return {
-      attendanceStats: stats,
-      modifiers: { 
-        onTime: student.attendanceHistory.filter(d => d.status === 'on time').map(d => parseDate(d.date)),
-        late: student.attendanceHistory.filter(d => d.status === 'late').map(d => parseDate(d.date)),
-        absent: student.attendanceHistory.filter(d => d.status === 'absent').map(d => parseDate(d.date)),
-      },
-      modifiersClassNames: {
-        onTime: 'day-on-time',
-        absent: 'day-absent',
-        late: 'day-late',
+  // Fetch attendance trend for currently displayed month (with retries and caching)
+  // month here should be 1-12 (use monthOneBased when calling)
+  const formatTrendKey = (studentId: number, year: number, monthOneBased: number) => `${studentId}-${year}-${monthOneBased}`;
+
+  const fetchAttendanceTrendForMonth = async (studentId: number, year: number, monthZeroBased: number) => {
+    const monthOne = monthZeroBased + 1;
+    const key = formatTrendKey(studentId, year, monthOne);
+    // Check cache
+    const cached = attendanceTrendCache.current.get(key);
+    if (cached) {
+      setAttendanceTrend(cached);
+      setTrendLoading(false);
+      setTrendError(false);
+      return;
+    }
+
+    console.debug('fetchAttendanceTrendForMonth', { studentId, year, monthZeroBased, monthOne });
+    setTrendLoading(true);
+    setTrendError(false);
+
+    let attempt = 0;
+    const maxAttempts = 3;
+    const delays = [500, 1000, 2000];
+    while (attempt < maxAttempts) {
+      try {
+        const resp = await wsClient.getStudentAttendanceTrend(studentId, year, monthOne);
+        // normalize points: ensure every day present (server should do this but be defensive)
+        const pointsRaw = resp.points || [];
+        // Convert server arrival_ts (epoch seconds) to minutes-since-midnight and local time string
+        const points = (pointsRaw || []).map((p: any) => {
+          const arrival_ts = p.arrival_ts || null;
+          let arrival_minutes: number | null = null;
+          let arrival_local: string | null = null;
+          if (arrival_ts) {
+            try {
+              const d = new Date(arrival_ts * 1000);
+              arrival_minutes = d.getHours() * 60 + d.getMinutes();
+              arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+              arrival_minutes = null;
+              arrival_local = null;
+            }
+          }
+          return { ...p, arrival_minutes, arrival_local };
+        });
+        attendanceTrendCache.current.set(key, points);
+        setAttendanceTrend(points);
+        setTrendLoading(false);
+        setTrendError(false);
+        return;
+      } catch (err) {
+        attempt += 1;
+        console.error(`attendance trend fetch attempt ${attempt} failed`, err);
+        if (attempt >= maxAttempts) {
+          console.warn('Failed to fetch attendance trend after retries', err);
+          setTrendError(true);
+          setTrendLoading(false);
+          return;
+        }
+        // wait before retry
+        await new Promise(r => setTimeout(r, delays[Math.min(attempt-1, delays.length-1)]));
+      }
+    }
+  };
+
+  // Subscribe to server push updates for attendance_trend to update cache
+  useEffect(() => {
+    const onPush = (data: any) => {
+      if (!data || !data.success) return;
+      console.debug('attendance_trend push received', data);
+      const { studentId, year, month, points } = data;
+      const key = formatTrendKey(studentId, year, month);
+      attendanceTrendCache.current.set(key, points || []);
+      // If it's the currently displayed month for this dialog and same student, update view
+      if (student && student.id === studentId && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth()+1)) {
+        setAttendanceTrend(points || []);
       }
     };
-  }, [student, students]);
+    wsClient.on('attendance_trend', onPush);
+    return () => wsClient.off('attendance_trend', onPush);
+  }, [student, displayedMonth]);
+
+  useEffect(() => {
+    if (!showTrend) return;
+    if (!student) return;
+    const year = displayedMonth.getFullYear();
+    const month = displayedMonth.getMonth();
+    fetchAttendanceTrendForMonth(student.id, year, month);
+  }, [showTrend, displayedMonth, student]);
+
+  // Close month picker when clicking outside
+  useEffect(() => {
+    if (!showMonthPicker) return;
+    function onDown(e: MouseEvent) {
+      const el = monthPickerRef.current;
+      const header = monthHeaderRef.current;
+      if (!el) return;
+      if (el.contains(e.target as Node)) return;
+      if (header && header.contains(e.target as Node)) return;
+      setShowMonthPicker(false);
+    }
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [showMonthPicker]);
+
+  const modifiers = useMemo(() => {
+    if (!student) return { onTime: [], late: [], absent: [], null: [] };
+
+    const attendanceDates = new Set(student.attendanceHistory.map(d => d.date));
+
+    const nullDates: Date[] = [];
+    const today = new Date();
+    // Start from a reasonable historical date to avoid too many dates
+    const startDate = new Date(2020, 0, 1); // January 1, 2020
+
+    for (let d = new Date(startDate); d < today; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
+
+      const dateStr = format(d, 'yyyy-MM-dd');
+      if (!attendanceDates.has(dateStr)) {
+        nullDates.push(new Date(d));
+      }
+    }
+
+    return {
+      onTime: student.attendanceHistory.filter(d => d.status === 'on time').map(d => parseDate(d.date)),
+      late: student.attendanceHistory.filter(d => d.status === 'late').map(d => parseDate(d.date)),
+      absent: student.attendanceHistory.filter(d => d.status === 'absent').map(d => parseDate(d.date)),
+      null: nullDates,
+    };
+  }, [student]);
+
+  const modifiersClassNames = {
+    onTime: 'day-on-time',
+    absent: 'day-absent',
+    late: 'day-late',
+    null: 'day-null',
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchSummary() {
+      if (!student) return setAttendanceStats(null);
+      const summary = studentSummaries.get(student.id);
+      if (summary) {
+        setAttendanceStats({
+          onTimeCount: summary.onTimeDays,
+          lateCount: summary.lateDays,
+          absentCount: summary.absentDays,
+          onTimePercentage: summary.onTimePercentage,
+          latePercentage: summary.latePercentage,
+          absentPercentage: summary.absencePercentage,
+          overallPercentage: summary.presencePercentage,
+        });
+      } else {
+        // Fetch and update store
+        try {
+          const res = await getStudentSummary(student.id);
+          const s = res?.summary;
+          if (!cancelled && s) {
+            // Update the store with the fetched summary
+            updateStudentSummaries([{
+              studentId: student.id,
+              summary: {
+                totalSchoolDays: s.totalSchoolDays,
+                presentDays: s.presentDays,
+                absentDays: s.absentDays,
+                onTimeDays: s.onTimeDays,
+                lateDays: s.lateDays,
+                presencePercentage: s.presencePercentage,
+                absencePercentage: s.absencePercentage,
+                onTimePercentage: s.onTimePercentage,
+                latePercentage: s.latePercentage,
+              }
+            }]);
+            setAttendanceStats({
+              onTimeCount: s.onTimeDays,
+              lateCount: s.lateDays,
+              absentCount: s.absentDays,
+              onTimePercentage: s.onTimePercentage,
+              latePercentage: s.latePercentage,
+              absentPercentage: s.absencePercentage,
+              overallPercentage: s.presencePercentage,
+            });
+          }
+        } catch (e) {
+          console.error('Failed to fetch student summary', e);
+          if (!cancelled) setAttendanceStats(null);
+        }
+      }
+    }
+
+    fetchSummary();
+    return () => { cancelled = true };
+  }, [student, studentSummaries, updateStudentSummaries]);
 
   const handleDownload = async (format: 'csv' | 'pdf') => {
     if (!student) return;
@@ -547,12 +816,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                 Grade {student.grade} - Class {student.className} | ID: {student.id}
               </DialogDescription>
             </div>
-             {canEdit && !isEditing && (
-              <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)}>
-                <Pencil className="h-5 w-5" />
-                <span className="sr-only">Edit Profile</span>
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {canEdit && !isEditing && (
+                <Button variant="ghost" size="icon" onClick={() => setIsEditing(true)}>
+                  <Pencil className="h-5 w-5" />
+                  <span className="sr-only">Edit Profile</span>
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
@@ -587,7 +858,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                       <div className="space-y-3 glassmorphic p-4 rounded-lg">
                         <div className="flex justify-between items-center">
                           <span className="flex items-center gap-2 text-sm text-muted-foreground"><GraduationCap className="h-4 w-4 text-primary" /> Overall Presence</span>
-                          <span className="font-bold text-lg">{attendanceStats.overallPercentage}%</span>
+                          <span className="font-bold text-lg">{attendanceStats.overallPercentage.toFixed(1)}%</span>
                         </div>
                         <Separator />
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
@@ -595,17 +866,17 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                               <span className="flex items-center gap-1.5"><UserCheck className="h-4 w-4 text-green-500" /> On Time</span>
                               <span>{attendanceStats.onTimeCount} days</span>
                           </div>
-                          <div className="text-right text-muted-foreground">{attendanceStats.onTimePercentage}%</div>
+                          <div className="text-right text-muted-foreground">{attendanceStats.onTimePercentage.toFixed(1)}%</div>
                           <div className="flex justify-between">
                             <span className="flex items-center gap-1.5"><Clock className="h-4 w-4 text-yellow-500" /> Late</span>
                             <span>{attendanceStats.lateCount} days</span>
                           </div>
-                          <div className="text-right text-muted-foreground">{attendanceStats.latePercentage}%</div>
+                          <div className="text-right text-muted-foreground">{attendanceStats.latePercentage.toFixed(1)}%</div>
                           <div className="flex justify-between">
                             <span className="flex items-center gap-1.5"><UserX className="h-4 w-4 text-red-500" /> Absent</span>
                             <span>{attendanceStats.absentCount} days</span>
                           </div>
-                          <div className="text-right text-muted-foreground">{attendanceStats.absentPercentage}%</div>
+                          <div className="text-right text-muted-foreground">{attendanceStats.absentPercentage.toFixed(1)}%</div>
                         </div>
                       </div>
                     ) : (
@@ -625,23 +896,129 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                         </div>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-headline text-lg text-accent-foreground mb-2">Attendance Calendar</h3>
-                    <div className="p-4 rounded-md glassmorphic">
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-headline text-lg text-accent-foreground">{showTrend ? 'Attendance Line Graph' : 'Attendance Calendar'}</h3>
+                      <Button variant="ghost" size="icon" onClick={() => setShowTrend(s => !s)} aria-pressed={showTrend} aria-label={showTrend ? 'Show calendar' : 'Show trend'}>
+                        {showTrend ? <CalendarIcon className="h-4 w-4" /> : <TrendingUp className="h-4 w-4" />}
+                      </Button>
+                    </div>
                       {isClient ? (
-                        <Calendar
-                          mode="single"
-                          selected={new Date()}
-                          disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
-                          modifiers={modifiers}
-                          modifiersClassNames={modifiersClassNames}
-                          className="p-0"
-                          weekStartsOn={1}
-                        />
+                        <div className="p-4 rounded-md glassmorphic relative mt-auto">
+                            <div className="flex items-center justify-between mb-2">
+                            <button type="button" aria-label="Previous month" className="p-1" onClick={() => setDisplayedMonth(new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() - 1, 1))}>
+                              <ChevronLeft className="h-4 w-4" />
+                            </button>
+                            <div
+                              ref={monthHeaderRef}
+                              className="text-sm font-medium cursor-pointer select-none"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => { setMonthPickerYear(displayedMonth.getFullYear()); setShowMonthPicker(s => !s); }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setMonthPickerYear(displayedMonth.getFullYear());
+                                  setShowMonthPicker(s => !s);
+                                }
+                              }}
+                            >
+                              {format(displayedMonth, 'MMMM yyyy')}
+                            </div>
+                            <button type="button" aria-label="Next month" className="p-1" onClick={() => setDisplayedMonth(new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 1))}>
+                              <ChevronRight className="h-4 w-4" />
+                            </button>
+                          </div>
+
+                          {showMonthPicker && (
+                            <div ref={monthPickerRef} className="absolute z-50 left-1/2 top-12 -translate-x-1/2 w-64">
+                              <div className="w-full p-3 glassmorphic rounded-md border border-border">
+                                <div className="flex items-center justify-between mb-2">
+                                  <button type="button" aria-label="Prev year" onClick={() => setMonthPickerYear(y => y - 1)} className="p-1"><ChevronLeft className="h-4 w-4" /></button>
+                                  <div className="text-sm font-medium">{monthPickerYear}</div>
+                                  <button type="button" aria-label="Next year" onClick={() => setMonthPickerYear(y => y + 1)} className="p-1"><ChevronRight className="h-4 w-4" /></button>
+                                </div>
+                                <div className="grid grid-cols-4 gap-2">
+                                  {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((label, i) => (
+                                    <button
+                                      key={label}
+                                      type="button"
+                                      onClick={() => { setDisplayedMonth(new Date(monthPickerYear, i, 1)); setShowMonthPicker(false); }}
+                                      className={`text-sm py-1 rounded ${displayedMonth.getFullYear() === monthPickerYear && displayedMonth.getMonth() === i ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/20'}`}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex justify-between mt-2">
+                                  <button type="button" className="text-sm text-muted-foreground" onClick={() => { setDisplayedMonth(new Date()); setShowMonthPicker(false); }}>This month</button>
+                                  <button type="button" className="text-sm text-muted-foreground" onClick={() => setShowMonthPicker(false)}>Close</button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {showTrend ? (
+                            <div className="w-full h-[250px]">
+                              {trendLoading ? (
+                                <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-40 w-full" /></div>
+                              ) : trendError ? (
+                                <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
+                                  <div>Unable to load trend</div>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <Button size="sm" onClick={() => fetchAttendanceTrendForMonth(student.id, displayedMonth.getFullYear(), displayedMonth.getMonth())}>Retry</Button>
+                                    {!wsConnected ? (
+                                      <Button size="sm" variant="outline" onClick={() => wsClient.connect()}>Connect</Button>
+                                    ) : (
+                                      <div className="text-xs text-muted-foreground">Connected</div>
+                                    )}
+                                  </div>
+                                  <div className="mt-2 text-xs text-muted-foreground">(If problems persist, check backend logs for request_attendance_trend)</div>
+                                </div>
+                              ) : (
+                                attendanceTrend ? (
+                                  <div className="w-full h-full">
+                                    <MiniTrendChart points={attendanceTrend} statusColors={statusColors} />
+                                  </div>
+                                ) : <Skeleton className="h-40 w-full" />
+                              )}
+                            </div>
+                            ) : (
+                                (monthHasData === false) ? (
+                              <div className="w-full h-[250px] flex items-center justify-center">
+                                <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
+                                  <div className="text-lg font-semibold mb-1">No Data Available</div>
+                                  <div className="text-sm">There is no attendance data for this month.</div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="w-full h-[250px] flex items-center justify-center">
+                                <div className="w-full max-w-[320px] h-full">
+                                  <Calendar
+                                    mode="single"
+                                    month={displayedMonth}
+                                    onMonthChange={(m) => setDisplayedMonth(m)}
+                                    selected={new Date()}
+                                    classNames={{ caption: 'hidden', caption_label: 'hidden', nav: 'hidden' }}
+                                    disabled={(date) => {
+                                      const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
+                                      const day = date.getDay();
+                                      const isWeekend = day === 0 || day === 6;
+                                      return isOutOfRange || isWeekend;
+                                    }}
+                                    modifiers={modifiers}
+                                    modifiersClassNames={modifiersClassNames}
+                                    className="w-full h-full p-0"
+                                    weekStartsOn={1}
+                                  />
+                                </div>
+                              </div>
+                            )
+                          )}
+                        </div>
                       ) : (
                         <Skeleton className="h-[250px] w-full" />
                       )}
-                    </div>
                   </div>
                 </div>
               </TabsContent>

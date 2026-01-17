@@ -102,30 +102,39 @@ export function getAttendanceSummary(student: Student, allStudents: Student[]) {
 
 
 /**
- * Calculates a student's attendance percentage against all actual school days.
- * A school day is defined as a weekday where at least one student has an attendance record.
- * @param student The student to calculate for.
- * @param allStudents The list of all students to determine which days were school days.
- * @returns The attendance percentage.
- */
-export function calculateAttendancePercentage(student: Student, allStudents: Student[]): number {
-  const { presencePercentage } = getAttendanceSummary(student, allStudents);
-  return presencePercentage;
-}
-
-/**
  * Shrinks a full `Student` object into a lightweight form suitable for list views.
  * - Clears large arrays like `attendanceHistory` and `fingerprints`.
  * - Removes contact details and notes to reduce RAM usage on the client.
  * The UI should fetch the full student profile on demand (see `selectStudent`).
  */
 export function shrinkStudentForList(student: Student): Student {
+  // Derive a lightweight `lastScanTime` from attendance history if available.
+  let lastScanTime: number | undefined = undefined;
+  try {
+    if (Array.isArray(student.attendanceHistory) && student.attendanceHistory.length > 0) {
+      // Prefer the most recent attendance record that has a checkInTime
+      const recWithTime = student.attendanceHistory.find(r => (r as any).checkInTime);
+      if (recWithTime && (recWithTime as any).checkInTime) {
+        const parsed = new Date((recWithTime as any).checkInTime).getTime();
+        if (!Number.isNaN(parsed)) lastScanTime = parsed;
+      }
+    }
+  } catch (e) {
+    // ignore parse errors
+  }
+
   return {
     ...student,
+    // Expose lastScanTime so list views can show today's check-in time
+    lastScanTime,
     // Replace potentially-large arrays/objects with small placeholders
     fingerprints: ['','','',''],
     attendanceHistory: [],
-    contact: { email: '', phone: '' },
+    // Preserve small contact fields for list views so phone/email show up
+    contact: {
+      email: student.contact?.email || '',
+      phone: student.contact?.phone || '',
+    },
     notes: undefined,
     specialRoles: undefined,
   };
