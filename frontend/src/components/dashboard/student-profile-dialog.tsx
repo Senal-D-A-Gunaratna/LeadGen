@@ -961,7 +961,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                           {showTrend ? (
                             <div className="w-full h-[250px]">
                               {trendLoading ? (
-                                <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-40 w-full" /></div>
+                                <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
                               ) : trendError ? (
                                 <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
                                   <div>Unable to load trend</div>
