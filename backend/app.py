@@ -297,7 +297,7 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
             try:
                 record_date = dt.fromisoformat(record['date'] + 'T00:00:00')
                 day_of_week = record_date.weekday()
-                if 0 < day_of_week < 6:  # Monday to Friday
+                if 0 <= day_of_week < 5:  # Monday (0) to Friday (4) only - exclude Saturday (5) and Sunday (6)
                     school_days.add(record['date'])
             except:
                 pass
