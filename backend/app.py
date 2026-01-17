@@ -290,14 +290,15 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
     from datetime import datetime as dt
     from calendar import day_name
     
-    # Get all unique school days (weekdays where at least one student has a record)
+    # Get all unique school days (weekdays where at least one student has on-time or late record)
     school_days = set()
     for s in all_students:
         for record in s.get('attendanceHistory', []):
             try:
                 record_date = dt.fromisoformat(record['date'] + 'T00:00:00')
                 day_of_week = record_date.weekday()
-                if 0 <= day_of_week < 5:  # Monday (0) to Friday (4) only - exclude Saturday (5) and Sunday (6)
+                # Only count if: weekday (Mon-Fri) AND status is on-time or late (not absent)
+                if 0 <= day_of_week < 5 and record['status'] in ('on time', 'late'):
                     school_days.add(record['date'])
             except:
                 pass
