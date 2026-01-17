@@ -960,27 +960,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
                           {showTrend ? (
                             <div className="w-full h-[250px]">
-                              {trendLoading ? (
+                              {trendLoading || trendError ? (
                                 <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
-                              ) : trendError ? (
-                                <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground">
-                                  <div>Unable to load trend</div>
-                                  <div className="mt-2 flex items-center gap-2">
-                                    <Button size="sm" onClick={() => fetchAttendanceTrendForMonth(student.id, displayedMonth.getFullYear(), displayedMonth.getMonth())}>Retry</Button>
-                                    {!wsConnected ? (
-                                      <Button size="sm" variant="outline" onClick={() => wsClient.connect()}>Connect</Button>
-                                    ) : (
-                                      <div className="text-xs text-muted-foreground">Connected</div>
-                                    )}
-                                  </div>
-                                  <div className="mt-2 text-xs text-muted-foreground">(If problems persist, check backend logs for request_attendance_trend)</div>
+                              ) : attendanceTrend ? (
+                                <div className="w-full h-full">
+                                  <MiniTrendChart points={attendanceTrend} statusColors={statusColors} />
                                 </div>
                               ) : (
-                                attendanceTrend ? (
-                                  <div className="w-full h-full">
-                                    <MiniTrendChart points={attendanceTrend} statusColors={statusColors} />
-                                  </div>
-                                ) : <Skeleton className="h-40 w-full" />
+                                <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
                               )}
                             </div>
                             ) : (
