@@ -904,7 +904,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                       </Button>
                     </div>
                       {isClient ? (
-                        <div className="p-4 rounded-md glassmorphic relative mt-auto">
+                        <div className="p-4 rounded-md glassmorphic relative">
                             <div className="flex items-center justify-between mb-2">
                             <button type="button" aria-label="Previous month" className="p-1" onClick={() => setDisplayedMonth(new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() - 1, 1))}>
                               <ChevronLeft className="h-4 w-4" />
