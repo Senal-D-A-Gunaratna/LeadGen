@@ -42,13 +42,35 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
           />
           <Tooltip
             contentStyle={{ background: 'var(--popover)', borderRadius: 6, border: '1px solid var(--border)' }}
-            formatter={(value: any, name: string) => {
-              const displayName = name === 'arrival_minutes' ? 'Arrival Time' : name;
-              const displayValue = typeof value === 'number' ? minutesToHHMM(value) : value;
-              return [displayValue, displayName];
+            content={({ active, payload }) => {
+              if (active && payload && payload.length > 0) {
+                const data = payload[0].payload as Point & { day: number };
+                let status = 'Unknown';
+                let statusColor = '#666';
+                
+                if (data.on_time) {
+                  status = 'On Time';
+                  statusColor = statusColors['on time'] || '#22c55e';
+                } else if (data.late) {
+                  status = 'Late';
+                  statusColor = statusColors['late'] || '#eab308';
+                } else if (data.absent) {
+                  status = 'Absent';
+                  statusColor = statusColors['absent'] || '#ef4444';
+                }
+                
+                const arrivalTime = typeof data.arrival_minutes === 'number' ? minutesToHHMM(data.arrival_minutes) : 'N/A';
+                
+                return (
+                  <div className="p-2 space-y-1 text-sm">
+                    <div className="font-medium">Day {data.day}</div>
+                    <div style={{ color: statusColor }}>Status: <span className="font-semibold">{status}</span></div>
+                    <div style={{ color: statusColor }}>Arrival: {arrivalTime}</div>
+                  </div>
+                );
+              }
+              return null;
             }}
-            labelFormatter={(label) => `Day ${label}`}
-            separator=" "
           />
           <Line type="monotone" dataKey="arrival_minutes" stroke={statusColors['on time'] || '#22c55e'} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={true} />
 
