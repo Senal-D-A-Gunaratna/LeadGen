@@ -17,6 +17,9 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
     return { ...p, day: d.getDate() };
   });
 
+  console.log('MiniTrendChart received points:', sorted.length, 'points', sorted);
+  console.log('MiniTrendChart dayLabels:', dayLabels.length, dayLabels);
+
   const numericValues = dayLabels.map(p => (typeof p.arrival_minutes === 'number' ? p.arrival_minutes : NaN)).filter(v => !isNaN(v));
   const minVal = numericValues.length ? Math.min(...numericValues) : 480; // default 08:00
   const maxVal = numericValues.length ? Math.max(...numericValues) : 540; // default 09:00
