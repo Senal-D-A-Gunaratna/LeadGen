@@ -992,14 +992,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                                 </div>
                               </div>
                             ) : (
-                              <div className="w-full h-[250px] flex items-center justify-center">
-                                <div className="w-full max-w-[320px] h-full">
+                              <div className="w-full h-[250px] flex items-center justify-center px-2">
+                                <div className="flex justify-center w-full max-w-[500px]">
                                   <Calendar
                                     mode="single"
                                     month={displayedMonth}
                                     onMonthChange={(m) => setDisplayedMonth(m)}
                                     selected={new Date()}
-                                    classNames={{ caption: 'hidden', caption_label: 'hidden', nav: 'hidden' }}
+                                    classNames={{ caption: 'hidden', caption_label: 'hidden', nav: 'hidden', table: 'w-full', head_cell: 'w-full h-8 text-muted-foreground font-normal text-sm', cell: 'w-full h-8' }}
                                     disabled={(date) => {
                                       const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
                                       const day = date.getDay();
@@ -1008,7 +1008,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                                     }}
                                     modifiers={modifiers}
                                     modifiersClassNames={modifiersClassNames}
-                                    className="w-full h-full p-0"
+                                    className="w-full p-0"
                                     weekStartsOn={1}
                                   />
                                 </div>
