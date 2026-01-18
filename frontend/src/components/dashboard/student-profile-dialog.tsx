@@ -634,38 +634,41 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   }, [showTrend, displayedMonth, student]);
 
   const modifiers = useMemo(() => {
-    if (!student) return { onTime: [], late: [], absent: [], null: [] };
-
-    const attendanceDates = new Set(student.attendanceHistory.map(d => d.date));
-
-    const nullDates: Date[] = [];
-    const today = new Date();
-    // Start from a reasonable historical date to avoid too many dates
-    const startDate = new Date(2020, 0, 1); // January 1, 2020
-
-    for (let d = new Date(startDate); d < today; d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay();
-      if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Skip weekends
-
-      const dateStr = format(d, 'yyyy-MM-dd');
-      if (!attendanceDates.has(dateStr)) {
-        nullDates.push(new Date(d));
-      }
-    }
+    if (!student) return { onTime: [], late: [], absent: [] };
 
     return {
       onTime: student.attendanceHistory.filter(d => d.status === 'on time').map(d => parseDate(d.date)),
       late: student.attendanceHistory.filter(d => d.status === 'late').map(d => parseDate(d.date)),
       absent: student.attendanceHistory.filter(d => d.status === 'absent').map(d => parseDate(d.date)),
-      null: nullDates,
     };
+  }, [student]);
+
+  // Create a set of null dates (weekdays without attendance records) for the disabled check
+  const nullDatesSet = useMemo(() => {
+    if (!student) return new Set<string>();
+
+    const attendanceDates = new Set(student.attendanceHistory.map(d => d.date));
+    const nullDates = new Set<string>();
+    const today = new Date();
+    const startDate = new Date(2020, 0, 1);
+
+    for (let d = new Date(startDate); d < today; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay();
+      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
+
+      const dateStr = format(d, 'yyyy-MM-dd');
+      if (!attendanceDates.has(dateStr)) {
+        nullDates.add(dateStr);
+      }
+    }
+
+    return nullDates;
   }, [student]);
 
   const modifiersClassNames = {
     onTime: 'day-on-time',
     absent: 'day-absent',
     late: 'day-late',
-    null: 'day-null',
   };
 
   useEffect(() => {
@@ -927,7 +930,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                                       const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
                                       const day = date.getDay();
                                       const isWeekend = day === 0 || day === 6;
-                                      return isOutOfRange || isWeekend;
+                                      const dateStr = format(date, 'yyyy-MM-dd');
+                                      const isNull = nullDatesSet.has(dateStr);
+                                      return isOutOfRange || isWeekend || isNull;
                                     }}
                                     modifiers={modifiers}
                                     modifiersClassNames={modifiersClassNames}

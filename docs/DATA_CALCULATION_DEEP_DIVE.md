@@ -434,15 +434,15 @@ The system listens for these events to trigger recalculation:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Student Profile Dialog (React Component)                   │
-│  Displays: Overall Presence, On Time, Late, Absent           │
+│  Displays: Overall Presence, On Time, Late, Absent          │
 └──────────────┬──────────────────────────────────────────────┘
                │ student.id + fetch on open
                ↓
 ┌──────────────────────────────────────────────────────────────┐
 │  useStudentStore (Zustand)                                   │
 │  studentSummaries: Map<studentId, SummaryData>               │
-│  (Checks cache first)                                         │
-└──────┬───────────────────────────────┬──────────────────────┘
+│  (Checks cache first)                                        │
+└──────┬───────────────────────────────┬───────────────────────┘
        │ (cached)                       │ (not cached)
        │ return immediately            │ call API
        ↓                               ↓
@@ -464,7 +464,7 @@ The system listens for these events to trigger recalculation:
                          ┌──────────────↓──────────────────────────┐
                          │  get_attendance_summary()               │
                          │  (backend/app.py)                       │
-                         │                                          │
+                         │                                         │
                          │  1. Find all school days (Mon-Fri)      │
                          │  2. Filter to student's records         │
                          │  3. Count: on_time, late, absent        │
