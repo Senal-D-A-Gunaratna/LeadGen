@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
+import { MonthYearSelector } from "@/components/ui/month-year-selector";
 import { wsClient } from "@/lib/websocket-client";
 import type { Student, AttendanceStatus, PrefectRole } from "@/lib/types";
 import { Mail, Phone, GraduationCap, Trash2, Loader2, Save, Pencil, UserCheck, Clock, UserX, Edit, Download, FileText, Fingerprint, File as FileIcon, ChevronLeft, ChevronRight, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
@@ -484,10 +485,6 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const [monthHasData, setMonthHasData] = useState<boolean | null>(null); // null = unknown/loading
   const [fetchError, setFetchError] = useState<boolean>(false);
   const fetchTimerRef = useRef<number | null>(null);
-  const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [monthPickerYear, setMonthPickerYear] = useState<number>(new Date().getFullYear());
-  const monthPickerRef = useRef<HTMLDivElement | null>(null);
-  const monthHeaderRef = useRef<HTMLDivElement | null>(null);
   // Trend (line chart) state + cache
   const [showTrend, setShowTrend] = useState<boolean>(false);
   const [trendLoading, setTrendLoading] = useState<boolean>(false);
@@ -635,21 +632,6 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     const month = displayedMonth.getMonth();
     fetchAttendanceTrendForMonth(student.id, year, month);
   }, [showTrend, displayedMonth, student]);
-
-  // Close month picker when clicking outside
-  useEffect(() => {
-    if (!showMonthPicker) return;
-    function onDown(e: MouseEvent) {
-      const el = monthPickerRef.current;
-      const header = monthHeaderRef.current;
-      if (!el) return;
-      if (el.contains(e.target as Node)) return;
-      if (header && header.contains(e.target as Node)) return;
-      setShowMonthPicker(false);
-    }
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [showMonthPicker]);
 
   const modifiers = useMemo(() => {
     if (!student) return { onTime: [], late: [], absent: [], null: [] };
@@ -905,58 +887,12 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                     </div>
                       {isClient ? (
                         <div className="p-4 rounded-md glassmorphic relative">
-                            <div className="flex items-center justify-between mb-2">
-                            <button type="button" aria-label="Previous month" className="p-1" onClick={() => setDisplayedMonth(new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() - 1, 1))}>
-                              <ChevronLeft className="h-4 w-4" />
-                            </button>
-                            <div
-                              ref={monthHeaderRef}
-                              className="text-sm font-medium cursor-pointer select-none"
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => { setMonthPickerYear(displayedMonth.getFullYear()); setShowMonthPicker(s => !s); }}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') {
-                                  e.preventDefault();
-                                  setMonthPickerYear(displayedMonth.getFullYear());
-                                  setShowMonthPicker(s => !s);
-                                }
-                              }}
-                            >
-                              {format(displayedMonth, 'MMMM yyyy')}
-                            </div>
-                            <button type="button" aria-label="Next month" className="p-1" onClick={() => setDisplayedMonth(new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 1))}>
-                              <ChevronRight className="h-4 w-4" />
-                            </button>
-                          </div>
-
-                          {showMonthPicker && (
-                            <div ref={monthPickerRef} className="absolute z-50 left-1/2 top-12 -translate-x-1/2 w-64">
-                              <div className="w-full p-3 glassmorphic rounded-md border border-border">
-                                <div className="flex items-center justify-between mb-2">
-                                  <button type="button" aria-label="Prev year" onClick={() => setMonthPickerYear(y => y - 1)} className="p-1"><ChevronLeft className="h-4 w-4" /></button>
-                                  <div className="text-sm font-medium">{monthPickerYear}</div>
-                                  <button type="button" aria-label="Next year" onClick={() => setMonthPickerYear(y => y + 1)} className="p-1"><ChevronRight className="h-4 w-4" /></button>
-                                </div>
-                                <div className="grid grid-cols-4 gap-2">
-                                  {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((label, i) => (
-                                    <button
-                                      key={label}
-                                      type="button"
-                                      onClick={() => { setDisplayedMonth(new Date(monthPickerYear, i, 1)); setShowMonthPicker(false); }}
-                                      className={`text-sm py-1 rounded ${displayedMonth.getFullYear() === monthPickerYear && displayedMonth.getMonth() === i ? 'bg-primary text-primary-foreground' : 'hover:bg-accent/20'}`}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                                <div className="flex justify-between mt-2">
-                                  <button type="button" className="text-sm text-muted-foreground" onClick={() => { setDisplayedMonth(new Date()); setShowMonthPicker(false); }}>This month</button>
-                                  <button type="button" className="text-sm text-muted-foreground" onClick={() => setShowMonthPicker(false)}>Close</button>
-                                </div>
-                              </div>
-                            </div>
-                          )}
+                            <MonthYearSelector
+                              displayedMonth={displayedMonth}
+                              onMonthChange={setDisplayedMonth}
+                              showYearSelector={true}
+                              disableFutureMonths={true}
+                            />
 
                           {showTrend ? (
                             <div className="w-full h-[250px]">

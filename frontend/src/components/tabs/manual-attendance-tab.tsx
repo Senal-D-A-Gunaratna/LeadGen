@@ -30,6 +30,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
+import { MonthYearSelector } from "../ui/month-year-selector";
 import { cn } from "@/lib/utils";
 import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown } from "lucide-react";
 import { RolePasswordDialog } from "../dashboard/role-password-dialog";
@@ -62,6 +63,7 @@ export function ManualAttendanceTab() {
   // can modify attendance and it will be flushed in one go.
   const [isSaving, setIsSaving] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [displayedMonth, setDisplayedMonth] = useState<Date>(selectedDate ? new Date(selectedDate) : new Date());
 
   // Small combo control: editable input + popover two-column picker (hours/minutes)
   function TimeCombo({ studentId, value, onChange }: { studentId: number; value: string; onChange: (v: string | null) => void }) {
@@ -319,12 +321,22 @@ export function ManualAttendanceTab() {
                   {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+              <PopoverContent className="w-auto p-3">
+                <div className="space-y-3">
+                  <MonthYearSelector
+                    displayedMonth={displayedMonth}
+                    onMonthChange={setDisplayedMonth}
+                    showYearSelector={true}
+                  />
+                </div>
                 <Calendar
                   mode="single"
+                  month={displayedMonth}
+                  onMonthChange={setDisplayedMonth}
                   selected={selectedDate}
                   onSelect={(date) => setSelectedDate(date)}
                   disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
+                  classNames={{ caption: 'hidden' }}
                   initialFocus
                   weekStartsOn={1}
                 />

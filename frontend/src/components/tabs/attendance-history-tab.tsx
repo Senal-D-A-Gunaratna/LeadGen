@@ -30,6 +30,7 @@ import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
+import { MonthYearSelector } from "../ui/month-year-selector";
 import { wsClient } from "@/lib/websocket-client";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -480,24 +481,12 @@ export function AttendanceHistoryTab() {
                     </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
-                    <div className="p-0">
-                      <div className="flex items-center justify-between px-2 py-1">
-                        <button
-                          aria-label="Previous month"
-                          className="h-8 w-8 flex items-center justify-center rounded-md"
-                          onClick={() => setDisplayedMonth(new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() - 1, 1))}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <div className="text-sm font-medium">{format(displayedMonth, 'MMMM yyyy')}</div>
-                        <button
-                          aria-label="Next month"
-                          className="h-8 w-8 flex items-center justify-center rounded-md"
-                          onClick={() => setDisplayedMonth(new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 1))}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
-                      </div>
+                    <div className="p-2">
+                      <MonthYearSelector
+                        displayedMonth={displayedMonth}
+                        onMonthChange={setDisplayedMonth}
+                        showYearSelector={true}
+                      />
 
                       {/* Loading or socket error: show skeleton only on fetchError; show placeholder while loading */}
                       {fetchError ? (
