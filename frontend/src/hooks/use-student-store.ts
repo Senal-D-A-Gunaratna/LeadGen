@@ -33,6 +33,26 @@ const getCurrentTime = async (get: () => StudentStore): Promise<Date> => {
 export const useStudentStore = create<StudentStore>()(
   devtools(
     (set, get) => {
+      // Initialize real-time listener for multi-user database changes (only once)
+      let realtimeListenerInitialized = false;
+      const initializeRealtimeListener = () => {
+        if (realtimeListenerInitialized) return;
+        realtimeListenerInitialized = true;
+        
+        // Listen for data changes from other users and automatically refetch
+        wsClient.on('data_changed', () => {
+          // Immediately refetch current data to detect changes made by other users
+          get().actions.fetchAndSetStudents().catch(err => 
+            console.error('Failed to refetch on data_changed event:', err)
+          );
+        });
+      };
+
+      // Trigger initialization when store is first used
+      if (typeof window !== 'undefined') {
+        initializeRealtimeListener();
+      }
+
       const fetchAndSetStudents = async () => {
         set({ isLoading: true });
         try {
@@ -268,10 +288,25 @@ export const useStudentStore = create<StudentStore>()(
             set({ pendingAttendanceChanges: {} });
           },
           // Clear UI filters (search + grade/class/role/status) and reset selected date to today (or fakeDate if set)
+          // Also aggressively clear all cached data when leaving a tab
           clearFilters: () => {
             const fake = get().fakeDate;
             const dateToSet = fake ? new Date(fake) : new Date();
-            set({ searchQuery: '', gradeFilter: 'all', classFilter: 'all', roleFilter: 'all', statusFilter: null, selectedDate: dateToSet });
+            // Clear all cached student data and reset filters
+            set({ 
+              searchQuery: '', 
+              gradeFilter: 'all', 
+              classFilter: 'all', 
+              roleFilter: 'all', 
+              statusFilter: null, 
+              selectedDate: dateToSet,
+              // Aggressive cache clearing
+              students: [],
+              fullRoster: [],
+              scannedStudent: null,
+              recentScans: [],
+              selectedStudent: null,
+            });
           },
           // Reset filters and refetch students for default view (also reset selected date)
           resetToDefault: async () => {

@@ -140,7 +140,8 @@ export default function Home() {
   }, [fakeDate]); 
 
   const handleTabChange = (value: string) => {
-    // Use centralized clearFilters to reset filters and selected date (today)
+    // Immediately clear all filters, cache, and reset state when leaving a tab
+    // This ensures: 1) Fresh data on tab return, 2) Multi-user changes are visible, 3) No state bleed between tabs
     useStudentStore.getState().actions.clearFilters();
     setActiveTab(value);
   };

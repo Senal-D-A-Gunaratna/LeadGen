@@ -13,6 +13,5 @@
     "install": "cd frontend && npm install",
     "install-backend": "cd backend && pip3 install -r requirements.txt",
     "install-all": "npm run install && npm run install-backend"
-  },
-  
+  }
 }
