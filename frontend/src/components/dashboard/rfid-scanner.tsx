@@ -11,6 +11,7 @@ const statusColors: Record<AttendanceStatus, string> = {
   "on time": 'text-green-500',
   absent: 'text-red-500',
   late: 'text-yellow-500',
+  weekend: 'text-gray-500',
 };
 
 

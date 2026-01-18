@@ -39,6 +39,7 @@ const COLORS: Record<AttendanceStatus, string> = {
   "on time": "hsl(var(--chart-2))",
   late: "hsl(var(--chart-3))",
   absent: "hsl(var(--destructive))",
+  weekend: "hsl(var(--muted-foreground))",
 };
 
 const GRADES = ["6", "7", "8", "9", "10", "11", "12", "13"];

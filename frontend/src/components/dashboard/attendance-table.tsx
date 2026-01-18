@@ -26,14 +26,14 @@ import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 import { useMemo } from "react";
 import { Button } from "../ui/button";
 
-const statusIcons: Record<AttendanceStatus | 'weekend', React.ReactNode> = {
+const statusIcons: Record<AttendanceStatus, React.ReactNode> = {
   "on time": <UserCheck className="h-4 w-4 text-green-500" />,
   absent: <UserX className="h-4 w-4 text-red-500" />,
   late: <Clock className="h-4 w-4 text-yellow-500" />,
   weekend: <Calendar className="h-4 w-4 text-gray-500" />,
 };
 
-const statusColors: Record<AttendanceStatus | 'weekend', string> = {
+const statusColors: Record<AttendanceStatus, string> = {
   "on time": 'bg-green-500/10 text-green-400 border-green-500/20',
   absent: 'bg-red-500/10 text-red-400 border-red-500/20',
   late: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
@@ -139,7 +139,7 @@ export function AttendanceTable() {
                       <div className="font-medium">{student.name}</div>
                     </TableCell>
                     <TableCell className="text-center">
-                      {student.status === 'weekend' ? (
+                      {(student.status as string) === 'weekend' ? (
                         <span className="text-muted-foreground">-</span>
                       ) : student.lastScanTime ? (
                         new Date(student.lastScanTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
@@ -148,9 +148,9 @@ export function AttendanceTable() {
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className={`capitalize ${statusColors[student.status as AttendanceStatus | 'weekend']} inline-flex justify-center`}>
-                        {statusIcons[student.status as AttendanceStatus | 'weekend']}
-                        {(student.status as string) === 'weekend' ? 'Weekend Holiday' : student.status}
+                      <Badge variant="outline" className={`capitalize ${statusColors[student.status]} inline-flex justify-center`}>
+                        {statusIcons[student.status]}
+                        {student.status === 'weekend' ? 'Weekend Holiday' : student.status}
                       </Badge>
                     </TableCell>
                   </TableRow>

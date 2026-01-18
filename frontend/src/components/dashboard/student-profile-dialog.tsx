@@ -64,6 +64,7 @@ const statusColors: Record<AttendanceStatus, string> = {
   "on time": 'hsl(var(--chart-2))',
   absent: 'hsl(var(--destructive))',
   late: 'hsl(var(--chart-3))',
+  weekend: 'hsl(var(--muted-foreground))',
 };
 
 const editFormSchema = z.object({

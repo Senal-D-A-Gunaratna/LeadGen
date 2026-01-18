@@ -1,6 +1,6 @@
 import type { DayPicker } from 'react-day-picker';
 
-export type AttendanceStatus = 'on time' | 'absent' | 'late';
+export type AttendanceStatus = 'on time' | 'absent' | 'late' | 'weekend';
 
 export type PrefectRole =
   | "Head Prefect"
