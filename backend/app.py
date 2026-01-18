@@ -202,9 +202,9 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
     return student
 
 def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dict]:
-    """Get all students with their attendance history for a specific date."""
-    if not target_date:
-        target_date = date.today().isoformat()
+    """Get all students with their attendance history for TODAY only (Live Attendance)."""
+    target_date = date.today().isoformat()  # Always use today, ignore parameter
+    is_weekend = date.today().weekday() >= 5  # 5=Saturday, 6=Sunday
     
     conn_students = get_db_connection('students')
     cursor_students = conn_students.cursor()
@@ -273,7 +273,12 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
             'phone': student['phone']
         }
         student['attendanceHistory'] = history
-        student['status'] = date_record['status'] if date_record else 'absent'
+        if is_weekend:
+            student['status'] = 'weekend'
+            student['lastScanTime'] = None
+        else:
+            student['status'] = date_record['status'] if date_record else 'absent'
+            student['lastScanTime'] = date_record['checkInTime'] if date_record else None
         student['hasScannedToday'] = date_record is not None and date_record['status'] != 'absent'
         
         # Remove SQLite-specific fields
@@ -565,6 +570,12 @@ def handle_scan(data):
     """Handle student scan via WebSocket."""
     if request.sid not in authenticated_sessions:  # type: ignore
         emit('scan_response', {'success': False, 'message': 'Not authenticated'})
+        return
+    
+    # Block weekend scans (Saturday=5, Sunday=6)
+    today = date.today()
+    if today.weekday() >= 5:
+        emit('scan_response', {'success': False, 'message': 'Scanning not allowed on weekends'})
         return
     
     fingerprint = data.get('fingerprint')

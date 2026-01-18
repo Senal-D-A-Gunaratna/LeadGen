@@ -17,7 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Search, UserCheck, UserX, Clock, X } from "lucide-react";
+import { Search, UserCheck, UserX, Clock, X, Calendar } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useStudentStore } from "@/hooks/use-student-store";
 import type { AttendanceStatus } from "@/lib/types";
@@ -26,16 +26,18 @@ import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 import { useMemo } from "react";
 import { Button } from "../ui/button";
 
-const statusIcons: Record<AttendanceStatus, React.ReactNode> = {
+const statusIcons: Record<AttendanceStatus | 'weekend', React.ReactNode> = {
   "on time": <UserCheck className="h-4 w-4 text-green-500" />,
   absent: <UserX className="h-4 w-4 text-red-500" />,
   late: <Clock className="h-4 w-4 text-yellow-500" />,
+  weekend: <Calendar className="h-4 w-4 text-gray-500" />,
 };
 
-const statusColors: Record<AttendanceStatus, string> = {
+const statusColors: Record<AttendanceStatus | 'weekend', string> = {
   "on time": 'bg-green-500/10 text-green-400 border-green-500/20',
   absent: 'bg-red-500/10 text-red-400 border-red-500/20',
   late: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  weekend: 'bg-gray-500/10 text-gray-400 border-gray-500/20',
 };
 
 export function AttendanceTable() {
@@ -144,9 +146,9 @@ export function AttendanceTable() {
                       )}
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="outline" className={`capitalize ${statusColors[student.status]} inline-flex justify-center`}>
-                        {statusIcons[student.status]}
-                        {student.status}
+                      <Badge variant="outline" className={`capitalize ${statusColors[student.status as AttendanceStatus | 'weekend']} inline-flex justify-center`}>
+                        {statusIcons[student.status as AttendanceStatus | 'weekend']}
+                        {(student.status as string) === 'weekend' ? 'Weekend Holiday' : student.status}
                       </Badge>
                     </TableCell>
                   </TableRow>
