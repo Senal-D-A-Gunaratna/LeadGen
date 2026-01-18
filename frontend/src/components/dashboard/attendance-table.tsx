@@ -139,7 +139,9 @@ export function AttendanceTable() {
                       <div className="font-medium">{student.name}</div>
                     </TableCell>
                     <TableCell className="text-center">
-                      {student.lastScanTime ? (
+                      {student.status === 'weekend' ? (
+                        <span className="text-muted-foreground">-</span>
+                      ) : student.lastScanTime ? (
                         new Date(student.lastScanTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
                       ) : (
                         <span className="text-muted-foreground">-</span>
