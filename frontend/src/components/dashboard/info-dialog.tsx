@@ -21,7 +21,7 @@ export function CreditsDialog() {
           <span className="sr-only">Credits</span>
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md glassmorphic glowing-border">
+      <DialogContent className="sm:max-w-md glowing-border opacity-93" style={{ backgroundColor: 'hsl(var(--card) / 0.93)' }}>
         <DialogHeader>
           <DialogTitle className="font-headline text-primary">Credits</DialogTitle>
           <DialogDescription>

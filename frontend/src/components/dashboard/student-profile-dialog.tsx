@@ -890,7 +890,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                       </Button>
                     </div>
                       {isClient ? (
-                        <div className="p-4 rounded-md relative opacity-93" style={{ backgroundColor: 'hsl(var(--card) / 0.93)' }}>
+                        <div className="p-4 rounded-md glassmorphic relative">
                             <MonthYearSelector
                               displayedMonth={displayedMonth}
                               onMonthChange={setDisplayedMonth}
