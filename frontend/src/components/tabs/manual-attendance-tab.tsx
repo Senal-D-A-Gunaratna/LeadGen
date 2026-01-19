@@ -39,6 +39,11 @@ import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 type PendingChanges = Record<number, { status: AttendanceStatus | 'null'; checkInTime?: string | null }>;
 const GRADES = ["6", "7", "8", "9", "10", "11", "12", "13"];
 
+const isWeekend = (date: Date): boolean => {
+  const day = date.getDay();
+  return day === 0 || day === 6; // 0 = Sunday, 6 = Saturday
+};
+
 export function ManualAttendanceTab() {
   const { students, actions, fakeDate, searchQuery, gradeFilter, classFilter, roleFilter, isLoading, pendingAttendanceChanges } = useStudentStore(
     state => ({
@@ -225,6 +230,10 @@ export function ManualAttendanceTab() {
   };
 
   const handleSaveChanges = () => {
+    if (selectedDate && isWeekend(selectedDate)) {
+      toast({ variant: "destructive", title: "Weekend Not Allowed", description: "Attendance cannot be marked for weekend dates." });
+      return;
+    }
     const pending = pendingAttendanceChanges || {};
     const validChanges = Object.values(pending).filter((ch: any) => ch && (ch.status !== 'null' || ch.checkInTime !== undefined));
     if (validChanges.length === 0) {
@@ -240,6 +249,9 @@ export function ManualAttendanceTab() {
     try {
         if (!selectedDate) {
             throw new Error("No date selected.");
+        }
+        if (isWeekend(selectedDate)) {
+            throw new Error("Cannot save attendance for weekend dates.");
         }
         // Build a properly typed changes map from the store pending cache
         const changesToSave: Record<number, any> = {};
@@ -335,7 +347,7 @@ export function ManualAttendanceTab() {
                   onMonthChange={setDisplayedMonth}
                   selected={selectedDate}
                   onSelect={(date) => setSelectedDate(date)}
-                  disabled={(date) => date > new Date() || date < new Date("2000-01-01")}
+                  disabled={(date) => date > new Date() || date < new Date("2000-01-01") || isWeekend(date)}
                   classNames={{ caption: 'hidden' }}
                   initialFocus
                   weekStartsOn={1}
