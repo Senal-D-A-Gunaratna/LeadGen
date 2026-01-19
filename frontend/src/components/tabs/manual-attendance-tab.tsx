@@ -395,7 +395,16 @@ export function ManualAttendanceTab() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {students.map((student) => {
+                  {(() => {
+                    // Check if any student has no attendance data for this date
+                    const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
+                    const hasAnyMissingData = students.some(student => {
+                      const fullStudent = fullStudents.find(s => s.id === student.id) as Student | undefined;
+                      const record = (fullStudent?.attendanceHistory || student.attendanceHistory).find(h => h.date === selectedDateStr);
+                      return !record;
+                    });
+
+                    return students.map((student) => {
                     const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
                     const fullStudent = fullStudents.find(s => s.id === student.id) as Student | undefined;
                     const record = (fullStudent?.attendanceHistory || student.attendanceHistory).find(h => h.date === selectedDateStr) as any | undefined;
@@ -423,9 +432,9 @@ export function ManualAttendanceTab() {
                     const pending = (pendingAttendanceChanges || {})[student.id];
                     const timeValue = pending?.checkInTime !== undefined ? (pending.checkInTime ?? '') : existingTime;
                     // Determine display status: prefer pending.status if present; otherwise derive from time (pending or existing) or fallback to record.status
-                    const displayStatus: AttendanceStatus = (pending && pending.status && pending.status !== 'null')
+                    const displayStatus: AttendanceStatus | 'null' = (pending && pending.status && pending.status !== 'null')
                       ? pending.status as AttendanceStatus
-                      : (pending && pending.checkInTime !== undefined ? timeToStatus(pending.checkInTime) : (existingTime ? timeToStatus(existingTime) : (record ? record.status : 'absent')));
+                      : (pending && pending.checkInTime !== undefined ? timeToStatus(pending.checkInTime) : (existingTime ? timeToStatus(existingTime) : (record ? record.status : (hasAnyMissingData ? 'null' : 'absent'))));
 
                     return (
                       <TableRow key={student.id} className="border-border/40 hover:bg-muted/60 transition-all duration-150 ease-out will-change-transform">
@@ -459,7 +468,8 @@ export function ManualAttendanceTab() {
                         </TableCell>
                       </TableRow>
                     );
-                  })}
+                  });
+                  })()}
                 </TableBody>
               </Table>
             )}
