@@ -707,33 +707,56 @@ def handle_get_student_by_id(data):
 
 @socketio.on('save_attendance')
 def handle_save_attendance(data):
-    """Save attendance records for students via WebSocket."""
+    """Save attendance records for students via WebSocket. Strictly forbids weekend dates."""
     if request.sid not in authenticated_sessions:  # type: ignore
         emit('save_attendance_response', {'success': False, 'message': 'Not authenticated'})
         return
     
     students = data.get('students', [])
     
-    conn_attendance = get_db_connection('attendance')
-    cursor_attendance = conn_attendance.cursor()
-    
+    # Validate all record dates first: reject weekends or invalid dates before any DB writes
+    inserts = []
     for student in students:
-        student_id = student['id']
+        student_id = student.get('id')
         for record in student.get('attendanceHistory', []):
-            # Allow clients to supply an explicit check-in time (ISO string). If not provided, use now().
+            date_str = record.get('date')
+            if not date_str:
+                emit('save_attendance_response', {'success': False, 'message': f"Invalid or missing date for student {student_id}"})
+                return
+            try:
+                parsed_date = datetime.fromisoformat(date_str).date()
+            except (ValueError, TypeError):
+                emit('save_attendance_response', {'success': False, 'message': f"Invalid date format for student {student_id}: {date_str}"})
+                return
+            # weekday(): Mon=0..Fri=4, Sat=5, Sun=6 -> reject if >=5
+            if parsed_date.weekday() >= 5:
+                emit('save_attendance_response', {'success': False, 'message': 'Weekend attendance cannot be marked. Please select a weekday (Monday-Friday).'})
+                return
+            
             supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
             check_in_time = supplied_check_in if supplied_check_in else datetime.now().isoformat()
-            cursor_attendance.execute('''
-                INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (student_id, record['date'], record['status'], datetime.now().isoformat(), check_in_time))
+            inserts.append((
+                student_id,
+                parsed_date.isoformat(),
+                record.get('status'),
+                datetime.now().isoformat(),
+                check_in_time
+            ))
+    
+    # All validated — perform DB inserts
+    conn_attendance = get_db_connection('attendance')
+    cursor_attendance = conn_attendance.cursor()
+    for ins in inserts:
+        cursor_attendance.execute('''
+            INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
+            VALUES (?, ?, ?, ?, ?)
+        ''', ins)
     
     conn_attendance.commit()
     conn_attendance.close()
     
     broadcast_data_change('attendance_updated')
-    # Broadcast summary updates for affected students
-    affected_ids = [student['id'] for student in students]
+    affected_ids = [student.get('id') for student in students]
     broadcast_summary_update(affected_ids)
     emit('save_attendance_response', {'success': True})
 
