@@ -79,7 +79,10 @@ authenticated_sessions = {}
 # Track all connected socket session IDs (unauthenticated + authenticated)
 connected_sids = set()
 # Optional scanner token for unauthenticated scanner devices
-SCANNER_TOKEN = os.environ.get('SCANNER_TOKEN')
+# Use a development default when not provided so local/dev testing is easy.
+SCANNER_TOKEN = os.environ.get('SCANNER_TOKEN', 'dev-scanner-token')
+if SCANNER_TOKEN == 'dev-scanner-token':
+    print('NOTE: SCANNER_TOKEN not set; using development default "dev-scanner-token". Do not use this in production.')
 
 # Development mode: force full client access (bypass auth checks)
 if os.environ.get('DEV_FORCE_FULL_ACCESS') == '1':

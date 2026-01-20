@@ -33,7 +33,10 @@ parser.add_argument('--timeout', type=float, default=6.0, help='Seconds to wait 
 args = parser.parse_args()
 
 BACKEND_URL = args.url.rstrip('/')
-SCANNER_TOKEN = args.token
+# Prefer explicit flag or env var, otherwise fall back to the development default.
+SCANNER_TOKEN = args.token or os.environ.get('SCANNER_TOKEN') or 'dev-scanner-token'
+if SCANNER_TOKEN == 'dev-scanner-token':
+    print('NOTE: No SCANNER_TOKEN provided; using development default "dev-scanner-token".')
 TIMEOUT = args.timeout
 
 sio = socketio.Client(logger=False, engineio_logger=False)
@@ -49,9 +52,6 @@ def connect():
 @sio.event
 def disconnect():
     print('Disconnected')
-
-
-@si  o_on = None
 def _scan_response_handler(data):
     global last_response
     last_response = data
