@@ -244,6 +244,10 @@ export function AttendanceHistoryTab() {
   const [fetchError, setFetchError] = useState<boolean>(false);
   const fetchTimerRef = useRef<number | null>(null);
 
+  // Control popover open state so we can intercept Radix outside events
+  const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
+  const monthPickerNodeRef = useRef<HTMLElement | null>(null);
+
   const isMonthWithinRange = (month: Date) => {
     // backend 'month' aggregate covers last ~30 days ending today; consider month has possible data if it overlaps last 30 days
     const today = new Date();
@@ -468,7 +472,7 @@ export function AttendanceHistoryTab() {
                       </Button>
                     )}
                 </div>
-                 <Popover>
+                  <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                     <PopoverTrigger asChild>
                     <Button
                         variant={"outline"}
@@ -481,12 +485,26 @@ export function AttendanceHistoryTab() {
                         {selectedDate ? format(selectedDate, "PPP") : <span>Pick a date</span>}
                     </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
+                    <PopoverContent
+                      className="w-auto p-0"
+                      onPointerDownOutside={(e: any) => {
+                        // If the pointerdown that would dismiss the popover started
+                        // inside the month-picker node, prevent Radix from closing.
+                        const target = e?.target as Node | null;
+                        if (monthPickerNodeRef.current && target && monthPickerNodeRef.current.contains(target)) {
+                          e.preventDefault();
+                          return;
+                        }
+                        // Otherwise, close the popover
+                        setCalendarOpen(false);
+                      }}
+                    >
                     <div className="p-2">
                       <MonthYearSelector
                         displayedMonth={displayedMonth}
                         onMonthChange={setDisplayedMonth}
                         showYearSelector={true}
+                        onMonthPickerMount={(n) => (monthPickerNodeRef.current = n)}
                       />
 
                       {/* Loading or socket error: show skeleton only on fetchError; show placeholder while loading */}

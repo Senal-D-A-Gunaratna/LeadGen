@@ -9,6 +9,7 @@ interface MonthYearSelectorProps {
   displayedMonth: Date;
   onMonthChange: (month: Date) => void;
   onClose?: () => void;
+  onMonthPickerMount?: (node: HTMLElement | null) => void;
   showYearSelector?: boolean;
   disableFutureMonths?: boolean;
 }
@@ -22,6 +23,7 @@ export const MonthYearSelector = React.forwardRef<
       displayedMonth,
       onMonthChange,
       onClose,
+      onMonthPickerMount,
       showYearSelector = true,
       disableFutureMonths = false,
     },
@@ -34,19 +36,36 @@ export const MonthYearSelector = React.forwardRef<
     const monthPickerRef = React.useRef<HTMLDivElement | null>(null);
     const monthHeaderRef = React.useRef<HTMLDivElement | null>(null);
 
+    // Notify parent when the month picker DOM node mounts/unmounts so
+    // parent components (Radix Popover consumers) can decide to ignore
+    // dismissal events that originate from inside this node.
+    React.useEffect(() => {
+      onMonthPickerMount?.(monthPickerRef.current ?? null);
+      return () => onMonthPickerMount?.(null);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [monthPickerRef.current, onMonthPickerMount]);
+
     // Handle clicks outside month picker
     React.useEffect(() => {
       if (!showMonthPicker) return;
-      function onDown(e: MouseEvent) {
+      function onPointerDown(e: PointerEvent) {
         const el = monthPickerRef.current;
         const header = monthHeaderRef.current;
         if (!el) return;
+        // If pointer event is inside the picker or on the header toggle, ignore
         if (el.contains(e.target as Node)) return;
         if (header && header.contains(e.target as Node)) return;
+        // Prevent the outside pointer event from bubbling to parent components (eg. Radix Popover)
+        // so only the month picker closes and the parent popover/calendar remain open.
+        e.stopPropagation();
+        // Also prevent other listeners on the same event from running.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (e as any).stopImmediatePropagation?.();
         setShowMonthPicker(false);
       }
-      window.addEventListener("mousedown", onDown);
-      return () => window.removeEventListener("mousedown", onDown);
+      // Use capture phase so this runs before most document-level dismissal handlers.
+      window.addEventListener("pointerdown", onPointerDown, true);
+      return () => window.removeEventListener("pointerdown", onPointerDown, true);
     }, [showMonthPicker]);
 
     const handlePrevMonth = () => {
