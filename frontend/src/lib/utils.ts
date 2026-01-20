@@ -111,9 +111,23 @@ export function shrinkStudentForList(student: Student): Student {
   // Derive a lightweight `lastScanTime` from attendance history if available.
   let lastScanTime: number | undefined = undefined;
   try {
-    if (Array.isArray(student.attendanceHistory) && student.attendanceHistory.length > 0) {
-      // Prefer the most recent attendance record that has a checkInTime
-      const recWithTime = student.attendanceHistory.find(r => (r as any).checkInTime);
+    // If the server already provided `lastScanTime` (preferred), normalize it to epoch ms.
+    if (student.lastScanTime) {
+      const maybeNum = Number(student.lastScanTime);
+      if (!Number.isNaN(maybeNum) && maybeNum > 0) {
+        lastScanTime = maybeNum;
+      } else {
+        const parsed = new Date(String(student.lastScanTime)).getTime();
+        if (!Number.isNaN(parsed)) lastScanTime = parsed;
+      }
+    }
+
+    // Fall back to scanning the attendanceHistory (useful for older server responses).
+    if (lastScanTime === undefined && Array.isArray(student.attendanceHistory) && student.attendanceHistory.length > 0) {
+      // Only use an attendanceHistory record if it belongs to TODAY.
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const recWithTime = student.attendanceHistory.find(r => (r as any).checkInTime && (r as any).date === todayStr);
       if (recWithTime && (recWithTime as any).checkInTime) {
         const parsed = new Date((recWithTime as any).checkInTime).getTime();
         if (!Number.isNaN(parsed)) lastScanTime = parsed;
