@@ -78,6 +78,8 @@ def validate_password(role: str, password: str) -> bool:
 authenticated_sessions = {}
 # Track all connected socket session IDs (unauthenticated + authenticated)
 connected_sids = set()
+# Optional scanner token for unauthenticated scanner devices
+SCANNER_TOKEN = os.environ.get('SCANNER_TOKEN')
 
 # Development mode: force full client access (bypass auth checks)
 if os.environ.get('DEV_FORCE_FULL_ACCESS') == '1':
@@ -567,10 +569,24 @@ def handle_authentication(data):
 
 @socketio.on('scan_student')
 def handle_scan(data):
-    """Handle student scan via WebSocket."""
-    if request.sid not in authenticated_sessions:  # type: ignore
-        emit('scan_response', {'success': False, 'message': 'Not authenticated'})
-        return
+    """Handle student scan via WebSocket.
+
+    Behavior:
+    - If the socket session is authenticated, proceed as before.
+    - If unauthenticated, require a matching `scanner_token` payload when
+      `SCANNER_TOKEN` is set in the environment; otherwise reject.
+    """
+    unauthenticated = request.sid not in authenticated_sessions  # type: ignore
+    if unauthenticated:
+        # If a scanner token is configured, require it for unauthenticated scans.
+        if SCANNER_TOKEN:
+            supplied = (data or {}).get('scanner_token')
+            if supplied != SCANNER_TOKEN:
+                emit('scan_response', {'success': False, 'message': 'Invalid scanner token'})
+                return
+        else:
+            emit('scan_response', {'success': False, 'message': 'Not authenticated'})
+            return
     
     # Block weekend scans (Saturday=5, Sunday=6)
     today = date.today()
