@@ -7,10 +7,7 @@ export type PrefectRole =
   | "Deputy Head Prefect"
   | "Super Senior Prefect"
   | "Senior Prefect"
-  | "Junior Prefect"
-  | "Sports Captain"
-  | "Science Club President"
-  | "Debate Team Captain";
+  | "Junior Prefect";
 
 export type AttendanceRecord = {
   date: string; // YYYY-MM-DD
