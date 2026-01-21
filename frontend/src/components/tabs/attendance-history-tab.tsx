@@ -421,14 +421,6 @@ export function AttendanceHistoryTab() {
       </div>
 
        <Card className="glassmorphic glowing-border" ref={studentListRef}>
-        {isLoading ? (
-          <div className="p-6 space-y-4">
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-4 w-64" />
-            <Skeleton className="h-[300px] w-full" />
-          </div>
-        ) : (
-          <>
             <CardHeader>
                 <CardTitle className="font-headline text-primary capitalize">
                      {selectedStatus ? `${selectedStatus} Students` : `All Students`}
@@ -628,8 +620,6 @@ export function AttendanceHistoryTab() {
                 )}
             </div>
         </CardContent>
-          </>
-        )}
        </Card>
     </div>
   );
