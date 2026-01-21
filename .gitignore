@@ -55,6 +55,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+.pytest_cache/
 
 # Misc
 .env
