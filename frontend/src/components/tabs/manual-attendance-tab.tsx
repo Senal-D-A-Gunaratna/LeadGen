@@ -34,10 +34,9 @@ import { MonthYearSelector } from "../ui/month-year-selector";
 import { cn } from "@/lib/utils";
 import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown } from "lucide-react";
 import { RolePasswordDialog } from "../dashboard/role-password-dialog";
-import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
+import { CLASSES, PREFECT_ROLES, GRADES } from "@/lib/student-data";
 
 type PendingChanges = Record<number, { status: AttendanceStatus | 'null'; checkInTime?: string | null }>;
-const GRADES = ["6", "7", "8", "9", "10", "11", "12", "13"];
 
 const isWeekend = (date: Date): boolean => {
   const day = date.getDay();

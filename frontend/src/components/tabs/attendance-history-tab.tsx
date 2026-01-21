@@ -26,7 +26,7 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import type { AttendanceStatus, Student } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Input } from "../ui/input";
-import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
+import { CLASSES, PREFECT_ROLES, GRADES } from "@/lib/student-data";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
@@ -42,7 +42,7 @@ const COLORS: Record<AttendanceStatus, string> = {
   weekend: "hsl(var(--muted-foreground))",
 };
 
-const GRADES = ["6", "7", "8", "9", "10", "11", "12", "13"];
+ 
 
 const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, payload }: any) => {
   if (percent === 0) return null;

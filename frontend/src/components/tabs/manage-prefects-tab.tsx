@@ -41,7 +41,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "../ui/dropdown-menu";
-import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
+import { CLASSES, PREFECT_ROLES, GRADES } from "@/lib/student-data";
 import { format } from "date-fns";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 import { UploadAuthDialog } from "../dashboard/upload-auth-dialog";
@@ -49,7 +49,7 @@ import { UploadAuthDialog } from "../dashboard/upload-auth-dialog";
 type UploadType = 'student-db' | 'student-csv' | 'attendance-db' | 'attendance-csv';
 type DownloadType = 'student-db' | 'student-csv' | 'student-pdf' | 'attendance-summary-csv' | 'attendance-db' | 'attendance-detailed-csv' | 'attendance-summary-pdf';
 
-const GRADES = ["6", "7", "8", "9", "10", "11", "12", "13"];
+ 
 
 export function ManagePrefectsTab() {
   const { 
