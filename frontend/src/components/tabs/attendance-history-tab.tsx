@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { Pie, PieChart, Cell, ResponsiveContainer, Sector, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { motion } from "framer-motion";
@@ -45,31 +45,25 @@ const COLORS: Record<AttendanceStatus, string> = {
  
 
 const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, payload }: any) => {
-  if (percent === 0) return null;
+  // Avoid rendering labels for very small slices (costly and noisy)
+  if (!percent || percent < 0.03) return null;
 
   const RADIAN = Math.PI / 180;
-  // Adjust radius to bring labels closer
-  const radius = outerRadius + 40; 
-  const x = cx + radius * Math.cos(-midAngle * RADIAN);
-  const y = cy + radius * Math.sin(-midAngle * RADIAN);
   const sin = Math.sin(-midAngle * RADIAN);
   const cos = Math.cos(-midAngle * RADIAN);
-  // Shorter start radius
-  const sx = cx + (outerRadius + 10) * cos;
-  const sy = cy + (outerRadius + 10) * sin;
-  // Longer elbow
-  const mx = cx + (outerRadius + 30) * cos;
-  const my = cy + (outerRadius + 30) * sin;
-  // Longer end point for a bigger elbow
-  const ex = mx + (cos >= 0 ? 1 : -1) * 22;
+  const sx = cx + (outerRadius + 6) * cos;
+  const sy = cy + (outerRadius + 6) * sin;
+  const mx = cx + (outerRadius + 18) * cos;
+  const my = cy + (outerRadius + 18) * sin;
+  const ex = mx + (cos >= 0 ? 1 : -1) * 16;
   const ey = my;
   const textAnchor = cos >= 0 ? 'start' : 'end';
 
   return (
     <g>
-      <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={payload.fill} fill="none" strokeWidth={2} />
-      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))" dy={-6}>{`${payload.name}`}</text>
-      <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={10} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))">
+      <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={payload.fill} fill="none" strokeWidth={1.5} />
+      <text x={ex + (cos >= 0 ? 1 : -1) * 10} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))" dy={-6} style={{ fontSize: 12 }}>{`${payload.name}`}</text>
+      <text x={ex + (cos >= 0 ? 1 : -1) * 10} y={ey} dy={10} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))" style={{ fontSize: 11 }}>
         {`${(Math.round(percent * 100 * 10) / 10).toFixed(1)}%`}
       </text>
     </g>
@@ -352,32 +346,35 @@ export function AttendanceHistoryTab() {
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] w-full" onClick={onContainerClick}>
-            <ResponsiveContainer>
+            <motion.div layout transition={{ duration: 0.35, ease: "easeOut" }} className="h-full">
+              <ResponsiveContainer>
                 <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
-                <Pie
-                  key={`pie-${animateKey}`}
-                  activeIndex={activeIndex}
-                  activeShape={renderActiveShape}
-                  data={attendanceData}
-                  cx="50%"
-                  cy="55%"
-                  innerRadius={80}
-                  outerRadius={110}
-                  dataKey="value"
-                  onClick={onPieClick}
-                  className="cursor-pointer"
-                  labelLine={false}
-                  label={renderCustomizedLabel}
-                  isAnimationActive={animateNow}
-                  animationDuration={800}
-                  animationBegin={0}
-                >
+                  <Pie
+                    key={`pie-${animateKey}`}
+                    activeIndex={activeIndex}
+                    activeShape={renderActiveShape}
+                    data={attendanceData}
+                    cx="50%"
+                    cy="55%"
+                    innerRadius={70}
+                    outerRadius={100}
+                    dataKey="value"
+                    onClick={onPieClick}
+                    className="cursor-pointer"
+                    labelLine={false}
+                    label={renderCustomizedLabel}
+                    isAnimationActive={animateNow}
+                    animationDuration={400}
+                    animationBegin={0}
+                    animationEasing="ease-out"
+                  >
                     {attendanceData.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none"/>
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
                     ))}
-                </Pie>
+                  </Pie>
                 </PieChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </motion.div>
           </CardContent>
         </Card>
         
@@ -388,18 +385,19 @@ export function AttendanceHistoryTab() {
             </CardHeader>
             <CardContent>
               <div className="h-[350px] w-full">
-                <ResponsiveContainer>
-                  <BarChart data={gradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
-                    <XAxis type="number" domain={[0, 1]} tickFormatter={percentageFormatter} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis type="category" dataKey="grade" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                    <Tooltip
-                      contentStyle={{
-                        background: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "var(--radius)",
-                      }}
-                      cursor={{ fill: "hsla(var(--muted), 0.5)" }}
-                       formatter={(value: number, name: string, props: any) => {
+                <motion.div layout transition={{ duration: 0.35, ease: "easeOut" }} className="h-full">
+                  <ResponsiveContainer>
+                    <BarChart data={gradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
+                      <XAxis type="number" domain={[0, 1]} tickFormatter={percentageFormatter} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="grade" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(var(--background))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "var(--radius)",
+                        }}
+                        cursor={{ fill: "hsla(var(--muted), 0.5)" }}
+                        formatter={(value: number, name: string, props: any) => {
                           const count = name === 'On Time' ? props.payload.onTimeCount : 
                                        name === 'Late' ? props.payload.lateCount : 
                                        props.payload.absentCount;
@@ -408,13 +406,14 @@ export function AttendanceHistoryTab() {
                        itemStyle={{ textTransform: 'capitalize' }}
                        labelStyle={{ fontWeight: 'bold' }}
                        separator=": "
-                    />
-                    <Legend />
-                    <Bar dataKey="onTime" name="On Time" stackId="a" fill={COLORS["on time"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
-                    <Bar dataKey="late" name="Late" stackId="a" fill={COLORS["late"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
-                    <Bar dataKey="absent" name="Absent" stackId="a" fill={COLORS["absent"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
-                  </BarChart>
-                </ResponsiveContainer>
+                      />
+                      <Legend />
+                      <Bar dataKey="onTime" name="On Time" stackId="a" fill={COLORS["on time"]} isAnimationActive={animateNow} animationDuration={400} animationBegin={0} animationEasing="ease-out" />
+                      <Bar dataKey="late" name="Late" stackId="a" fill={COLORS["late"]} isAnimationActive={animateNow} animationDuration={400} animationBegin={50} animationEasing="ease-out" />
+                      <Bar dataKey="absent" name="Absent" stackId="a" fill={COLORS["absent"]} isAnimationActive={animateNow} animationDuration={400} animationBegin={100} animationEasing="ease-out" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </motion.div>
               </div>
             </CardContent>
           </Card>
