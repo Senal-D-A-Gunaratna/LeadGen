@@ -95,6 +95,62 @@ const renderActiveShape = (props: any) => {
 };
 
 
+// Hook: tween numeric fields between previous and next arrays for smooth transitions
+function useTweenedArray<T extends Record<string, any>>(data: T[], keyProp: string, numericKeys: string[], duration = 400) {
+  const prevRef = useRef<T[]>(data);
+  const [tweened, setTweened] = useState<T[]>(data);
+
+  useEffect(() => {
+    const start = prevRef.current || [];
+    const end = data || [];
+
+    // fast path
+    if (start.length === 0 && end.length === 0) return;
+
+    let rafId = 0;
+    let startTime: number | null = null;
+
+    const step = (ts: number) => {
+      if (!startTime) startTime = ts;
+      const t = Math.min(1, (ts - startTime) / duration);
+      const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
+
+      // build a map from key to start/end entries
+      const startMap = new Map<string, T>();
+      start.forEach((it) => startMap.set(String(it[keyProp]), it));
+      const endMap = new Map<string, T>();
+      end.forEach((it) => endMap.set(String(it[keyProp]), it));
+
+      const out: T[] = end.map((endItem) => {
+        const k = String(endItem[keyProp]);
+        const s = startMap.get(k) || ({} as T);
+        const e = endMap.get(k) || ({} as T);
+        const merged: any = { ...endItem };
+        numericKeys.forEach((nk) => {
+          const sv = Number(s[nk] ?? 0);
+          const ev = Number(e[nk] ?? 0);
+          merged[nk] = sv + (ev - sv) * ease;
+        });
+        return merged as T;
+      });
+
+      setTweened(out);
+
+      if (t < 1) {
+        rafId = window.requestAnimationFrame(step);
+      } else {
+        prevRef.current = end;
+      }
+    };
+
+    rafId = window.requestAnimationFrame(step);
+    return () => { if (rafId) window.cancelAnimationFrame(rafId); };
+  }, [data, keyProp, duration]);
+
+  return tweened;
+}
+
+
 export function AttendanceHistoryTab() {
   const { students, actions, searchQuery, gradeFilter, classFilter, roleFilter, fakeDate, isLoading, availableGrades, availableClasses, availableRoles } = useStudentStore(
     (state: any) => ({
@@ -131,6 +187,8 @@ export function AttendanceHistoryTab() {
   const studentListRef = useRef<HTMLDivElement>(null);
   const [animateKey, setAnimateKey] = useState(0);
   const [animateNow, setAnimateNow] = useState(false);
+  // Trigger short animation when data updates due to filters
+  const [animateData, setAnimateData] = useState(false);
 
   const activeTab = useUIStateStore(state => state.activeTab);
   let visibilityTimer: number | undefined;
@@ -159,6 +217,16 @@ export function AttendanceHistoryTab() {
     if (activeTab === "attendance-history") runTrigger();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  // Animate on data changes (filters) for smooth transitions
+  useEffect(() => {
+    // don't animate if still loading
+    if (isLoading) return;
+    // trigger a short animation when attendance or grade data arrays change
+    setAnimateData(true);
+    const t = window.setTimeout(() => setAnimateData(false), 450);
+    return () => window.clearTimeout(t);
+  }, [students.length, (availableGrades || []).length, gradeFilter, classFilter, roleFilter, isLoading]);
 
   // `availableGrades` is provided by the student store (derived from DB)
 
@@ -211,6 +279,9 @@ export function AttendanceHistoryTab() {
     ];
   }, [students]);
 
+  // Tween attendance data for smooth transitions when filters applied
+  const tweenedAttendance = useTweenedArray(attendanceData, 'name', ['value', 'percent'], 450);
+
   const selectedStatus = activeIndex !== -1 ? attendanceData[activeIndex]?.name.toLowerCase() as AttendanceStatus : null;
 
   type GradeBarDatum = { grade: string; onTime: number; late: number; absent: number; onTimeCount: number; lateCount: number; absentCount: number };
@@ -239,6 +310,9 @@ export function AttendanceHistoryTab() {
 
     return barData;
   }, [students, availableGrades, selectedStatus]);
+
+  // Tween grade-wise data (onTime/late/absent) for smooth transitions
+  const tweenedGradeWiseStatusData = useTweenedArray(gradeWiseStatusData, 'grade', ['onTime', 'late', 'absent'], 450);
 
   // Displayed month for the popover calendar (controls month navigation independent of selectedDate)
   const [displayedMonth, setDisplayedMonth] = useState<Date>(selectedDate ? new Date(selectedDate) : new Date());
@@ -353,7 +427,7 @@ export function AttendanceHistoryTab() {
                     key={`pie-${animateKey}`}
                     activeIndex={activeIndex}
                     activeShape={renderActiveShape}
-                    data={attendanceData}
+                    data={tweenedAttendance}
                     cx="50%"
                     cy="55%"
                     innerRadius={70}
@@ -363,8 +437,8 @@ export function AttendanceHistoryTab() {
                     className="cursor-pointer"
                     labelLine={false}
                     label={renderCustomizedLabel}
-                    isAnimationActive={animateNow}
-                    animationDuration={400}
+                    isAnimationActive={true}
+                    animationDuration={500}
                     animationBegin={0}
                     animationEasing="ease-out"
                   >
@@ -387,7 +461,7 @@ export function AttendanceHistoryTab() {
               <div className="h-[350px] w-full">
                 <motion.div layout transition={{ duration: 0.35, ease: "easeOut" }} className="h-full">
                   <ResponsiveContainer>
-                    <BarChart data={gradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
+                    <BarChart data={tweenedGradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
                       <XAxis type="number" domain={[0, 1]} tickFormatter={percentageFormatter} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                       <YAxis type="category" dataKey="grade" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                       <Tooltip
@@ -408,9 +482,9 @@ export function AttendanceHistoryTab() {
                        separator=": "
                       />
                       <Legend />
-                      <Bar dataKey="onTime" name="On Time" stackId="a" fill={COLORS["on time"]} isAnimationActive={animateNow} animationDuration={400} animationBegin={0} animationEasing="ease-out" />
-                      <Bar dataKey="late" name="Late" stackId="a" fill={COLORS["late"]} isAnimationActive={animateNow} animationDuration={400} animationBegin={50} animationEasing="ease-out" />
-                      <Bar dataKey="absent" name="Absent" stackId="a" fill={COLORS["absent"]} isAnimationActive={animateNow} animationDuration={400} animationBegin={100} animationEasing="ease-out" />
+                      <Bar dataKey="onTime" name="On Time" stackId="a" fill={COLORS["on time"]} isAnimationActive={true} animationDuration={500} animationBegin={0} animationEasing="ease-out" />
+                      <Bar dataKey="late" name="Late" stackId="a" fill={COLORS["late"]} isAnimationActive={true} animationDuration={500} animationBegin={50} animationEasing="ease-out" />
+                      <Bar dataKey="absent" name="Absent" stackId="a" fill={COLORS["absent"]} isAnimationActive={true} animationDuration={500} animationBegin={100} animationEasing="ease-out" />
                     </BarChart>
                   </ResponsiveContainer>
                 </motion.div>
