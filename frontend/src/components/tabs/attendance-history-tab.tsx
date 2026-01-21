@@ -200,46 +200,51 @@ export function AttendanceHistoryTab() {
     }
   };
 
-  const { attendanceData, gradeWiseStatusData } = useMemo(() => {
+  type AttendanceDatum = { name: string; value: number; color: string; percent: number };
+  const attendanceData = useMemo<AttendanceDatum[]>(() => {
     const totalStudents = students.length;
-    
-    const pieData = (() => {
-        if (totalStudents === 0) return [];
-        const onTime = students.filter((s: Student) => s.status === "on time").length;
-        const late = students.filter((s: Student) => s.status === "late").length;
-        const absent = students.filter((s: Student) => s.status === "absent").length;
-        
-        return [
-        { name: "On Time", value: onTime, color: COLORS["on time"], percent: totalStudents > 0 ? (onTime / totalStudents) : 0 },
-        { name: "Late", value: late, color: COLORS.late, percent: totalStudents > 0 ? (late / totalStudents) : 0 },
-        { name: "Absent", value: absent, color: COLORS.absent, percent: totalStudents > 0 ? (absent / totalStudents) : 0 },
-        ];
-    })();
 
+    if (totalStudents === 0) return [];
+
+    const onTime = students.filter((s: Student) => s.status === "on time").length;
+    const late = students.filter((s: Student) => s.status === "late").length;
+    const absent = students.filter((s: Student) => s.status === "absent").length;
+
+    return [
+      { name: "On Time", value: onTime, color: COLORS["on time"], percent: totalStudents > 0 ? (onTime / totalStudents) : 0 },
+      { name: "Late", value: late, color: COLORS.late, percent: totalStudents > 0 ? (late / totalStudents) : 0 },
+      { name: "Absent", value: absent, color: COLORS.absent, percent: totalStudents > 0 ? (absent / totalStudents) : 0 },
+    ];
+  }, [students]);
+
+  const selectedStatus = activeIndex !== -1 ? attendanceData[activeIndex]?.name.toLowerCase() as AttendanceStatus : null;
+
+  type GradeBarDatum = { grade: string; onTime: number; late: number; absent: number; onTimeCount: number; lateCount: number; absentCount: number };
+  const gradeWiseStatusData = useMemo<GradeBarDatum[]>(() => {
     const barData = (availableGrades || []).map((gradeStr: string) => {
       const grade = parseInt(gradeStr, 10);
-      const gradeStudents = students.filter((s: Student) => s.grade === grade);
-        const totalInGrade = gradeStudents.length;
+      const gradeStudents = students.filter((s: Student) => s.grade === grade && (!selectedStatus || s.status === selectedStatus));
+      const totalInGrade = gradeStudents.length;
 
-        if (totalInGrade === 0) return null;
+      if (totalInGrade === 0) return null;
 
-        const onTimeCount = gradeStudents.filter((s: Student) => s.status === 'on time').length;
-        const lateCount = gradeStudents.filter((s: Student) => s.status === 'late').length;
-        const absentCount = gradeStudents.filter((s: Student) => s.status === 'absent').length;
+      const onTimeCount = gradeStudents.filter((s: Student) => s.status === 'on time').length;
+      const lateCount = gradeStudents.filter((s: Student) => s.status === 'late').length;
+      const absentCount = gradeStudents.filter((s: Student) => s.status === 'absent').length;
 
-        return {
-            grade: `Grade ${grade}`,
-            onTime: totalInGrade > 0 ? (onTimeCount / totalInGrade) : 0,
-            late: totalInGrade > 0 ? (lateCount / totalInGrade) : 0,
-            absent: totalInGrade > 0 ? (absentCount / totalInGrade) : 0,
-            onTimeCount,
-            lateCount,
-            absentCount,
-        };
-    }).filter(Boolean) as { grade: string; onTime: number; late: number; absent: number; onTimeCount: number; lateCount: number; absentCount: number}[];
-    
-    return { attendanceData: pieData, gradeWiseStatusData: barData };
-  }, [students]);
+      return {
+        grade: `Grade ${grade}`,
+        onTime: totalInGrade > 0 ? (onTimeCount / totalInGrade) : 0,
+        late: totalInGrade > 0 ? (lateCount / totalInGrade) : 0,
+        absent: totalInGrade > 0 ? (absentCount / totalInGrade) : 0,
+        onTimeCount,
+        lateCount,
+        absentCount,
+      };
+    }).filter(Boolean) as GradeBarDatum[];
+
+    return barData;
+  }, [students, availableGrades, selectedStatus]);
 
   // Displayed month for the popover calendar (controls month navigation independent of selectedDate)
   const [displayedMonth, setDisplayedMonth] = useState<Date>(selectedDate ? new Date(selectedDate) : new Date());
@@ -327,8 +332,6 @@ export function AttendanceHistoryTab() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMonth, gradeFilter]);
-
-  const selectedStatus = activeIndex !== -1 ? attendanceData[activeIndex]?.name.toLowerCase() as AttendanceStatus : null;
 
   const filteredStudentsForTable = useMemo(() => {
     if (!selectedStatus) return students;
