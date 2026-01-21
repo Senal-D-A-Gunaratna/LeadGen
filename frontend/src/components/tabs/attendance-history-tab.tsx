@@ -26,7 +26,7 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import type { AttendanceStatus, Student } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Input } from "../ui/input";
-import { CLASSES, PREFECT_ROLES, GRADES } from "@/lib/student-data";
+import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
@@ -102,7 +102,7 @@ const renderActiveShape = (props: any) => {
 
 
 export function AttendanceHistoryTab() {
-  const { students, actions, searchQuery, gradeFilter, classFilter, roleFilter, fakeDate, isLoading } = useStudentStore(
+  const { students, actions, searchQuery, gradeFilter, classFilter, roleFilter, fakeDate, isLoading, availableGrades } = useStudentStore(
     (state: any) => ({
       students: state.students,
       actions: state.actions,
@@ -112,6 +112,7 @@ export function AttendanceHistoryTab() {
       roleFilter: state.roleFilter,
       fakeDate: state.fakeDate,
       isLoading: state.isLoading,
+      availableGrades: state.availableGrades,
     })
   );
   const { setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, selectStudent, setSelectedDate, fetchAndSetStudents } = actions;
@@ -163,7 +164,7 @@ export function AttendanceHistoryTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
-  const availableGrades = GRADES;
+  // `availableGrades` is provided by the student store (derived from DB)
 
   const onPieClick = useCallback((data: any, index: number, event?: any) => {
     event?.stopPropagation();
@@ -213,9 +214,9 @@ export function AttendanceHistoryTab() {
         ];
     })();
 
-    const barData = GRADES.map((gradeStr: string) => {
-        const grade = parseInt(gradeStr, 10);
-        const gradeStudents = students.filter((s: Student) => s.grade === grade);
+    const barData = (availableGrades || []).map((gradeStr: string) => {
+      const grade = parseInt(gradeStr, 10);
+      const gradeStudents = students.filter((s: Student) => s.grade === grade);
         const totalInGrade = gradeStudents.length;
 
         if (totalInGrade === 0) return null;

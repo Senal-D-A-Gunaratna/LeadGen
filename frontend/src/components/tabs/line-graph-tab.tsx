@@ -6,7 +6,6 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { GRADES } from "@/lib/student-data";
 import { Input } from "../ui/input";
 import { wsClient } from "@/lib/websocket-client";
 
@@ -16,7 +15,8 @@ export function LineGraphTab() {
   // Leave empty to request full history by default
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  const GRADE_OPTIONS = ["all", ...GRADES];
+  const availableGrades = useStudentStore(state => state.availableGrades || []);
+  const GRADE_OPTIONS = ["all", ...availableGrades];
   const [grade, setGrade] = useState<string>("all");
   const [data, setData] = useState<Array<any>>([]);
   const [loading, setLoading] = useState(false);

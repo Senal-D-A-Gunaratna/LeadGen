@@ -79,7 +79,29 @@ export const useStudentStore = create<StudentStore>()(
           const lightStudents = students.map(s => shrinkStudentForList(s));
           const lightFullRoster = fullRoster.map(s => shrinkStudentForList(s));
 
-          set({ students: lightStudents, fullRoster: lightFullRoster, isLoading: false });
+          // Derive dynamic filter lists from the full roster so the UI can
+          // render filter options based on actual data present in the DB.
+          const gradesSet = new Set<string>();
+          const classesSet = new Set<string>();
+          const rolesSet = new Set<string>();
+          lightFullRoster.forEach(s => {
+            if (s.grade !== undefined && s.grade !== null) gradesSet.add(String(s.grade));
+            if (s.className) classesSet.add(s.className);
+            if (s.role) rolesSet.add(String(s.role));
+          });
+
+          const derivedGrades = Array.from(gradesSet).sort((a,b) => Number(a) - Number(b));
+          const derivedClasses = Array.from(classesSet).sort();
+          const derivedRoles = Array.from(rolesSet).sort();
+
+          set({ 
+            students: lightStudents, 
+            fullRoster: lightFullRoster, 
+            isLoading: false,
+            availableGrades: derivedGrades,
+            availableClasses: derivedClasses,
+            availableRoles: derivedRoles,
+          });
         } catch (error) {
           console.error("Failed to fetch students:", error);
           set({ isLoading: false });
@@ -101,6 +123,9 @@ export const useStudentStore = create<StudentStore>()(
         roleFilter: 'all',
         selectedDate: undefined,
         fakeDate: null,
+        availableGrades: [],
+        availableClasses: [],
+        availableRoles: [],
         // Local cache for pending manual attendance changes (studentId -> { status, checkInTime })
         pendingAttendanceChanges: {},
         
@@ -283,6 +308,13 @@ export const useStudentStore = create<StudentStore>()(
                 }
               };
             }));
+          },
+          setFilterOptions: (opts: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
+            set({
+              availableGrades: opts.grades || [],
+              availableClasses: opts.classes || [],
+              availableRoles: opts.roles || [],
+            });
           },
           clearPendingAttendanceChanges: () => {
             set({ pendingAttendanceChanges: {} });

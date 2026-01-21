@@ -34,7 +34,7 @@ import { MonthYearSelector } from "../ui/month-year-selector";
 import { cn } from "@/lib/utils";
 import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown } from "lucide-react";
 import { RolePasswordDialog } from "../dashboard/role-password-dialog";
-import { CLASSES, PREFECT_ROLES, GRADES } from "@/lib/student-data";
+ 
 
 type PendingChanges = Record<number, { status: AttendanceStatus | 'null'; checkInTime?: string | null }>;
 
@@ -44,7 +44,7 @@ const isWeekend = (date: Date): boolean => {
 };
 
 export function ManualAttendanceTab() {
-  const { students, actions, fakeDate, searchQuery, gradeFilter, classFilter, roleFilter, isLoading, pendingAttendanceChanges } = useStudentStore(
+  const { students, actions, fakeDate, searchQuery, gradeFilter, classFilter, roleFilter, isLoading, pendingAttendanceChanges, availableGrades: availableGradesFromStore, availableClasses: availableClassesFromStore, availableRoles: availableRolesFromStore } = useStudentStore(
     state => ({
       students: state.students,
       actions: state.actions,
@@ -55,6 +55,9 @@ export function ManualAttendanceTab() {
       roleFilter: state.roleFilter,
       isLoading: state.isLoading,
       pendingAttendanceChanges: state.pendingAttendanceChanges,
+      availableGrades: state.availableGrades,
+      availableClasses: state.availableClasses,
+      availableRoles: state.availableRoles,
     })
   );
   const { user } = useAuthStore();
@@ -194,7 +197,7 @@ export function ManualAttendanceTab() {
     return () => { mounted = false; };
   }, [selectedDate, searchQuery, gradeFilter, classFilter, roleFilter]);
 
-  const availableGrades = GRADES;
+  const availableGrades = availableGradesFromStore || [];
 
   // We'll compute the display status inline to avoid changing the `Student` type
   // (so we never pass a non-Student shaped object to `selectStudent`).
@@ -370,8 +373,8 @@ export function ManualAttendanceTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {CLASSES.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                {availableClassesFromStore.map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -382,8 +385,8 @@ export function ManualAttendanceTab() {
                 <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
                      <SelectItem value="none">No Role</SelectItem>
-                    {PREFECT_ROLES.map(role => (
-                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                    {availableRolesFromStore.map(role => (
+                      <SelectItem key={role} value={role}>{role}</SelectItem>
                     ))}
                 </SelectContent>
             </Select>

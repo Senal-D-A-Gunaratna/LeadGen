@@ -41,7 +41,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "../ui/dropdown-menu";
-import { CLASSES, PREFECT_ROLES, GRADES } from "@/lib/student-data";
+import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 import { format } from "date-fns";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 import { UploadAuthDialog } from "../dashboard/upload-auth-dialog";
@@ -61,6 +61,9 @@ export function ManagePrefectsTab() {
     roleFilter, 
     actions, 
     fakeDate, 
+    availableGrades: availableGradesFromStore,
+    availableClasses: availableClassesFromStore,
+    availableRoles: availableRolesFromStore,
   } = useStudentStore();
   const { 
     setSearchQuery, 
@@ -96,7 +99,7 @@ export function ManagePrefectsTab() {
 
   const filteredStudents = students;
 
-  const availableGrades = GRADES;
+  const availableGrades = availableGradesFromStore || [];
 
   const handleUploadClick = (type: UploadType) => {
     if (isAdminOrDev) {
@@ -422,7 +425,7 @@ export function ManagePrefectsTab() {
               <SelectContent>
                 <SelectItem value="all">All Grades</SelectItem>
                 {availableGrades.map(grade => (
-                    <SelectItem key={grade} value={grade}>Grade {grade}</SelectItem>
+                  <SelectItem key={grade} value={grade}>Grade {grade}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -432,8 +435,8 @@ export function ManagePrefectsTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {CLASSES.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                {availableClassesFromStore.map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -444,8 +447,8 @@ export function ManagePrefectsTab() {
                 <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
                      <SelectItem value="none">No Role</SelectItem>
-                    {PREFECT_ROLES.map(role => (
-                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                    {availableRolesFromStore.map(role => (
+                      <SelectItem key={role} value={role}>{role}</SelectItem>
                     ))}
                 </SelectContent>
             </Select>

@@ -22,7 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { useStudentStore } from "@/hooks/use-student-store";
 import type { AttendanceStatus } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 import { useMemo } from "react";
 import { Button } from "../ui/button";
 
@@ -41,24 +40,24 @@ const statusColors: Record<AttendanceStatus, string> = {
 };
 
 export function AttendanceTable() {
-  const { students, searchQuery, gradeFilter, classFilter, roleFilter, actions } = useStudentStore(state => ({
+    const { students, searchQuery, gradeFilter, classFilter, roleFilter, actions, availableGrades, availableClasses, availableRoles } = useStudentStore(state => ({
       students: state.students,
       searchQuery: state.searchQuery,
       gradeFilter: state.gradeFilter,
       classFilter: state.classFilter,
       roleFilter: state.roleFilter,
       actions: state.actions,
-  }));
+      availableGrades: state.availableGrades,
+      availableClasses: state.availableClasses,
+      availableRoles: state.availableRoles,
+    }));
   const { setSearchQuery, selectStudent, setGradeFilter, setClassFilter, setRoleFilter } = actions;
   
   // The students array is now the filtered list from the server
   const filteredStudents = students;
 
-  const availableGrades = useMemo(() => {
-    // This could be made dynamic by an API call, but for now we can use a static list
-    // or derive from the initial unfiltered load if we had one.
-    return ["6", "7", "8", "9", "10", "11", "12", "13"];
-  }, []);
+  // Use dynamic availableGrades from the store
+  const availableGradesFromStore = availableGrades || [];
 
   return (
     <>
@@ -94,8 +93,8 @@ export function AttendanceTable() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Grades</SelectItem>
-                {availableGrades.map(grade => (
-                    <SelectItem key={grade} value={grade}>Grade {grade}</SelectItem>
+                {availableGradesFromStore.map(grade => (
+                  <SelectItem key={grade} value={grade}>Grade {grade}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -105,8 +104,8 @@ export function AttendanceTable() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {CLASSES.map(c => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                {availableClasses.map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -117,8 +116,8 @@ export function AttendanceTable() {
                 <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
                     <SelectItem value="none">No Role</SelectItem>
-                    {PREFECT_ROLES.map(role => (
-                        <SelectItem key={role} value={role}>{role}</SelectItem>
+                    {availableRoles.map(role => (
+                      <SelectItem key={role} value={role}>{role}</SelectItem>
                     ))}
                 </SelectContent>
             </Select>
