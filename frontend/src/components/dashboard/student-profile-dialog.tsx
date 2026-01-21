@@ -34,7 +34,7 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "../ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/static-filters";
+import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/student-data";
 import { Badge } from "../ui/badge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
