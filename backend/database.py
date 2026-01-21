@@ -422,14 +422,14 @@ def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
             cur.execute('''
                 INSERT INTO attendance_records (student_id, date, status, created_at, updated_at, check_in_time)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (student_id, date_str, 'absent', datetime.utcnow().isoformat(), datetime.utcnow().isoformat(), incoming_utc_iso))
+            ''', (student_id, date_str, 'absent', datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), incoming_utc_iso))
             conn.commit()
             return incoming_utc_iso
 
         existing_iso = row['check_in_time']
         # If existing is None or incoming is earlier, update
         if existing_iso is None:
-            cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE id = ?', (incoming_utc_iso, datetime.utcnow().isoformat(), row['id']))
+            cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE id = ?', (incoming_utc_iso, datetime.now(timezone.utc).isoformat(), row['id']))
             conn.commit()
             return incoming_utc_iso
 

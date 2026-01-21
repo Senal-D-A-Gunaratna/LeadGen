@@ -7,7 +7,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit, disconnect
 import sqlite3
 import json
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from pathlib import Path
 import os
 from typing import Dict, List, Optional
@@ -626,9 +626,10 @@ def handle_scan(data):
     today = date.today().isoformat()
     conn_students.close()
     
-    # Determine server receipt time (server-local) and UTC stamp to persist
+    # Determine server receipt time (server-local) and UTC stamp to persist (timezone-aware)
     receipt_local = datetime.now()
-    receipt_utc_iso = datetime.utcnow().isoformat()
+    receipt_utc_iso = datetime.now(timezone.utc).isoformat()
+    print(f"DEBUG: receipt_local={receipt_local.isoformat()} receipt_utc_iso={receipt_utc_iso}")
     date_str = receipt_local.date().isoformat()
 
     # Save check-in using transactional helper - ensures earliest checkin wins
@@ -651,14 +652,18 @@ def handle_scan(data):
             conn_attendance.close()
 
     # Convert earliest UTC to local time for status computation
-    from datetime import timezone
     try:
-        dt_earliest_utc = datetime.fromisoformat(earliest_utc)
-        if dt_earliest_utc.tzinfo is None:
-            dt_earliest_utc = dt_earliest_utc.replace(tzinfo=timezone.utc)
-        earliest_local = dt_earliest_utc.astimezone()
+        parsed = datetime.fromisoformat(earliest_utc)
+        if parsed.tzinfo is None:
+            # legacy naive timestamps — assume they are server-local wall-clock times
+            earliest_local = parsed
+        else:
+            # convert timezone-aware UTC timestamps to server-local
+            earliest_local = parsed.astimezone()
+        print(f"DEBUG: earliest_utc={earliest_utc} earliest_local={earliest_local.isoformat()}")
     except Exception:
         # If parse fails, fallback to receipt_local
+        print('DEBUG: failed to parse earliest_utc, falling back to receipt_local:', earliest_utc)
         earliest_local = receipt_local
 
     # Compute status using centralized utils and configured cutoffs
