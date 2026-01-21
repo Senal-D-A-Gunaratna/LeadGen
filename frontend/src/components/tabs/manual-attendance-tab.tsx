@@ -198,6 +198,8 @@ export function ManualAttendanceTab() {
   }, [selectedDate, searchQuery, gradeFilter, classFilter, roleFilter]);
 
   const availableGrades = availableGradesFromStore || [];
+  const availableClasses = availableClassesFromStore || [];
+  const availableRoles = availableRolesFromStore || [];
 
   // We'll compute the display status inline to avoid changing the `Student` type
   // (so we never pass a non-Student shaped object to `selectStudent`).
@@ -363,7 +365,7 @@ export function ManualAttendanceTab() {
               <SelectContent>
                 <SelectItem value="all">All Grades</SelectItem>
                 {availableGrades.map(grade => (
-                    <SelectItem key={grade} value={grade}>Grade {grade}</SelectItem>
+                  <SelectItem key={grade} value={grade}>Grade {grade}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -373,7 +375,7 @@ export function ManualAttendanceTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {availableClassesFromStore.map(c => (
+                {availableClasses.map(c => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
@@ -385,7 +387,7 @@ export function ManualAttendanceTab() {
                 <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
                      <SelectItem value="none">No Role</SelectItem>
-                    {availableRolesFromStore.map(role => (
+                    {availableRoles.map(role => (
                       <SelectItem key={role} value={role}>{role}</SelectItem>
                     ))}
                 </SelectContent>

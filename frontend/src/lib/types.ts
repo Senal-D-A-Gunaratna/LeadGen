@@ -69,6 +69,9 @@ export type StudentStore = {
   roleFilter: string;
   selectedDate: Date | undefined;
   fakeDate: Date | null;
+  availableGrades?: string[];
+  availableClasses?: string[];
+  availableRoles?: string[];
   pendingAttendanceChanges?: Record<
     number,
     { status?: AttendanceStatus | 'null'; checkInTime?: string | null }
@@ -85,6 +88,7 @@ export type StudentStore = {
     setRoleFilter: (role: string) => void;
     setSelectedDate: (date: Date | undefined) => void;
     selectStudent: (student: Student | null) => void;
+    setFilterOptions?: (opts: { grades?: string[]; classes?: string[]; roles?: string[] }) => void;
     addStudent: (newStudent: NewStudent) => Promise<void>;
     removeStudent: (studentId: number) => Promise<void>;
     updateStudent: (

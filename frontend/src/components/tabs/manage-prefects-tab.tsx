@@ -100,6 +100,8 @@ export function ManagePrefectsTab() {
   const filteredStudents = students;
 
   const availableGrades = availableGradesFromStore || [];
+  const availableClasses = availableClassesFromStore || [];
+  const availableRoles = availableRolesFromStore || [];
 
   const handleUploadClick = (type: UploadType) => {
     if (isAdminOrDev) {
@@ -435,7 +437,7 @@ export function ManagePrefectsTab() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {availableClassesFromStore.map(c => (
+                {availableClasses.map(c => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
@@ -447,7 +449,7 @@ export function ManagePrefectsTab() {
                 <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
                      <SelectItem value="none">No Role</SelectItem>
-                    {availableRolesFromStore.map(role => (
+                    {availableRoles.map(role => (
                       <SelectItem key={role} value={role}>{role}</SelectItem>
                     ))}
                 </SelectContent>

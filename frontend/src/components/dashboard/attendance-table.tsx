@@ -58,6 +58,8 @@ export function AttendanceTable() {
 
   // Use dynamic availableGrades from the store
   const availableGradesFromStore = availableGrades || [];
+  const availableClassesFromStore = availableClasses || [];
+  const availableRolesFromStore = availableRoles || [];
 
   return (
     <>
@@ -104,7 +106,7 @@ export function AttendanceTable() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {availableClasses.map(c => (
+                {availableClassesFromStore.map(c => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>
                 ))}
               </SelectContent>
@@ -116,7 +118,7 @@ export function AttendanceTable() {
                 <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
                     <SelectItem value="none">No Role</SelectItem>
-                    {availableRoles.map(role => (
+                    {availableRolesFromStore.map(role => (
                       <SelectItem key={role} value={role}>{role}</SelectItem>
                     ))}
                 </SelectContent>
