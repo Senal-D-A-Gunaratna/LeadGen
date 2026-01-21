@@ -51,19 +51,20 @@ const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, payload
   const RADIAN = Math.PI / 180;
   const sin = Math.sin(-midAngle * RADIAN);
   const cos = Math.cos(-midAngle * RADIAN);
-  const sx = cx + (outerRadius + 6) * cos;
-  const sy = cy + (outerRadius + 6) * sin;
-  const mx = cx + (outerRadius + 18) * cos;
-  const my = cy + (outerRadius + 18) * sin;
-  const ex = mx + (cos >= 0 ? 1 : -1) * 16;
+  // Move the elbow and labels further out for a larger, thicker donut
+  const sx = cx + (outerRadius + 12) * cos;
+  const sy = cy + (outerRadius + 12) * sin;
+  const mx = cx + (outerRadius + 48) * cos;
+  const my = cy + (outerRadius + 48) * sin;
+  const ex = mx + (cos >= 0 ? 1 : -1) * 46;
   const ey = my;
   const textAnchor = cos >= 0 ? 'start' : 'end';
 
   return (
     <g>
-      <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={payload.fill} fill="none" strokeWidth={1.5} />
-      <text x={ex + (cos >= 0 ? 1 : -1) * 10} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))" dy={-6} style={{ fontSize: 12 }}>{`${payload.name}`}</text>
-      <text x={ex + (cos >= 0 ? 1 : -1) * 10} y={ey} dy={10} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))" style={{ fontSize: 11 }}>
+      <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={payload.fill} fill="none" strokeWidth={2.4} />
+      <text x={ex + (cos >= 0 ? 1 : -1) * 18} y={ey} textAnchor={textAnchor} fill="hsl(var(--foreground))" dy={-10} style={{ fontSize: 16, fontWeight: 700 }}>{`${payload.name}`}</text>
+      <text x={ex + (cos >= 0 ? 1 : -1) * 18} y={ey} dy={14} textAnchor={textAnchor} fill="hsl(var(--muted-foreground))" style={{ fontSize: 16, fontWeight: 600 }}>
         {`${(Math.round(percent * 100 * 10) / 10).toFixed(1)}%`}
       </text>
     </g>
@@ -74,7 +75,7 @@ const renderActiveShape = (props: any) => {
   const RADIAN = Math.PI / 180;
   const { cx, cy, midAngle, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
   
-  const shift = 10;
+  const shift = 14;
   const dx = shift * Math.cos(-midAngle * RADIAN);
   const dy = shift * Math.sin(-midAngle * RADIAN);
 
@@ -430,8 +431,8 @@ export function AttendanceHistoryTab() {
                     data={tweenedAttendance}
                     cx="50%"
                     cy="55%"
-                    innerRadius={70}
-                    outerRadius={100}
+                    innerRadius={100}
+                    outerRadius={130}
                     dataKey="value"
                     onClick={onPieClick}
                     className="cursor-pointer"
