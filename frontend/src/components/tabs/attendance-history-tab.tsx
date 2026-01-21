@@ -102,7 +102,7 @@ const renderActiveShape = (props: any) => {
 
 
 export function AttendanceHistoryTab() {
-  const { students, actions, searchQuery, gradeFilter, classFilter, roleFilter, fakeDate, isLoading, availableGrades } = useStudentStore(
+  const { students, actions, searchQuery, gradeFilter, classFilter, roleFilter, fakeDate, isLoading, availableGrades, availableClasses, availableRoles } = useStudentStore(
     (state: any) => ({
       students: state.students,
       actions: state.actions,
@@ -113,6 +113,8 @@ export function AttendanceHistoryTab() {
       fakeDate: state.fakeDate,
       isLoading: state.isLoading,
       availableGrades: state.availableGrades,
+      availableClasses: state.availableClasses,
+      availableRoles: state.availableRoles,
     })
   );
   const { setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, selectStudent, setSelectedDate, fetchAndSetStudents } = actions;
@@ -589,9 +591,9 @@ export function AttendanceHistoryTab() {
                 </SelectTrigger>
                 <SelectContent>
                     <SelectItem value="all">All Classes</SelectItem>
-                    {CLASSES.map((c: string) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
+                  {(availableClasses || []).map((c: string) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
                 </SelectContent>
                 </Select>
                  <Select value={roleFilter} onValueChange={setRoleFilter}>
@@ -601,8 +603,8 @@ export function AttendanceHistoryTab() {
                     <SelectContent>
                         <SelectItem value="all">All Roles</SelectItem>
                         <SelectItem value="none">No Role</SelectItem>
-                        {PREFECT_ROLES.map((role: string) => (
-                            <SelectItem key={role} value={role}>{role}</SelectItem>
+                        {(availableRoles || []).map((role: string) => (
+                          <SelectItem key={role} value={role}>{role}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
