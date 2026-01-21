@@ -384,3 +384,89 @@ def migrate_json_to_sqlite():
 
 # Initialize database on import
 init_database()
+
+
+def get_earliest_checkin(student_id: int, date_str: str):
+    """
+    Return the earliest check_in_time (ISO UTC string) for a student/date, or None.
+    """
+    conn = get_db_connection('attendance')
+    cur = conn.cursor()
+    cur.execute('SELECT check_in_time FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
+    row = cur.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return row['check_in_time']
+
+
+def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
+    """
+    Save a check-in timestamp for student/date using a transaction that ensures
+    the earliest check-in is preserved. Returns the earliest check_in_time (ISO UTC).
+
+    incoming_utc_iso should be an ISO-8601 string in UTC (e.g. datetime.utcnow().isoformat()).
+    """
+    import sqlite3
+    from datetime import datetime, timezone
+
+    conn = get_db_connection('attendance')
+    cur = conn.cursor()
+    try:
+        # Begin an immediate transaction to avoid write/write races on SQLite
+        cur.execute('BEGIN IMMEDIATE')
+        cur.execute('SELECT id, check_in_time FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
+        row = cur.fetchone()
+        if not row:
+            # Insert new record; status will be computed by caller after we return the earliest time
+            cur.execute('''
+                INSERT INTO attendance_records (student_id, date, status, created_at, updated_at, check_in_time)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (student_id, date_str, 'absent', datetime.utcnow().isoformat(), datetime.utcnow().isoformat(), incoming_utc_iso))
+            conn.commit()
+            return incoming_utc_iso
+
+        existing_iso = row['check_in_time']
+        # If existing is None or incoming is earlier, update
+        if existing_iso is None:
+            cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE id = ?', (incoming_utc_iso, datetime.utcnow().isoformat(), row['id']))
+            conn.commit()
+            return incoming_utc_iso
+
+        try:
+            existing_dt = datetime.fromisoformat(existing_iso)
+        except Exception:
+            # If parse fails, treat incoming as earlier (be conservative)
+            existing_dt = None
+
+        try:
+            incoming_dt = datetime.fromisoformat(incoming_utc_iso)
+        except Exception:
+            incoming_dt = None
+
+        # If either parse failed, prefer the non-null; otherwise compare
+        if existing_dt is None:
+            chosen = incoming_utc_iso
+        elif incoming_dt is None:
+            chosen = existing_iso
+        else:
+            # Ensure both are timezone-aware UTC for accurate compare
+            if existing_dt.tzinfo is None:
+                existing_dt = existing_dt.replace(tzinfo=timezone.utc)
+            if incoming_dt.tzinfo is None:
+                incoming_dt = incoming_dt.replace(tzinfo=timezone.utc)
+            if incoming_dt < existing_dt:
+                # Update to earlier time
+                cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE id = ?', (incoming_utc_iso, datetime.utcnow().isoformat(), row['id']))
+                conn.commit()
+                chosen = incoming_utc_iso
+            else:
+                chosen = existing_iso
+
+        return chosen
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+

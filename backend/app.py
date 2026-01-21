@@ -11,7 +11,9 @@ from datetime import datetime, date
 from pathlib import Path
 import os
 from typing import Dict, List, Optional
-from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext
+from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin
+from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END
+from utils import compute_attendance_status
 import csv
 import io
 import base64
@@ -624,47 +626,72 @@ def handle_scan(data):
     today = date.today().isoformat()
     conn_students.close()
     
-    # Check if already scanned today (in attendance database)
-    conn_attendance = get_db_connection('attendance')
-    cursor_attendance = conn_attendance.cursor()
-    cursor_attendance.execute('''
-        SELECT status FROM attendance_records
-        WHERE student_id = ? AND date = ?
-    ''', (student_id, today))
-    
-    existing = cursor_attendance.fetchone()
-    if existing and existing['status'] != 'absent':
-        # Already scanned — update last scan time
+    # Determine server receipt time (server-local) and UTC stamp to persist
+    receipt_local = datetime.now()
+    receipt_utc_iso = datetime.utcnow().isoformat()
+    date_str = receipt_local.date().isoformat()
+
+    # Save check-in using transactional helper - ensures earliest checkin wins
+    try:
+        earliest_utc = save_checkin_utc(student_id, date_str, receipt_utc_iso)
+    except Exception:
+        # On failure, fall back to a simple insert/update to avoid losing scans
+        conn_attendance = get_db_connection('attendance')
+        cur = conn_attendance.cursor()
         try:
-            cursor_attendance.execute('''
-                UPDATE attendance_records
-                SET check_in_time = ?, updated_at = ?
-                WHERE student_id = ? AND date = ?
-            ''', (datetime.now().isoformat(), datetime.now().isoformat(), student_id, today))
+            cur.execute('''
+                INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (student_id, date_str, 'absent', datetime.utcnow().isoformat(), receipt_utc_iso))
             conn_attendance.commit()
+            earliest_utc = receipt_utc_iso
         except Exception:
-            # ignore update failures
+            earliest_utc = receipt_utc_iso
+        finally:
+            conn_attendance.close()
+
+    # Convert earliest UTC to local time for status computation
+    from datetime import timezone
+    try:
+        dt_earliest_utc = datetime.fromisoformat(earliest_utc)
+        if dt_earliest_utc.tzinfo is None:
+            dt_earliest_utc = dt_earliest_utc.replace(tzinfo=timezone.utc)
+        earliest_local = dt_earliest_utc.astimezone()
+    except Exception:
+        # If parse fails, fallback to receipt_local
+        earliest_local = receipt_local
+
+    # Compute status using centralized utils and configured cutoffs
+    status = compute_attendance_status(earliest_local, ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END)
+
+    # Persist computed status and ensure check_in_time is earliest_utc
+    conn_attendance = get_db_connection('attendance')
+    cur = conn_attendance.cursor()
+    try:
+        # If a row exists, update it; otherwise insert a new row.
+        cur.execute('SELECT id FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
+        existing_row = cur.fetchone()
+        if existing_row:
+            cur.execute('''
+                UPDATE attendance_records
+                SET status = ?, updated_at = ?, check_in_time = ?
+                WHERE student_id = ? AND date = ?
+            ''', (status, datetime.utcnow().isoformat(), earliest_utc, student_id, date_str))
+        else:
+            cur.execute('''
+                INSERT INTO attendance_records (student_id, date, status, created_at, updated_at, check_in_time)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (student_id, date_str, status, datetime.utcnow().isoformat(), datetime.utcnow().isoformat(), earliest_utc))
+        conn_attendance.commit()
+    except Exception as e:
+        try:
+            conn_attendance.rollback()
+        except Exception:
             pass
+        print('Error persisting attendance record:', e)
+    finally:
         conn_attendance.close()
-        student_data = get_student_by_id(student_id)
-        emit('scan_response', {'success': True, 'student': student_data, 'alreadyScanned': True})
-        broadcast_data_change('scan', {'studentId': student_id})
-        return
-    
-    # Determine status based on time
-    now = datetime.now()
-    on_time_cutoff = datetime(now.year, now.month, now.day, 7, 20, 0)
-    status = 'on time' if now < on_time_cutoff else 'late'
-    
-    # Update or insert attendance record
-    cursor_attendance.execute('''
-        INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (student_id, today, status, datetime.now().isoformat(), datetime.now().isoformat()))
-    
-    conn_attendance.commit()
-    conn_attendance.close()
-    
+
     student_data = get_student_by_id(student_id)
     emit('scan_response', {'success': True, 'student': student_data})
     broadcast_data_change('scan', {'studentId': student_id})

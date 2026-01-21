@@ -33,7 +33,7 @@ parser.add_argument('--timeout', type=float, default=6.0, help='Seconds to wait 
 args = parser.parse_args()
 
 BACKEND_URL = args.url.rstrip('/')
-# Prefer explicit flag or env var, otherwise fall back to the development default.
+#3# Prefer explicit flag or env var, otherwise fall back to the development default.
 SCANNER_TOKEN = args.token or os.environ.get('SCANNER_TOKEN') or 'dev-scanner-token'
 if SCANNER_TOKEN == 'dev-scanner-token':
     print('NOTE: No SCANNER_TOKEN provided; using development default "dev-scanner-token".')
