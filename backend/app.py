@@ -651,23 +651,10 @@ def handle_scan(data):
         finally:
             conn_attendance.close()
 
-    # Convert earliest UTC to local time for status computation
-    try:
-        parsed = datetime.fromisoformat(earliest_utc)
-        if parsed.tzinfo is None:
-            # legacy naive timestamps — assume they are server-local wall-clock times
-            earliest_local = parsed
-        else:
-            # convert timezone-aware UTC timestamps to server-local
-            earliest_local = parsed.astimezone()
-        print(f"DEBUG: earliest_utc={earliest_utc} earliest_local={earliest_local.isoformat()}")
-    except Exception:
-        # If parse fails, fallback to receipt_local
-        print('DEBUG: failed to parse earliest_utc, falling back to receipt_local:', earliest_utc)
-        earliest_local = receipt_local
-
-    # Compute status using centralized utils and configured cutoffs
-    status = compute_attendance_status(earliest_local, ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END)
+    # Compute status using server local receipt time (system time).
+    # This ensures comparisons use the server's wall-clock unambiguously.
+    status = compute_attendance_status(receipt_local, ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END)
+    print(f"DEBUG: computed status from receipt_local={receipt_local.isoformat()} -> {status}")
 
     # Persist computed status and ensure check_in_time is earliest_utc
     conn_attendance = get_db_connection('attendance')
