@@ -34,7 +34,7 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "../ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { PREFECT_ROLES, CLASSES } from "@/lib/student-data";
+import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/static-filters";
 import { Badge } from "../ui/badge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -84,7 +84,7 @@ const editFormSchema = z.object({
   notes: z.string().optional(),
 });
 
-const GRADES = Array.from({ length: 8 }, (_, i) => i + 6); // 6 to 13
+
 
 function RemoveStudentButton({ student, onDeleted, canDelete }: { student: Student, onDeleted: () => void, canDelete: boolean }) {
   const { actions } = useStudentStore();

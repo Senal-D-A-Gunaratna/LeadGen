@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
 import type { NewStudent, PrefectRole } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { PREFECT_ROLES, CLASSES } from "@/lib/student-data";
+import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/static-filters";
 import { Textarea } from "../ui/textarea";
 import { useAuthStore } from "@/hooks/use-auth-store";
 
@@ -55,7 +55,7 @@ interface AddStudentFormProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const GRADES = Array.from({ length: 8 }, (_, i) => i + 6); // 6 to 13
+
 
 export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
   const [isPending, setIsPending] = useState(false);
