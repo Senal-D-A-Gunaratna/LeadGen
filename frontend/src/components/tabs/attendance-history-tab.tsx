@@ -345,98 +345,78 @@ export function AttendanceHistoryTab() {
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="glassmorphic glowing-border">
-          {isLoading ? (
-            <div className="p-6 space-y-4">
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-64" />
-              <Skeleton className="h-[350px] w-full" />
-            </div>
-          ) : (
-            <>
-              <CardHeader className="pb-2">
-                <CardTitle className="font-headline text-primary">Attendance Breakdown</CardTitle>
-                <CardDescription>
-                    Overview for {selectedDate ? format(selectedDate, "PPP") : "today"}. Click a slice to filter the list.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="h-[350px] w-full" onClick={onContainerClick}>
-                <ResponsiveContainer>
-                    <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
-                    <Pie
-                      key={`pie-${animateKey}`}
-                      activeIndex={activeIndex}
-                      activeShape={renderActiveShape}
-                      data={attendanceData}
-                      cx="50%"
-                      cy="55%"
-                      innerRadius={80}
-                      outerRadius={110}
-                      dataKey="value"
-                      onClick={onPieClick}
-                      className="cursor-pointer"
-                      labelLine={false}
-                      label={renderCustomizedLabel}
-                      isAnimationActive={animateNow}
-                      animationDuration={800}
-                      animationBegin={0}
-                    >
-                        {attendanceData.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none"/>
-                        ))}
-                    </Pie>
-                    </PieChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </>
-          )}
+          <CardHeader className="pb-2">
+            <CardTitle className="font-headline text-primary">Attendance Breakdown</CardTitle>
+            <CardDescription>
+                Overview for {selectedDate ? format(selectedDate, "PPP") : "today"}. Click a slice to filter the list.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-[350px] w-full" onClick={onContainerClick}>
+            <ResponsiveContainer>
+                <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
+                <Pie
+                  key={`pie-${animateKey}`}
+                  activeIndex={activeIndex}
+                  activeShape={renderActiveShape}
+                  data={attendanceData}
+                  cx="50%"
+                  cy="55%"
+                  innerRadius={80}
+                  outerRadius={110}
+                  dataKey="value"
+                  onClick={onPieClick}
+                  className="cursor-pointer"
+                  labelLine={false}
+                  label={renderCustomizedLabel}
+                  isAnimationActive={animateNow}
+                  animationDuration={800}
+                  animationBegin={0}
+                >
+                    {attendanceData.map((entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none"/>
+                    ))}
+                </Pie>
+                </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
         </Card>
         
         <Card className="glassmorphic glowing-border">
-            {isLoading ? (
-              <div className="p-6 space-y-4">
-                <Skeleton className="h-6 w-48" />
-                <Skeleton className="h-4 w-64" />
-                <Skeleton className="h-[350px] w-full" />
+            <CardHeader>
+              <CardTitle className="font-headline text-primary">Section wise Presence</CardTitle>
+              <CardDescription>Percentage of students on time, late, and absent for each grade on the selected date.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[350px] w-full">
+                <ResponsiveContainer>
+                  <BarChart data={gradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
+                    <XAxis type="number" domain={[0, 1]} tickFormatter={percentageFormatter} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="grade" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{
+                        background: "hsl(var(--background))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "var(--radius)",
+                      }}
+                      cursor={{ fill: "hsla(var(--muted), 0.5)" }}
+                       formatter={(value: number, name: string, props: any) => {
+                          const count = name === 'On Time' ? props.payload.onTimeCount : 
+                                       name === 'Late' ? props.payload.lateCount : 
+                                       props.payload.absentCount;
+                          return `${count}`;
+                       }}
+                       itemStyle={{ textTransform: 'capitalize' }}
+                       labelStyle={{ fontWeight: 'bold' }}
+                       separator=": "
+                    />
+                    <Legend />
+                    <Bar dataKey="onTime" name="On Time" stackId="a" fill={COLORS["on time"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
+                    <Bar dataKey="late" name="Late" stackId="a" fill={COLORS["late"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
+                    <Bar dataKey="absent" name="Absent" stackId="a" fill={COLORS["absent"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
-            ) : (
-              <>
-                <CardHeader>
-                  <CardTitle className="font-headline text-primary">Section wise Presence</CardTitle>
-                  <CardDescription>Percentage of students on time, late, and absent for each grade on the selected date.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[350px] w-full">
-                    <ResponsiveContainer>
-                      <BarChart data={gradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
-                        <XAxis type="number" domain={[0, 1]} tickFormatter={percentageFormatter} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis type="category" dataKey="grade" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip
-                          contentStyle={{
-                            background: "hsl(var(--background))",
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "var(--radius)",
-                          }}
-                          cursor={{ fill: "hsla(var(--muted), 0.5)" }}
-                           formatter={(value: number, name: string, props: any) => {
-                              const count = name === 'On Time' ? props.payload.onTimeCount : 
-                                           name === 'Late' ? props.payload.lateCount : 
-                                           props.payload.absentCount;
-                              return `${count}`;
-                           }}
-                           itemStyle={{ textTransform: 'capitalize' }}
-                           labelStyle={{ fontWeight: 'bold' }}
-                           separator=": "
-                        />
-                        <Legend />
-                        <Bar dataKey="onTime" name="On Time" stackId="a" fill={COLORS["on time"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
-                        <Bar dataKey="late" name="Late" stackId="a" fill={COLORS["late"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
-                        <Bar dataKey="absent" name="Absent" stackId="a" fill={COLORS["absent"]} isAnimationActive={animateNow} animationDuration={800} animationBegin={0} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </CardContent>
-              </>
-            )}
+            </CardContent>
           </Card>
       </div>
 
