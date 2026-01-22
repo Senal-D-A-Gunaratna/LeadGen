@@ -148,29 +148,8 @@ def broadcast_static_filters():
 
     Uses DB-derived values so the frontend stays consistent with student data.
     """
-    try:
-        payload = compute_static_filters_from_db()
-        socketio.emit('static_filters_update', payload, namespace='/')
-    except Exception:
-        # Don't let filter broadcasting break other flows.
-        pass
-    else:
-        # Emit summaries for specific students
-        students = get_all_students_with_history()
-        summaries = []
-        for sid in affected_student_ids:
-            student = next((s for s in students if s['id'] == sid), None)
-            if student:
-                summary = get_attendance_summary(student, students)
-                summaries.append({
-                    'studentId': sid,
-                    'name': student['name'],
-                    'grade': student['grade'],
-                    'className': student['className'],
-                    'summary': summary
-                })
-        if summaries:
-            socketio.emit('summary_update', {'summaries': summaries}, namespace='/')
+    # Broadcast helper removed — static filter pushes are disabled.
+    raise NotImplementedError('broadcast_static_filters was removed; use get_static_filters request instead')
 
 # ==================== HELPER FUNCTIONS ====================
 
@@ -537,6 +516,11 @@ def handle_connect():
     except Exception:
         pass
 
+    # Emit current canonical and DB-derived static filters to the newly connected client
+    # Note: removed push 'static_filters_update' emission — clients should
+    # request filters via 'get_static_filters' when needed.
+    
+
 
 @socketio.on('disconnect')
 def handle_disconnect(*args):
@@ -767,6 +751,7 @@ def handle_get_filtered_students(data):
 def handle_get_static_filters():
     """Respond with server-side computed static filters via WebSocket."""
     try:
+        print(f"Received get_static_filters request from sid={request.sid}")  # type: ignore
         # Return canonical lists (from config) alongside DB-derived available lists.
         db_payload = compute_static_filters_from_db()
         emit('get_static_filters_response', {
@@ -909,10 +894,7 @@ def handle_add_student(data):
     student = get_student_by_id(next_id)
     broadcast_data_change('student_added', {'studentId': next_id})
     broadcast_summary_update([next_id])
-    try:
-        broadcast_static_filters()
-    except Exception:
-        pass
+    # static filter pushes removed
     emit('add_student_response', {'success': True, 'student': student})
 
 @socketio.on('remove_student')
@@ -943,10 +925,7 @@ def handle_remove_student(data):
     
     broadcast_data_change('student_removed', {'studentId': student_id})
     broadcast_summary_update()  # Emit all summaries since student removed
-    try:
-        broadcast_static_filters()
-    except Exception:
-        pass
+    # static filter pushes removed
     emit('remove_student_response', {'success': True})
 
 @socketio.on('update_student')
@@ -1043,10 +1022,7 @@ def handle_update_student(data):
     student = get_student_by_id(student_id)
     broadcast_data_change('student_updated', {'studentId': student_id})
     broadcast_summary_update([student_id])
-    try:
-        broadcast_static_filters()
-    except Exception:
-        pass
+    # static filter pushes removed
     emit('update_student_response', {'success': True, 'student': student})
 
 @socketio.on('validate_password')

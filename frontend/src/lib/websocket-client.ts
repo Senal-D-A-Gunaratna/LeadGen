@@ -266,11 +266,7 @@ class WebSocketClient {
         listeners.forEach(listener => listener(data));
       });
 
-      // Server push for static filters update
-      this.socket.on('static_filters_update', (data: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
-        const listeners = this.listeners.get('static_filters_update') || new Set();
-        listeners.forEach(listener => listener(data));
-      });
+      // Note: push-based 'static_filters_update' removed — use request API instead.
     }).catch((error) => {
       console.error('Failed to get backend URL:', error);
       this.emitConnectionState(false);

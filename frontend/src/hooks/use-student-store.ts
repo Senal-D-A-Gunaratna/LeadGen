@@ -47,19 +47,6 @@ export const useStudentStore = create<StudentStore>()(
           );
         });
 
-        // Listen for server-pushed static filter updates and apply to store
-        wsClient.on('static_filters_update', (payload: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
-          try {
-            set({
-              availableGrades: payload.grades || [],
-              availableClasses: payload.classes || [],
-              availableRoles: payload.roles || [],
-            });
-          } catch (err) {
-            console.error('Failed to apply static_filters_update payload:', err);
-          }
-        });
-
         // Request initial static filters from server (best-effort)
         wsClient.getStaticFilters().then((resp) => {
           set({
