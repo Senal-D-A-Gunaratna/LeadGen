@@ -24,3 +24,37 @@ def parse_time_str(hhmmss: str) -> Tuple[int, int, int]:
     else:
         h, m, s = parts
     return int(h), int(m), int(s)
+
+
+# Authoritative static filter values moved from frontend
+# These are the canonical values used for registration/profile forms.
+# If you later require admin-editable lists separate from student data,
+# consider persisting them in a small settings table or file.
+GRADES = [
+    "6",
+    "7",
+    "8",
+    "9",
+    "10",
+    "11",
+    "12",
+    "13",
+]
+
+PREFECT_ROLES = [
+    "Head Prefect",
+    "Deputy Head Prefect",
+    "Super Senior Prefect",
+    "Senior Prefect",
+    "Junior Prefect",
+]
+
+CLASSES = [
+    "Nena",
+    "Guna",
+    "Edi",
+    "Bala",
+    "Suru",
+    "Viru",
+    "Diri",
+]

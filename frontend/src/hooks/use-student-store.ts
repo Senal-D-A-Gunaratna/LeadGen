@@ -46,6 +46,30 @@ export const useStudentStore = create<StudentStore>()(
             console.error('Failed to refetch on data_changed event:', err)
           );
         });
+
+        // Listen for server-pushed static filter updates and apply to store
+        wsClient.on('static_filters_update', (payload: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
+          try {
+            set({
+              availableGrades: payload.grades || [],
+              availableClasses: payload.classes || [],
+              availableRoles: payload.roles || [],
+            });
+          } catch (err) {
+            console.error('Failed to apply static_filters_update payload:', err);
+          }
+        });
+
+        // Request initial static filters from server (best-effort)
+        wsClient.getStaticFilters().then((resp) => {
+          set({
+            availableGrades: resp.grades || [],
+            availableClasses: resp.classes || [],
+            availableRoles: resp.roles || [],
+          });
+        }).catch((err) => {
+          console.warn('Could not fetch initial static filters via WebSocket:', err);
+        });
       };
 
       // Trigger initialization when store is first used

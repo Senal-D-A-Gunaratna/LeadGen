@@ -118,6 +118,42 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
                 'summary': summary
             })
         socketio.emit('summary_update', {'summaries': summaries}, namespace='/')
+
+
+def compute_static_filters_from_db() -> Dict[str, List[str]]:
+    """Compute distinct grades, classes, and roles from the students DB.
+
+    Returns a dict with keys: 'grades', 'classes', 'roles'. Grades are
+    converted to strings for consistency with frontend expectations.
+    """
+    conn = get_db_connection('students')
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT DISTINCT grade FROM students WHERE grade IS NOT NULL ORDER BY grade')
+        grades = [str(r['grade']) for r in cur.fetchall() if r['grade'] is not None]
+
+        cur.execute("SELECT DISTINCT className FROM students WHERE className IS NOT NULL AND className != '' ORDER BY className")
+        classes = [r['className'] for r in cur.fetchall()]
+
+        cur.execute("SELECT DISTINCT role FROM students WHERE role IS NOT NULL AND role != '' ORDER BY role")
+        roles = [r['role'] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+    return {'grades': grades, 'classes': classes, 'roles': roles}
+
+
+def broadcast_static_filters():
+    """Emit current static filters to all connected clients via WebSocket.
+
+    Uses DB-derived values so the frontend stays consistent with student data.
+    """
+    try:
+        payload = compute_static_filters_from_db()
+        socketio.emit('static_filters_update', payload, namespace='/')
+    except Exception:
+        # Don't let filter broadcasting break other flows.
+        pass
     else:
         # Emit summaries for specific students
         students = get_all_students_with_history()
@@ -726,6 +762,16 @@ def handle_get_filtered_students(data):
     
     emit('filtered_students_response', {'success': True, 'students': filtered})
 
+
+@socketio.on('get_static_filters')
+def handle_get_static_filters():
+    """Respond with server-side computed static filters via WebSocket."""
+    try:
+        payload = compute_static_filters_from_db()
+        emit('get_static_filters_response', {'success': True, **payload})
+    except Exception as e:
+        emit('get_static_filters_response', {'success': False, 'message': 'Error computing filters', 'error': str(e)})
+
 @socketio.on('get_student_by_id')
 def handle_get_student_by_id(data):
     """Get a single student by ID via WebSocket."""
@@ -854,6 +900,10 @@ def handle_add_student(data):
     student = get_student_by_id(next_id)
     broadcast_data_change('student_added', {'studentId': next_id})
     broadcast_summary_update([next_id])
+    try:
+        broadcast_static_filters()
+    except Exception:
+        pass
     emit('add_student_response', {'success': True, 'student': student})
 
 @socketio.on('remove_student')
@@ -884,6 +934,10 @@ def handle_remove_student(data):
     
     broadcast_data_change('student_removed', {'studentId': student_id})
     broadcast_summary_update()  # Emit all summaries since student removed
+    try:
+        broadcast_static_filters()
+    except Exception:
+        pass
     emit('remove_student_response', {'success': True})
 
 @socketio.on('update_student')
@@ -980,6 +1034,10 @@ def handle_update_student(data):
     student = get_student_by_id(student_id)
     broadcast_data_change('student_updated', {'studentId': student_id})
     broadcast_summary_update([student_id])
+    try:
+        broadcast_static_filters()
+    except Exception:
+        pass
     emit('update_student_response', {'success': True, 'student': student})
 
 @socketio.on('validate_password')

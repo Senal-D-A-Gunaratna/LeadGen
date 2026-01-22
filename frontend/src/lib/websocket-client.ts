@@ -265,6 +265,12 @@ class WebSocketClient {
         const listeners = this.listeners.get('attendance_trend') || new Set();
         listeners.forEach(listener => listener(data));
       });
+
+      // Server push for static filters update
+      this.socket.on('static_filters_update', (data: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
+        const listeners = this.listeners.get('static_filters_update') || new Set();
+        listeners.forEach(listener => listener(data));
+      });
     }).catch((error) => {
       console.error('Failed to get backend URL:', error);
       this.emitConnectionState(false);
@@ -279,6 +285,33 @@ class WebSocketClient {
       this.currentRole = null;
       this.emitConnectionState(false);
     }
+  }
+
+  getStaticFilters(): Promise<{ grades: string[]; classes: string[]; roles: string[] }> {
+    return new Promise(async (resolve, reject) => {
+      const ok = await this.waitForConnected(5000);
+      if (!ok || !this.socket || !this.socket.connected) {
+        reject(new Error('Not connected'));
+        return;
+      }
+
+      const handler = (data: { success: boolean; grades?: string[]; classes?: string[]; roles?: string[]; message?: string }) => {
+        this.socket?.off('get_static_filters_response', handler);
+        if (data.success) {
+          resolve({ grades: data.grades || [], classes: data.classes || [], roles: data.roles || [] });
+        } else {
+          reject(new Error(data.message || 'Failed to get static filters'));
+        }
+      };
+
+      this.socket.on('get_static_filters_response', handler);
+      this.socket.emit('get_static_filters');
+
+      setTimeout(() => {
+        this.socket?.off('get_static_filters_response', handler);
+        reject(new Error('Request timeout'));
+      }, 10000);
+    });
   }
 
   isConnected(): boolean {
