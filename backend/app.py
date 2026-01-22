@@ -12,7 +12,7 @@ from pathlib import Path
 import os
 from typing import Dict, List, Optional
 from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin
-from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END
+from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
 from utils import compute_attendance_status
 import csv
 import io
@@ -767,8 +767,17 @@ def handle_get_filtered_students(data):
 def handle_get_static_filters():
     """Respond with server-side computed static filters via WebSocket."""
     try:
-        payload = compute_static_filters_from_db()
-        emit('get_static_filters_response', {'success': True, **payload})
+        # Return canonical lists (from config) alongside DB-derived available lists.
+        db_payload = compute_static_filters_from_db()
+        emit('get_static_filters_response', {
+            'success': True,
+            'grades': CANONICAL_GRADES,
+            'classes': CANONICAL_CLASSES,
+            'roles': CANONICAL_PREFECT_ROLES,
+            'availableGrades': db_payload.get('grades', []),
+            'availableClasses': db_payload.get('classes', []),
+            'availableRoles': db_payload.get('roles', []),
+        })
     except Exception as e:
         emit('get_static_filters_response', {'success': False, 'message': 'Error computing filters', 'error': str(e)})
 
