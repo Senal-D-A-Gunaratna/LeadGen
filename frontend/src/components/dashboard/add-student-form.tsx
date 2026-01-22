@@ -59,7 +59,7 @@ interface AddStudentFormProps {
 
 export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
   const [isPending, setIsPending] = useState(false);
-  const { actions, fullRoster } = useStudentStore();
+  const { actions, fullRoster, availableGrades: availableGradesFromStore, availableClasses: availableClassesFromStore, availableRoles: availableRolesFromStore } = useStudentStore();
   const { user } = useAuthStore();
   const { toast } = useToast();
   const isDev = user?.role === 'dev';
@@ -188,7 +188,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {GRADES.map(grade => (
+                              {(availableGradesFromStore || []).map(grade => (
                                 <SelectItem key={grade} value={String(grade)}>{grade}</SelectItem>
                               ))}
                             </SelectContent>
@@ -210,7 +210,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {CLASSES.map(c => (
+                              {(availableClassesFromStore || []).map(c => (
                                 <SelectItem key={c} value={c}>{c}</SelectItem>
                               ))}
                             </SelectContent>
@@ -234,7 +234,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
-                          {PREFECT_ROLES.map(role => (
+                          {(availableRolesFromStore || []).map(role => (
                             <SelectItem key={role} value={role}>{role}</SelectItem>
                           ))}
                         </SelectContent>

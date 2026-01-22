@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider } from '@/hooks/auth-provider';
 import { enableMapSet } from 'immer';
+import WsInitializer from '@/components/ws-initializer';
 
 // Enable Immer MapSet plugin for Zustand store
 enableMapSet();
@@ -52,6 +53,7 @@ export default function RootLayout({
           }}
         />
           <AuthProvider>
+            <WsInitializer />
             <div className="fixed inset-0 -z-10 h-full w-full bg-gradient-to-br from-blue-200 via-blue-100 to-blue-50 dark:from-blue-950 dark:via-slate-900 dark:to-slate-950">
             </div>
             {children}

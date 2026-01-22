@@ -26,7 +26,7 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import type { AttendanceStatus, Student } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Input } from "../ui/input";
-import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
+// Use `useStudentStore`'s reactive lists instead of importing module-level arrays
 import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";

@@ -34,7 +34,7 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "../ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/student-data";
+// Use filter lists from the central store (reactive) instead of module-level arrays
 import { Badge } from "../ui/badge";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -87,7 +87,7 @@ const editFormSchema = z.object({
 
 
 function RemoveStudentButton({ student, onDeleted, canDelete }: { student: Student, onDeleted: () => void, canDelete: boolean }) {
-  const { actions } = useStudentStore();
+  const { actions, availableGrades, availableClasses, availableRoles } = useStudentStore();
   const { toast } = useToast();
   const { user } = useAuthStore();
   const [isPending, setIsPending] = useState(false);
@@ -162,7 +162,7 @@ function RemoveStudentButton({ student, onDeleted, canDelete }: { student: Stude
 
 function EditStudentForm({ student, onFinished }: { student: Student, onFinished: () => void}) {
   const [isPending, setIsPending] = useState(false);
-  const { actions } = useStudentStore();
+  const { actions, availableGrades, availableClasses, availableRoles } = useStudentStore();
   const { toast } = useToast();
   const { user } = useAuthStore();
   const { addActionLog } = useActionLogStore();
@@ -311,7 +311,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                             </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            {GRADES.map(grade => (
+                            {(availableGrades || []).map((grade: string) => (
                             <SelectItem key={grade} value={String(grade)}>{grade}</SelectItem>
                             ))}
                         </SelectContent>
@@ -333,7 +333,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                             </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            {CLASSES.map(c => (
+                            {(availableClasses || []).map((c: string) => (
                             <SelectItem key={c} value={c}>{c}</SelectItem>
                             ))}
                         </SelectContent>
@@ -357,7 +357,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
-                          {PREFECT_ROLES.map(role => (
+                          {(availableRoles || []).map((role: string) => (
                             <SelectItem key={role} value={role}>{role}</SelectItem>
                           ))}
                         </SelectContent>

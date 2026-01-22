@@ -41,7 +41,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "../ui/dropdown-menu";
-import { CLASSES, PREFECT_ROLES } from "@/lib/student-data";
+// Use reactive store lists (`useStudentStore`) instead of importing static arrays
 import { format } from "date-fns";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 import { UploadAuthDialog } from "../dashboard/upload-auth-dialog";
