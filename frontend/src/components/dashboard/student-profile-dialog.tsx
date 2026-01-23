@@ -34,6 +34,7 @@ import { useStudentStore } from "@/hooks/use-student-store";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "../ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { GRADES, CLASSES, PREFECT_ROLES } from "@/lib/student-data";
 // Use filter lists from the central store (reactive) instead of module-level arrays
 import { Badge } from "../ui/badge";
 import { useForm } from "react-hook-form";
@@ -190,6 +191,11 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
     },
   });
 
+  // Use static/config-backed lists only (no fallback to dynamic available_* lists)
+  const gradeOptions = GRADES;
+  const classOptions = CLASSES;
+  const roleOptions = PREFECT_ROLES;
+
   async function onSubmit(values: z.infer<typeof editFormSchema>) {
     setIsPending(true);
     try {
@@ -311,8 +317,8 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                             </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            {(availableGrades || []).map((grade: string) => (
-                            <SelectItem key={grade} value={String(grade)}>{grade}</SelectItem>
+                            {gradeOptions.map((grade: string) => (
+                            <SelectItem key={String(grade)} value={String(grade)}>{grade}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -333,8 +339,8 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                             </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            {(availableClasses || []).map((c: string) => (
-                            <SelectItem key={c} value={c}>{c}</SelectItem>
+                            {classOptions.map((c: string) => (
+                            <SelectItem key={String(c)} value={String(c)}>{c}</SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -357,8 +363,8 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
-                          {(availableRoles || []).map((role: string) => (
-                            <SelectItem key={role} value={role}>{role}</SelectItem>
+                          {roleOptions.map((role: any) => (
+                            <SelectItem key={String(role)} value={String(role)}>{String(role)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>

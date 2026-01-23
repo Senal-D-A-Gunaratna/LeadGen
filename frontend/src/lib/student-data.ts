@@ -13,13 +13,24 @@ export const AVAILABLE_GRADES: string[] = [];
 export const AVAILABLE_CLASSES: string[] = [];
 export const AVAILABLE_ROLES: string[] = [];
 
+// Static (backend-configured) filter arrays — populated once from the
+// backend `get_static_filters` request. These are the canonical, static
+// lists (grades/classes/prefect roles) and should be used by components
+// that expect the configuration-provided values.
+export const STATIC_GRADES: string[] = [];
+export const STATIC_CLASSES: string[] = [];
+export const STATIC_ROLES: PrefectRole[] = [];
+
 // Backwards-compatible aliases: components that import `GRADES`, `CLASSES`,
 // and `PREFECT_ROLES` can continue to use those names — they'll reference the
 // runtime arrays and thus will be populated via WebSocket. This preserves the
 // strict WebSocket-only transfer while avoiding mass component rewrites.
-export const GRADES = AVAILABLE_GRADES;
-export const CLASSES = AVAILABLE_CLASSES;
-export const PREFECT_ROLES: PrefectRole[] = AVAILABLE_ROLES as PrefectRole[];
+// Backwards-compatible aliases (deprecated): keep these names so existing
+// import sites don't break. They point to the static/config-backed lists
+// rather than the runtime `AVAILABLE_*` arrays.
+export const GRADES = STATIC_GRADES;
+export const CLASSES = STATIC_CLASSES;
+export const PREFECT_ROLES: PrefectRole[] = STATIC_ROLES as PrefectRole[];
 
 // Keep exported arrays in-sync with the central store so existing importers
 // that reference `GRADES`, `CLASSES`, or `PREFECT_ROLES` see updates when
@@ -58,6 +69,27 @@ if (typeof window !== 'undefined') {
 			});
 			useStudentStore.subscribe((state: any) => state.availableRoles, (roles: string[]) => {
 				AVAILABLE_ROLES.splice(0, AVAILABLE_ROLES.length, ...(roles || []));
+			});
+		} catch (err) {
+			// noop
+		}
+
+		// Populate static/config-backed lists once from the backend via WebSocket.
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			const { wsClient } = require('@/lib/websocket-client');
+			wsClient.getStaticFilters().then((resp: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
+				if (resp && resp.grades && resp.grades.length) {
+					STATIC_GRADES.splice(0, STATIC_GRADES.length, ...resp.grades);
+				}
+				if (resp && resp.classes && resp.classes.length) {
+					STATIC_CLASSES.splice(0, STATIC_CLASSES.length, ...resp.classes);
+				}
+				if (resp && resp.roles && resp.roles.length) {
+					STATIC_ROLES.splice(0, STATIC_ROLES.length, ...(resp.roles as PrefectRole[]));
+				}
+			}).catch(() => {
+				// noop
 			});
 		} catch (err) {
 			// noop

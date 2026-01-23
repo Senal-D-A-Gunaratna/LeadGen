@@ -106,6 +106,11 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
     })
   }, [nextFingerprintIds]);
 
+  // Use static/config-backed lists only (no fallback to dynamic available_* lists)
+  const gradeOptions = GRADES;
+  const classOptions = CLASSES;
+  const roleOptions = PREFECT_ROLES;
+
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsPending(true);
@@ -188,8 +193,8 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {(availableGradesFromStore || []).map(grade => (
-                                <SelectItem key={grade} value={String(grade)}>{grade}</SelectItem>
+                              {gradeOptions.map(grade => (
+                                <SelectItem key={String(grade)} value={String(grade)}>{grade}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -210,8 +215,8 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {(availableClassesFromStore || []).map(c => (
-                                <SelectItem key={c} value={c}>{c}</SelectItem>
+                              {classOptions.map(c => (
+                                <SelectItem key={String(c)} value={String(c)}>{c}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -234,8 +239,8 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
                         </FormControl>
                         <SelectContent>
                           <SelectItem value="none">None</SelectItem>
-                          {(availableRolesFromStore || []).map(role => (
-                            <SelectItem key={role} value={role}>{role}</SelectItem>
+                          {roleOptions.map((role: any) => (
+                            <SelectItem key={String(role)} value={String(role)}>{String(role)}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
