@@ -79,14 +79,38 @@ if (typeof window !== 'undefined') {
 			// eslint-disable-next-line @typescript-eslint/no-var-requires
 			const { wsClient } = require('@/lib/websocket-client');
 			wsClient.getStaticFilters().then((resp: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
-				if (resp && resp.grades && resp.grades.length) {
-					STATIC_GRADES.splice(0, STATIC_GRADES.length, ...resp.grades);
-				}
-				if (resp && resp.classes && resp.classes.length) {
-					STATIC_CLASSES.splice(0, STATIC_CLASSES.length, ...resp.classes);
-				}
-				if (resp && resp.roles && resp.roles.length) {
-					STATIC_ROLES.splice(0, STATIC_ROLES.length, ...(resp.roles as PrefectRole[]));
+				if (resp) {
+					if (resp.grades && resp.grades.length) {
+						STATIC_GRADES.splice(0, STATIC_GRADES.length, ...resp.grades);
+					}
+					if (resp.classes && resp.classes.length) {
+						STATIC_CLASSES.splice(0, STATIC_CLASSES.length, ...resp.classes);
+					}
+					if (resp.roles && resp.roles.length) {
+						STATIC_ROLES.splice(0, STATIC_ROLES.length, ...(resp.roles as PrefectRole[]));
+					}
+					// Also populate DB-derived dynamic lists if provided by the same response
+					// (backend returns both canonical lists and available* in get_static_filters_response)
+					// Update module-level AVAILABLE_* arrays in-place so existing importers see values.
+					// Then seed the store's available* via its action to keep the reactive source in-sync.
+					const anyResp: any = resp as any;
+					if (anyResp.availableGrades && anyResp.availableGrades.length) {
+						AVAILABLE_GRADES.splice(0, AVAILABLE_GRADES.length, ...anyResp.availableGrades);
+					}
+					if (anyResp.availableClasses && anyResp.availableClasses.length) {
+						AVAILABLE_CLASSES.splice(0, AVAILABLE_CLASSES.length, ...anyResp.availableClasses);
+					}
+					if (anyResp.availableRoles && anyResp.availableRoles.length) {
+						AVAILABLE_ROLES.splice(0, AVAILABLE_ROLES.length, ...(anyResp.availableRoles as string[]));
+					}
+					try {
+						const sstate = useStudentStore.getState();
+						if (sstate && sstate.actions && typeof sstate.actions.setFilterOptions === 'function') {
+							sstate.actions.setFilterOptions({ grades: anyResp.availableGrades || [], classes: anyResp.availableClasses || [], roles: anyResp.availableRoles || [] });
+						}
+					} catch (e) {
+						// noop
+					}
 				}
 			}).catch(() => {
 				// noop
