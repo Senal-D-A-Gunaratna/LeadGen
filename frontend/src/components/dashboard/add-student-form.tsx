@@ -30,6 +30,7 @@ import { Loader2 } from "lucide-react";
 import type { NewStudent, PrefectRole } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/student-data";
+import { wsClient } from "@/lib/websocket-client";
 import { Textarea } from "../ui/textarea";
 import { useAuthStore } from "@/hooks/use-auth-store";
 
@@ -106,10 +107,22 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
     })
   }, [nextFingerprintIds]);
 
-  // Use static/config-backed lists only (no fallback to dynamic available_* lists)
-  const gradeOptions = GRADES;
-  const classOptions = CLASSES;
-  const roleOptions = PREFECT_ROLES;
+  // Static option state: fetch latest static lists when the dialog opens
+  const [gradeOptions, setGradeOptions] = useState<string[]>(GRADES || []);
+  const [classOptions, setClassOptions] = useState<string[]>(CLASSES || []);
+  const [roleOptions, setRoleOptions] = useState<PrefectRole[]>(PREFECT_ROLES || []);
+
+  useEffect(() => {
+    let mounted = true;
+    if (!open) return;
+    wsClient.getStaticFilters().then((resp) => {
+      if (!mounted) return;
+      if (resp.grades && resp.grades.length) setGradeOptions(resp.grades);
+      if (resp.classes && resp.classes.length) setClassOptions(resp.classes);
+      if (resp.roles && resp.roles.length) setRoleOptions(resp.roles as PrefectRole[]);
+    }).catch(() => {});
+    return () => { mounted = false; };
+  }, [open]);
 
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
