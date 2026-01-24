@@ -76,7 +76,7 @@ export function ManagePrefectsTab() {
     fetchAndSetStudents,
   } = actions;
 
-  const clearFilters = () => useStudentStore.getState().actions.clearFilters();
+  const clearFilters = () => useStudentStore.getState().actions.resetToDefault?.();
 
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);

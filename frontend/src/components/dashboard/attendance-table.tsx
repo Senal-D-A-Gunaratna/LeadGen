@@ -53,7 +53,7 @@ export function AttendanceTable() {
       availableRoles: state.availableRoles,
     }));
   const { setSearchQuery, selectStudent, setGradeFilter, setClassFilter, setRoleFilter } = actions;
-  const clearFilters = () => useStudentStore.getState().actions.clearFilters();
+  const clearFilters = () => useStudentStore.getState().actions.resetToDefault?.();
 
   
 
