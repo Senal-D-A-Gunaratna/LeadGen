@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Search, UserCheck, UserX, Clock, X, Calendar } from "lucide-react";
+import { MdFilterAltOff } from "react-icons/md";
 import { Badge } from "@/components/ui/badge";
 import { useStudentStore } from "@/hooks/use-student-store";
 import type { AttendanceStatus } from "@/lib/types";
@@ -52,6 +53,18 @@ export function AttendanceTable() {
       availableRoles: state.availableRoles,
     }));
   const { setSearchQuery, selectStudent, setGradeFilter, setClassFilter, setRoleFilter } = actions;
+  const clearFilters = () => {
+    setSearchQuery('');
+    setGradeFilter('all');
+    setClassFilter('all');
+    setRoleFilter('all');
+  };
+
+  
+
+  
+
+  
   
   // The students array is now the filtered list from the server
   const filteredStudents = students;
@@ -123,6 +136,9 @@ export function AttendanceTable() {
                     ))}
                 </SelectContent>
             </Select>
+            <Button variant="outline" size="icon" className="ml-auto" onClick={clearFilters} aria-label="Clear filters">
+              <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+            </Button>
           </div>
           <div className="overflow-y-auto h-[506px] pr-2">
             <Table>
