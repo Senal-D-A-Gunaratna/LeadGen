@@ -56,3 +56,5 @@ CLASSES = [
     "Viru",
     "Diri",
 ]
+
+# End of backend/config.py

@@ -6,6 +6,8 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { MdFilterAltOff } from "react-icons/md";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { wsClient } from "@/lib/websocket-client";
 
@@ -109,6 +111,14 @@ export function LineGraphTab() {
     return () => { mounted = false; };
   }, [range, grade, status]);
 
+  const clearFilters = () => {
+    setRange('week');
+    setGrade('all');
+    setStatus('overview');
+    setStartDate('');
+    setEndDate('');
+  };
+
   // Global tab change will handle clearing filters; no per-tab cleanup here.
 
   return (
@@ -158,6 +168,11 @@ export function LineGraphTab() {
           <label className="text-sm text-muted-foreground">Custom Range</label>
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="glassmorphic" />
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="glassmorphic" />
+        </div>
+        <div className="ml-auto">
+          <Button variant="outline" size="icon" onClick={clearFilters} aria-label="Clear filters">
+            <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+          </Button>
         </div>
       </div>
 

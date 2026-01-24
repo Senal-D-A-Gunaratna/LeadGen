@@ -33,6 +33,7 @@ import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
 import { cn } from "@/lib/utils";
 import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown } from "lucide-react";
+import { MdFilterAltOff } from "react-icons/md";
 import { RolePasswordDialog } from "../dashboard/role-password-dialog";
  
 
@@ -64,6 +65,12 @@ export function ManualAttendanceTab() {
   const { addActionLog } = useActionLogStore();
   const { toast } = useToast();
   const { setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, selectStudent, setSelectedDate, fetchAndSetStudents } = actions;
+  const clearFilters = () => {
+    setSearchQuery('');
+    setGradeFilter('all');
+    setClassFilter('all');
+    setRoleFilter('all');
+  };
   
   const selectedDate = useStudentStore(state => state.selectedDate);
   // pendingAttendanceChanges now lives in the central store so multiple components
@@ -392,6 +399,11 @@ export function ManualAttendanceTab() {
                     ))}
                 </SelectContent>
             </Select>
+            <div className="ml-auto">
+              <Button variant="outline" size="icon" onClick={clearFilters} aria-label="Clear filters">
+                <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+              </Button>
+            </div>
           </div>
 
           <div className="max-h-[600px] overflow-y-auto pr-2">

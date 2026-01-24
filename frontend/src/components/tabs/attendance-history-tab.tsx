@@ -6,6 +6,7 @@ import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { Pie, PieChart, Cell, ResponsiveContainer, Sector, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { motion } from "framer-motion";
 import { Search, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { MdFilterAltOff } from "react-icons/md";
 import { format } from "date-fns";
 import {
   Card,
@@ -169,6 +170,12 @@ export function AttendanceHistoryTab() {
     })
   );
   const { setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, selectStudent, setSelectedDate, fetchAndSetStudents } = actions;
+  const clearFilters = () => {
+    setSearchQuery('');
+    setGradeFilter('all');
+    setClassFilter('all');
+    setRoleFilter('all');
+  };
   
   const selectedDate = useStudentStore((state: any) => state.selectedDate);
 
@@ -657,6 +664,11 @@ export function AttendanceHistoryTab() {
                         ))}
                     </SelectContent>
                 </Select>
+                    <div className="ml-auto">
+                      <Button variant="outline" size="icon" onClick={clearFilters} aria-label="Clear filters">
+                        <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+                      </Button>
+                    </div>
             </div>
              <p className="text-sm text-muted-foreground mb-4">
                 Showing {filteredStudentsForTable.length} student(s)
