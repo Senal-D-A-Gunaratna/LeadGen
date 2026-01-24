@@ -124,7 +124,7 @@ export function AttendanceTable() {
                 </SelectContent>
             </Select>
           </div>
-          <div className="overflow-y-auto h-[450px] pr-2">
+          <div className="overflow-y-auto h-[506px] pr-2">
             <Table>
               <TableHeader>
                 <TableRow className="border-border/40 hover:bg-muted/60">

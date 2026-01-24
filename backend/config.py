@@ -26,10 +26,8 @@ def parse_time_str(hhmmss: str) -> Tuple[int, int, int]:
     return int(h), int(m), int(s)
 
 
-# Authoritative static filter values moved from frontend
-# These are the canonical values used for registration/profile forms.
-# If you later require admin-editable lists separate from student data,
-# consider persisting them in a small settings table or file.
+# Authoritative static filter values used for registration/profile forms
+
 GRADES = [
     "6",
     "7",
