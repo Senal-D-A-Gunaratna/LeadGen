@@ -170,12 +170,7 @@ export function AttendanceHistoryTab() {
     })
   );
   const { setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, selectStudent, setSelectedDate, fetchAndSetStudents } = actions;
-  const clearFilters = () => {
-    setSearchQuery('');
-    setGradeFilter('all');
-    setClassFilter('all');
-    setRoleFilter('all');
-  };
+  const clearFilters = () => useStudentStore.getState().actions.clearFilters();
   
   const selectedDate = useStudentStore((state: any) => state.selectedDate);
 

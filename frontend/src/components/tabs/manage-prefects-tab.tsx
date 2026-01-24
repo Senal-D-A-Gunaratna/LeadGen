@@ -76,12 +76,7 @@ export function ManagePrefectsTab() {
     fetchAndSetStudents,
   } = actions;
 
-  const clearFilters = () => {
-    setSearchQuery('');
-    setGradeFilter('all');
-    setClassFilter('all');
-    setRoleFilter('all');
-  };
+  const clearFilters = () => useStudentStore.getState().actions.clearFilters();
 
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);

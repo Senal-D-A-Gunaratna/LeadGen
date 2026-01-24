@@ -65,12 +65,7 @@ export function ManualAttendanceTab() {
   const { addActionLog } = useActionLogStore();
   const { toast } = useToast();
   const { setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, selectStudent, setSelectedDate, fetchAndSetStudents } = actions;
-  const clearFilters = () => {
-    setSearchQuery('');
-    setGradeFilter('all');
-    setClassFilter('all');
-    setRoleFilter('all');
-  };
+  const clearFilters = () => useStudentStore.getState().actions.clearFilters();
   
   const selectedDate = useStudentStore(state => state.selectedDate);
   // pendingAttendanceChanges now lives in the central store so multiple components

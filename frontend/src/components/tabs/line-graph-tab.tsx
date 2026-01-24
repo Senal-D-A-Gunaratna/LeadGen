@@ -112,6 +112,7 @@ export function LineGraphTab() {
   }, [range, grade, status]);
 
   const clearFilters = () => {
+    useStudentStore.getState().actions.clearFilters();
     setRange('week');
     setGrade('all');
     setStatus('overview');
