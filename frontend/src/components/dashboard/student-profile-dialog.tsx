@@ -704,6 +704,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           latePercentage: summary.latePercentage,
           absentPercentage: summary.absencePercentage,
           overallPercentage: summary.presencePercentage,
+          totalSchoolDays: summary.totalSchoolDays,
         });
       } else {
         // Fetch and update store
@@ -734,6 +735,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
               latePercentage: s.latePercentage,
               absentPercentage: s.absencePercentage,
               overallPercentage: s.presencePercentage,
+              totalSchoolDays: s.totalSchoolDays,
             });
           }
         } catch (e) {
@@ -863,6 +865,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                         <div className="flex justify-between items-center">
                           <span className="flex items-center gap-2 text-sm text-muted-foreground"><GraduationCap className="h-4 w-4 text-primary" /> Overall Presence</span>
                           <span className="font-bold text-lg">{attendanceStats.overallPercentage.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm text-muted-foreground">
+                          <span className="flex items-center gap-2"><CalendarIcon className="h-4 w-4 text-primary" /> School Days</span>
+                          <span className="font-semibold">{attendanceStats.totalSchoolDays ?? '—'}</span>
                         </div>
                         <Separator />
                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
