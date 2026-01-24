@@ -31,52 +31,20 @@ export function Header() {
       // ignore
     }
 
-    // Theme handling
-    // If user previously saved a theme in localStorage, respect it.
-    // Otherwise, auto-detect via `prefers-color-scheme` and listen for changes.
-    const savedTheme = localStorage.getItem("theme");
-    const prefersDark = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initialTheme = savedTheme ?? (prefersDark ? "dark" : "light");
-    setTheme(initialTheme);
-    document.documentElement.classList.toggle("dark", initialTheme === "dark");
-
-    // If no explicit saved theme, listen to system changes and update theme automatically.
-    let mq: MediaQueryList | null = null;
-    const mqHandler = (e: MediaQueryListEvent) => {
-      // Only auto-update when user hasn't chosen a theme
-      if (localStorage.getItem("theme") === null) {
-        const newTheme = e.matches ? "dark" : "light";
-        setTheme(newTheme);
-        document.documentElement.classList.toggle("dark", newTheme === "dark");
-      }
-    };
-    if (typeof window !== "undefined" && window.matchMedia) {
-      mq = window.matchMedia("(prefers-color-scheme: dark)");
-      if (mq.addEventListener) {
-        mq.addEventListener("change", mqHandler as EventListener);
-      } else if ((mq as any).addListener) {
-        // Safari
-        (mq as any).addListener(mqHandler);
-      }
-    }
+    // Force dark theme by default. Remove device detection and client-side caching.
+    setTheme("dark");
+    document.documentElement.classList.add("dark");
 
 
     return () => {
       wsClient.off('connection', handler);
-      if (mq) {
-        if (mq.removeEventListener) {
-          mq.removeEventListener("change", mqHandler as EventListener);
-        } else if ((mq as any).removeListener) {
-          (mq as any).removeListener(mqHandler);
-        }
-      }
+      // nothing additional to clean up for theme
     };
   }, []);
 
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
     setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
     if (newTheme === "dark") {
       document.documentElement.classList.add("dark");
     } else {

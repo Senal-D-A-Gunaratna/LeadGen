@@ -35,21 +35,7 @@ export default function RootLayout({
       <body className={cn('font-body antialiased', fontInter.variable, fontSpaceGrotesk.variable)} suppressHydrationWarning>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(${String(() => {
-              try {
-                var theme = localStorage.getItem('theme');
-                if (theme === 'dark') {
-                  document.documentElement.classList.add('dark');
-                  return;
-                } else if (theme === 'light') {
-                  document.documentElement.classList.remove('dark');
-                  return;
-                }
-                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                if (prefersDark) document.documentElement.classList.add('dark');
-                else document.documentElement.classList.remove('dark');
-              } catch (e) {}
-            })})();`,
+            __html: `(() => { try { document.documentElement.classList.add('dark'); } catch (e) {} })();`,
           }}
         />
           <AuthProvider>
