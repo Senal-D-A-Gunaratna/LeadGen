@@ -41,6 +41,7 @@ class WebSocketClient {
   private authenticated: boolean = false;
   private currentRole: string | null = null;
   private connected: boolean = false;
+  private connecting: boolean = false;
 
   private emitConnectionState(connected: boolean) {
     this.connected = connected;
@@ -87,8 +88,21 @@ class WebSocketClient {
   }
 
   connect() {
-    if (this.socket?.connected) {
+    if (this.socket?.connected || this.connecting) {
       return;
+    }
+
+    // If there is an existing socket that isn't connected, make sure it's
+    // fully cleaned up before creating a new one to avoid duplicate listeners
+    // or leaked sockets that still attempt reconnection.
+    if (this.socket) {
+      try {
+        this.socket.removeAllListeners();
+      } catch (e) {}
+      try {
+        this.socket.disconnect();
+      } catch (e) {}
+      this.socket = null;
     }
 
     // Ensure backend URL is fetched from server before connecting
@@ -109,15 +123,18 @@ class WebSocketClient {
         pingInterval: 25000,
       };
 
+      this.connecting = true;
       this.socket = io(backendUrl, socketOptions);
 
       this.socket.on('connect', () => {
         console.log('WebSocket connected');
+        this.connecting = false;
         this.emitConnectionState(true);
       });
 
       this.socket.on('disconnect', (reason: any) => {
         console.log('WebSocket disconnected', reason);
+        this.connecting = false;
         this.authenticated = false;
         this.currentRole = null;
         this.emitConnectionState(false);
@@ -126,6 +143,7 @@ class WebSocketClient {
       // Treat connection errors as server error / disconnected state
       this.socket.on('connect_error', (err: any) => {
         console.error('WebSocket connect error', err);
+        this.connecting = false;
         this.emitConnectionState(false);
       });
 
@@ -142,6 +160,7 @@ class WebSocketClient {
 
       this.socket.on('reconnect_failed', () => {
         console.warn('WebSocket reconnect failed');
+        this.connecting = false;
         this.emitConnectionState(false);
       });
 
