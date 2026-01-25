@@ -30,6 +30,18 @@ const getCurrentTime = async (get: () => StudentStore): Promise<Date> => {
     return new Date();
 };
 
+// Normalize a date-like value to a local date (strip time component)
+const toLocalDate = (d?: any) => {
+  if (!d) return undefined;
+  try {
+    const dt = d instanceof Date ? d : new Date(d);
+    if (Number.isNaN(dt.getTime())) return undefined;
+    return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+  } catch (e) {
+    return undefined;
+  }
+};
+
 export const useStudentStore = create<StudentStore>()(
   devtools(
     (set, get) => {
@@ -68,8 +80,9 @@ export const useStudentStore = create<StudentStore>()(
         set({ isLoading: true });
         try {
           const { searchQuery, statusFilter, gradeFilter, classFilter, roleFilter, selectedDate, fakeDate } = get();
-          const dateToFetch = selectedDate || fakeDate || new Date();
-          const dateString = format(dateToFetch, 'yyyy-MM-dd');
+
+          const dateObj = toLocalDate(selectedDate) || toLocalDate(fakeDate) || new Date();
+          const dateString = format(dateObj, 'yyyy-MM-dd');
           
           // Fetch the filtered list for the main UI
           const students = await getFilteredStudentsAction({
@@ -193,7 +206,7 @@ export const useStudentStore = create<StudentStore>()(
             }
           },
           setFakeDate: (date) => {
-            set({ fakeDate: date });
+            set({ fakeDate: toLocalDate(date) });
           },
           setSearchQuery: (query) => {
             set({ searchQuery: query });
@@ -216,7 +229,7 @@ export const useStudentStore = create<StudentStore>()(
             get().actions.fetchAndSetStudents();
           },
           setSelectedDate: (date) => {
-            set({ selectedDate: date });
+            set({ selectedDate: toLocalDate(date) });
             get().actions.fetchAndSetStudents();
           },
           selectStudent: async (student) => {
@@ -334,7 +347,7 @@ export const useStudentStore = create<StudentStore>()(
           // Also aggressively clear all cached data when leaving a tab
           clearFilters: () => {
             const fake = get().fakeDate;
-            const dateToSet = fake ? new Date(fake) : new Date();
+            const dateToSet = toLocalDate(fake) || toLocalDate(new Date()) || new Date();
             // Clear all cached student data and reset filters
             set({ 
               searchQuery: '', 
@@ -354,7 +367,7 @@ export const useStudentStore = create<StudentStore>()(
           // Reset filters and refetch students for default view (also reset selected date)
           resetToDefault: async () => {
             const fake = get().fakeDate;
-            const dateToSet = fake ? new Date(fake) : new Date();
+            const dateToSet = toLocalDate(fake) || toLocalDate(new Date()) || new Date();
             set({ searchQuery: '', gradeFilter: 'all', classFilter: 'all', roleFilter: 'all', statusFilter: null, selectedDate: dateToSet });
             await fetchAndSetStudents();
           },

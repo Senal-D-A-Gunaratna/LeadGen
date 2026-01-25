@@ -225,8 +225,17 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
 
 def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dict]:
     """Get all students with their attendance history for TODAY only (Live Attendance)."""
-    target_date = date.today().isoformat()  # Always use today, ignore parameter
-    is_weekend = date.today().weekday() >= 5  # 5=Saturday, 6=Sunday
+    # Use provided target_date if valid (YYYY-MM-DD); otherwise default to today.
+    if target_date:
+        try:
+            td = date.fromisoformat(target_date)
+        except Exception:
+            td = date.today()
+    else:
+        td = date.today()
+
+    target_date = td.isoformat()
+    is_weekend = td.weekday() >= 5  # 5=Saturday, 6=Sunday
     
     conn_students = get_db_connection('students')
     cursor_students = conn_students.cursor()
