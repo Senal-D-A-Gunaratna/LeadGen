@@ -660,7 +660,17 @@ export function AttendanceHistoryTab() {
                     </SelectContent>
                 </Select>
                     <div className="ml-auto">
-                      <Button variant="outline" size="icon" onClick={clearFilters} aria-label="Clear filters">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => {
+                          // Clear global filters in the store
+                          useStudentStore.getState().actions.clearFilters();
+                          // Reset pie selection local state
+                          setActiveIndex(-1);
+                        }}
+                        aria-label="Clear filters"
+                      >
                         <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
                       </Button>
                     </div>
