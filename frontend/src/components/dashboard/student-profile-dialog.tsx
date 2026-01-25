@@ -254,7 +254,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full">
-         <div className="overflow-y-auto pr-2 flex-grow h-[450px]">
+         <div className="overflow-y-auto pr-2 flex-grow min-h-[420px]">
           <div className="space-y-4 pr-4">
             <FormField
               control={form.control}
@@ -841,7 +841,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
               <TabsTrigger value="general">General Information</TabsTrigger>
               <TabsTrigger value="additional">Additional Information</TabsTrigger>
             </TabsList>
-            <div className="h-[400px]">
+            <div className="min-h-[420px]">
               <TabsContent value="general" className="h-full overflow-y-auto pr-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                   <div className="space-y-4">
@@ -861,7 +861,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
                     <h3 className="font-headline text-lg text-accent-foreground">Attendance Statistics</h3>
                     {isClient && attendanceStats ? (
-                      <div className="space-y-3 glassmorphic p-4 rounded-lg">
+                      <div className="space-y-2 glassmorphic px-4 pt-3 pb-0.5 rounded-lg min-h-[180px]">
                         <div className="flex justify-between items-center">
                           <span className="flex items-center gap-2 text-sm text-muted-foreground"><GraduationCap className="h-4 w-4 text-primary" /> Overall Presence</span>
                           <span className="font-bold text-lg">{attendanceStats.overallPercentage.toFixed(1)}%</span>
@@ -994,7 +994,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                 </div>
               </TabsContent>
             </div>
-            <DialogFooter className="sm:justify-between items-center mt-4">
+            <DialogFooter className="sm:justify-between items-center mt-1">
                 <div />
                 <div className="flex items-center gap-2">
                     {canDownload && (
