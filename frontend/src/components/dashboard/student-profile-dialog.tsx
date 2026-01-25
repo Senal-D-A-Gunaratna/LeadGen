@@ -847,16 +847,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                   <div className="space-y-4">
                     <h3 className="font-headline text-lg text-accent-foreground">Contact & Role</h3>
                     <div className="space-y-3 glassmorphic p-4 rounded-lg">
+                      {student.role && (
+                        <div className="flex items-center gap-3">
+                          <Badge variant="secondary">{student.role}</Badge>
+                        </div>
+                      )}
+                      {student.role && <Separator />}
                       <div className="flex items-center gap-3"><Phone className="h-4 w-4 text-primary" />{student.contact.phone}</div>
                       <div className="flex items-center gap-3"><Mail className="h-4 w-4 text-primary" /> <span className="font-medium">{student.contact.email || 'N/A'}</span></div>
-                      {student.role && (
-                        <>
-                          <Separator />
-                          <div className="flex items-center gap-3">
-                            <Badge variant="secondary">{student.role}</Badge>
-                          </div>
-                        </>
-                      )}
                     </div>
 
                     <h3 className="font-headline text-lg text-accent-foreground">Attendance Statistics</h3>
