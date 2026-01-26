@@ -32,8 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
 import { cn } from "@/lib/utils";
-import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown } from "lucide-react";
-import { MdFilterAltOff } from "react-icons/md";
+import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown, FilterX } from "lucide-react";
 import { RolePasswordDialog } from "../dashboard/role-password-dialog";
  
 
@@ -396,7 +395,7 @@ export function ManualAttendanceTab() {
             </Select>
             <div className="ml-auto">
               <Button variant="outline" size="icon" onClick={clearFilters} aria-label="Clear filters">
-                <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+                <FilterX className="h-5 w-5 text-muted-foreground" />
               </Button>
             </div>
           </div>

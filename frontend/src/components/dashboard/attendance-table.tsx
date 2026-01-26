@@ -17,8 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Search, UserCheck, UserX, Clock, X, Calendar } from "lucide-react";
-import { MdFilterAltOff } from "react-icons/md";
+import { Search, UserCheck, UserX, Clock, X, Calendar, FilterX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useStudentStore } from "@/hooks/use-student-store";
 import type { AttendanceStatus } from "@/lib/types";
@@ -132,7 +131,7 @@ export function AttendanceTable() {
                 </SelectContent>
             </Select>
             <Button variant="outline" size="icon" className="ml-auto" onClick={clearFilters} aria-label="Clear filters">
-              <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+              <FilterX className="h-5 w-5 text-muted-foreground" />
             </Button>
           </div>
           <div className="overflow-y-auto h-[506px] pr-2">

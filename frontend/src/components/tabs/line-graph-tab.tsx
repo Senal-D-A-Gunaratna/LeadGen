@@ -6,7 +6,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { format } from "date-fns";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { MdFilterAltOff } from "react-icons/md";
+import { FilterX } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { wsClient } from "@/lib/websocket-client";
@@ -172,7 +172,7 @@ export function LineGraphTab() {
         </div>
         <div className="ml-auto">
           <Button variant="outline" size="icon" onClick={clearFilters} aria-label="Clear filters">
-            <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+            <FilterX className="h-5 w-5 text-muted-foreground" />
           </Button>
         </div>
       </div>

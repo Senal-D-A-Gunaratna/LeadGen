@@ -5,8 +5,7 @@ import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { Pie, PieChart, Cell, ResponsiveContainer, Sector, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { motion } from "framer-motion";
-import { Search, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import { MdFilterAltOff } from "react-icons/md";
+import { Search, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, FilterX } from "lucide-react";
 import { format } from "date-fns";
 import {
   Card,
@@ -671,7 +670,7 @@ export function AttendanceHistoryTab() {
                         }}
                         aria-label="Clear filters"
                       >
-                        <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+                        <FilterX className="h-5 w-5 text-muted-foreground" />
                       </Button>
                     </div>
             </div>

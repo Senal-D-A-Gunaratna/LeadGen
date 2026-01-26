@@ -17,8 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Search, UserPlus, Upload, Loader2, Download, Database, FileText, History, Users, X, File as FileIcon } from "lucide-react";
-import { MdFilterAltOff } from "react-icons/md";
+import { Search, UserPlus, Upload, Loader2, Download, Database, FileText, History, Users, X, File as FileIcon, FilterX } from "lucide-react";
 import { useStudentStore } from "@/hooks/use-student-store";
 import type { Student } from "@/lib/types";
 import { Badge } from "../ui/badge";
@@ -458,7 +457,7 @@ export function ManagePrefectsTab() {
                 </SelectContent>
             </Select>
             <Button variant="outline" size="icon" className="ml-auto" onClick={clearFilters} aria-label="Clear filters">
-              <MdFilterAltOff className="h-5 w-5 text-muted-foreground" />
+              <FilterX className="h-5 w-5 text-muted-foreground" />
             </Button>
         </div>
         <p className="text-sm text-muted-foreground mb-4">
