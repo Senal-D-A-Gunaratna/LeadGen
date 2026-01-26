@@ -5,7 +5,7 @@ import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { Pie, PieChart, Cell, ResponsiveContainer, Sector, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
 import { motion } from "framer-motion";
-import { Search, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, FilterX } from "lucide-react";
+import { Search, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, FilterX, LineChart } from "lucide-react";
 import { format } from "date-fns";
 import {
   Card,
@@ -193,6 +193,7 @@ export function AttendanceHistoryTab() {
   const [animateData, setAnimateData] = useState(false);
 
   const activeTab = useUIStateStore(state => state.activeTab);
+  const { setActiveTab } = useUIStateStore();
   let visibilityTimer: number | undefined;
 
   const runTrigger = () => {
@@ -495,17 +496,27 @@ export function AttendanceHistoryTab() {
           </Card>
       </div>
 
-       <Card className="glassmorphic glowing-border" ref={studentListRef}>
-            <CardHeader>
+        <Card className="glassmorphic glowing-border" ref={studentListRef}>
+          <CardHeader className="relative">
                 <CardTitle className="font-headline text-primary capitalize">
                      {selectedStatus ? `${selectedStatus} Students` : `All Students`}
                 </CardTitle>
                  <CardDescription>
                     A list of students based on the selected filters. Click a student to view details.
                 </CardDescription>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setActiveTab('line-graph')}
+                  aria-label="Open line graph"
+                  className="absolute right-3 top-3 z-20"
+                >
+                  <LineChart className="h-5 w-5 text-muted-foreground" />
+                </Button>
             </CardHeader>
             <CardContent>
-            <div className="flex flex-wrap gap-2 w-full mb-4">
+              <div>
+                <div className="flex flex-wrap gap-2 w-full mb-4">
                 <div className="relative flex-grow min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -658,7 +669,7 @@ export function AttendanceHistoryTab() {
                         ))}
                     </SelectContent>
                 </Select>
-                    <div className="ml-auto">
+                    <div className="ml-auto flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="icon"
@@ -672,9 +683,12 @@ export function AttendanceHistoryTab() {
                       >
                         <FilterX className="h-5 w-5 text-muted-foreground" />
                       </Button>
+
+                      
                     </div>
-            </div>
-             <p className="text-sm text-muted-foreground mb-4">
+                  </div>
+                </div>
+                 <p className="text-sm text-muted-foreground mb-4">
                 Showing {filteredStudentsForTable.length} student(s)
             </p>
             <div className="h-[300px] overflow-y-auto rounded-md border border-border/40">
