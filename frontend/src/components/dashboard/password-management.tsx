@@ -130,7 +130,7 @@ export function PasswordManagement({ onUnlockRequest }: { onUnlockRequest?: () =
        <Card className="glassmorphic glowing-border">
           <CardHeader>
              <CardTitle className="font-headline text-primary">System Passwords</CardTitle>
-             <CardDescription>Manage passwords for user roles.</CardDescription>
+             <CardDescription>Manage passwords for user roles</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
               <Skeleton className="h-10 w-full" />

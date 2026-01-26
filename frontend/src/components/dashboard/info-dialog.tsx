@@ -25,11 +25,11 @@ export function CreditsDialog() {
         <DialogHeader>
           <DialogTitle className="font-headline text-primary">Credits</DialogTitle>
           <DialogDescription>
-            Information about the creators and technologies used in this application.
+            Information about the creators and technologies used in this application
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col items-center justify-center h-48 space-y-4">
-          <p className="text-center">This application was brought to you by the power of AI.</p>
+          <p className="text-center">This application was brought to you by the power of AI</p>
           <p className="text-sm text-muted-foreground text-center">Built with Next.js, ShadCN, Tailwind CSS, and Firebase.</p>
         </div>
       </DialogContent>

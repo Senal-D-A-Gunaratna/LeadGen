@@ -279,7 +279,7 @@ export function BackupManagement() {
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Restore {type} data?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                This will overwrite current {type} data with the contents of this backup. This action requires authorization and is not reversible.
+                                                This will overwrite current {type} data with the contents of this backup, This action requires authorization and is not reversible
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
@@ -298,7 +298,7 @@ export function BackupManagement() {
                                         <AlertDialogHeader>
                                             <AlertDialogTitle>Delete this backup?</AlertDialogTitle>
                                             <AlertDialogDescription>
-                                                Permanently delete the backup file: {file}. This action requires authorization and cannot be undone.
+                                                Permanently delete the backup file: {file}. This action requires authorization and cannot be undone
                                             </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
@@ -323,7 +323,7 @@ export function BackupManagement() {
         <CardHeader>
           <CardTitle className="font-headline text-primary">Backup Management</CardTitle>
           <CardDescription>
-            Create, restore, and delete backups for student and attendance data.
+            Create, restore, and delete backups for student and attendance data
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -338,7 +338,7 @@ export function BackupManagement() {
                     Delete All Backups
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Permanently delete all student and attendance backups.
+                    Permanently delete all student and attendance backups
                   </p>
                 </div>
                 <AlertDialog>
@@ -352,7 +352,7 @@ export function BackupManagement() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This action is irreversible and requires developer authorization. It will permanently delete ALL backup files.
+                        This action is irreversible and requires developer authorization, It will permanently delete ALL backup files
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

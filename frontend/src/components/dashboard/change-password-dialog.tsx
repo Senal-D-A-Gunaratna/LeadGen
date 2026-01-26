@@ -103,7 +103,7 @@ export function ChangePasswordDialog({ role, open, onOpenChange }: ChangePasswor
         <DialogHeader>
           <DialogTitle className="font-headline text-primary">Change {roleName} Password</DialogTitle>
           <DialogDescription>
-            Enter your old and new password below.
+            Enter your old and new password below
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

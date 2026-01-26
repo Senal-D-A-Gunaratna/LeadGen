@@ -119,7 +119,7 @@ function TimeFreeze() {
             <CardHeader>
                 <CardTitle className="font-headline text-primary">Time Freeze Controls</CardTitle>
                 <CardDescription>
-                    Freeze the application's internal clock to a specific date and time for testing.
+                    Freeze the application's internal clock to a specific date and time for testing
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -238,21 +238,21 @@ export function DevTab() {
             <CardHeader>
                 <CardTitle className="font-headline text-primary">Debug Actions</CardTitle>
                 <CardDescription>
-                Use these tools to test and debug application functionality.
+                Use these tools to test and debug application functionality
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
                         <h3 className="font-semibold">Simulate Fingerprint Scan</h3>
-                        <p className="text-sm text-muted-foreground">Trigger a scan for a random student.</p>
+                        <p className="text-sm text-muted-foreground">Trigger a scan for a random student</p>
                     </div>
                     <Button onClick={handleScan}>Simulate Scan</Button>
                 </div>
                 <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div>
                         <h3 className="font-semibold">Reset Daily Data</h3>
-                        <p className="text-sm text-muted-foreground">Reset all students to `absent` for today.</p>
+                        <p className="text-sm text-muted-foreground">Reset all students to `absent` for today</p>
                     </div>
                     <AlertDialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
                     <AlertDialogTrigger asChild>
@@ -262,7 +262,7 @@ export function DevTab() {
                         <AlertDialogHeader>
                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This action will reset the attendance status for all students to 'absent' for today. This cannot be undone.
+                            This action will reset the attendance status for all students to 'absent' for today, This cannot be undone
                         </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -275,7 +275,7 @@ export function DevTab() {
                 <div className="flex items-center justify-between p-4 border border-destructive/50 rounded-lg">
                     <div>
                         <h3 className="font-semibold text-destructive">Delete All Attendance History</h3>
-                        <p className="text-sm text-muted-foreground">Permanently delete all historical attendance records.</p>
+                        <p className="text-sm text-muted-foreground">Permanently delete all historical attendance records</p>
                     </div>
                     <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
                     <AlertDialogTrigger asChild>
@@ -285,7 +285,7 @@ export function DevTab() {
                         <AlertDialogHeader>
                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This action is irreversible and requires developer authorization. This will permanently delete all attendance history for every student.
+                            This action is irreversible and requires developer authorization, This will permanently delete all attendance history for every student
                         </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>

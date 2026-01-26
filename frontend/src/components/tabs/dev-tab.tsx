@@ -136,7 +136,7 @@ function TimeFreeze({ onUnlockRequest }: { onUnlockRequest: () => void }) {
                 <div>
                     <CardTitle className="font-headline text-primary">Time Freeze Controls</CardTitle>
                     <CardDescription>
-                        Freeze the application's internal clock for testing.
+                        Freeze the application's internal clock for testing
                     </CardDescription>
                 </div>
                 <DevLocker title="Time Freeze" onUnlock={onUnlockRequest} />
@@ -306,7 +306,7 @@ function DebugActions({ onUnlockRequest }: { onUnlockRequest: () => void }) {
             <div>
                 <CardTitle className="font-headline text-primary">Debug Actions</CardTitle>
                 <CardDescription>
-                Tools to test and debug application functionality.
+                Tools to test and debug application functionality
                 </CardDescription>
             </div>
              <DevLocker title="Debug Actions" onUnlock={onUnlockRequest} />
@@ -315,28 +315,28 @@ function DebugActions({ onUnlockRequest }: { onUnlockRequest: () => void }) {
             <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                     <h3 className="font-semibold">Simulate Fingerprint Scan</h3>
-                    <p className="text-sm text-muted-foreground">Trigger a scan for a random student.</p>
+                    <p className="text-sm text-muted-foreground">Trigger a scan for a random student</p>
                 </div>
                 <Button onClick={handleScan} disabled={!isDevUnlocked}>Simulate Scan</Button>
             </div>
             <div className="flex items-center justify-between p-4 border rounded-lg">
                 <div>
                     <h3 className="font-semibold">Reset Daily Data</h3>
-                    <p className="text-sm text-muted-foreground">Reset all students to `absent` for today.</p>
+                    <p className="text-sm text-muted-foreground">Reset all students to `absent` for today</p>
                 </div>
                 <Button variant="secondary" onClick={() => handleRequest('reset-daily')} disabled={!isDevUnlocked}>Reset Data</Button>
             </div>
              <div className="flex items-center justify-between p-4 border border-destructive/50 rounded-lg">
                 <div>
                     <h3 className="font-semibold text-destructive">Delete All Student Data</h3>
-                    <p className="text-sm text-muted-foreground">Permanently delete all students and their history.</p>
+                    <p className="text-sm text-muted-foreground">Permanently delete all students and their history</p>
                 </div>
                 <Button variant="destructive" onClick={() => handleRequest('delete-students')}>Delete Data</Button>
             </div>
             <div className="flex items-center justify-between p-4 border border-destructive/50 rounded-lg">
                 <div>
                     <h3 className="font-semibold text-destructive">Delete All Attendance History</h3>
-                    <p className="text-sm text-muted-foreground">Permanently delete all historical attendance records.</p>
+                    <p className="text-sm text-muted-foreground">Permanently delete all historical attendance records</p>
                 </div>
                 <Button variant="destructive" onClick={() => handleRequest('delete-history')}>Delete History</Button>
             </div>

@@ -72,7 +72,7 @@ export function AdminActions() {
         <CardHeader>
           <CardTitle className="font-headline text-primary">Admin Actions</CardTitle>
           <CardDescription>
-            Perform administrative actions on the system data. Requires password authorization.
+            Perform administrative actions on the system data, Requires password authorization
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -82,7 +82,7 @@ export function AdminActions() {
                 Delete All Student Data
               </h3>
               <p className="text-sm text-muted-foreground">
-                Permanently delete all students and their history.
+                Permanently delete all students and their history
               </p>
             </div>
              <AlertDialog>
@@ -93,7 +93,7 @@ export function AdminActions() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action is irreversible and requires admin authorization. It will permanently delete all student data and attendance history.
+                    This action is irreversible and requires admin authorization, It will permanently delete all student data and attendance history
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -111,7 +111,7 @@ export function AdminActions() {
                 Delete All Attendance History
               </h3>
               <p className="text-sm text-muted-foreground">
-                Permanently delete all historical attendance records.
+                Permanently delete all historical attendance records
               </p>
             </div>
             <AlertDialog>
@@ -122,7 +122,7 @@ export function AdminActions() {
                 <AlertDialogHeader>
                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    This action is irreversible and requires admin authorization. It will permanently delete all attendance history.
+                    This action is irreversible and requires admin authorization, It will permanently delete all attendance history
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

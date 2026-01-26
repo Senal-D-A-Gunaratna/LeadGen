@@ -34,14 +34,14 @@ export function ActionLog() {
       <CardHeader>
         <CardTitle className="font-headline text-primary">Action Log</CardTitle>
         <CardDescription>
-          Live feed of privileged user actions.
+          Live feed of privileged user actions
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow h-64">
         <ScrollArea className="h-full pr-4">
           {actionLogs.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p>No actions logged yet.</p>
+              <p>No actions logged yet</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -77,7 +77,7 @@ export function ActionLog() {
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently clear the action log. This action cannot be undone.
+                This will permanently clear the action log, This action cannot be undone
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

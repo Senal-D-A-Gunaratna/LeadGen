@@ -270,7 +270,7 @@ export function ManagePrefectsTab() {
             <div>
                 <CardTitle className="font-headline text-primary mb-1">Manage Students</CardTitle>
                 <CardDescription>
-                Add, edit, and manage student roles. Click a student to see more.
+                Add, edit, and manage student roles; Click a student to see more
                 </CardDescription>
             </div>
              <div className="flex items-center gap-2">

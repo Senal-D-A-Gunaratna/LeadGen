@@ -419,7 +419,7 @@ export function AttendanceHistoryTab() {
           <CardHeader className="pb-2">
             <CardTitle className="font-headline text-primary">Attendance Breakdown</CardTitle>
             <CardDescription>
-                Overview for {selectedDate ? format(selectedDate, "PPP") : "today"}. Click a slice to filter the list.
+                Overview for {selectedDate ? format(selectedDate, "PPP") : "today"}. Click a slice to filter the list
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] w-full" onClick={onContainerClick}>
@@ -458,7 +458,7 @@ export function AttendanceHistoryTab() {
         <Card className="glassmorphic glowing-border">
             <CardHeader>
               <CardTitle className="font-headline text-primary">Section wise Presence</CardTitle>
-              <CardDescription>Percentage of students on time, late, and absent for each grade on the selected date.</CardDescription>
+              <CardDescription>Percentage of students on time, late, and absent for each grade on the selected date</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="h-[350px] w-full">
@@ -502,7 +502,7 @@ export function AttendanceHistoryTab() {
                      {selectedStatus ? `${selectedStatus} Students` : `All Students`}
                 </CardTitle>
                  <CardDescription>
-                    A list of students based on the selected filters. Click a student to view details.
+                    A list of students based on the selected filters, Click a student to view details
                 </CardDescription>
                 <Button
                   variant="ghost"

@@ -73,7 +73,7 @@ export function AttendanceTable() {
       <Card className="glassmorphic glowing-border w-full flex flex-col">
         <CardHeader>
           <CardTitle className="font-headline text-primary">Live Attendance</CardTitle>
-          <CardDescription>A real-time log of student check-ins.</CardDescription>
+          <CardDescription>A real-time log of student check-ins</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex gap-2 w-full mb-4">

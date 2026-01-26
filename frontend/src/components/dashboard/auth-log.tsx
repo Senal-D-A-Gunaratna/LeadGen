@@ -44,14 +44,14 @@ export function AuthLog() {
       <CardHeader>
         <CardTitle className="font-headline text-primary">Authentication Log</CardTitle>
         <CardDescription>
-          Live feed of user sign-ins and sign-outs.
+          Live feed of user sign-ins and sign-outs
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-grow h-64">
         <ScrollArea className="h-full pr-4">
           {logs.length === 0 ? (
             <div className="flex items-center justify-center h-full text-muted-foreground">
-              <p>No authentication events yet.</p>
+              <p>No authentication events yet</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -87,7 +87,7 @@ export function AuthLog() {
             <AlertDialogHeader>
               <AlertDialogTitle>Are you sure?</AlertDialogTitle>
               <AlertDialogDescription>
-                This will permanently clear the authentication log. This action cannot be undone.
+                This will permanently clear the authentication log, This action cannot be undone
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

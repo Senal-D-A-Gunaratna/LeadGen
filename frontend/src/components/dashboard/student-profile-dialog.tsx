@@ -137,7 +137,7 @@ function RemoveStudentButton({ student, onDeleted, canDelete }: { student: Stude
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action will permanently delete {student.name}'s records and requires password authorization.
+              This action will permanently delete {student.name}'s records and requires password authorization
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -270,7 +270,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
             {(isDev || isAdmin) && (
               <div className="space-y-2">
                   <FormLabel>Fingerprint IDs</FormLabel>
-                   {isAdmin && <p className="text-xs text-destructive">Fingerprint IDs are auto-generated and cannot be edited.</p>}
+                   {isAdmin && <p className="text-xs text-destructive">Fingerprint IDs are auto-generated and cannot be edited</p>}
                   <div className="grid grid-cols-2 gap-4">
                       <FormField
                       control={form.control}
@@ -937,7 +937,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                               <div className="w-full h-[250px] flex items-center justify-center">
                                 <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
                                   <div className="text-lg font-semibold mb-1">No Data Available</div>
-                                  <div className="text-sm">There is no attendance data for this month.</div>
+                                  <div className="text-sm">There is no attendance data for this month</div>
                                 </div>
                               </div>
                             ) : (

@@ -85,7 +85,7 @@ export function DevAuthDialog({ open, onOpenChange, onSuccess }: DevAuthDialogPr
         <DialogHeader>
           <DialogTitle className="font-headline text-primary">Developer Authorization</DialogTitle>
           <DialogDescription>
-            Please enter the Developer password to authorize this sensitive action.
+            Please enter the Developer password to authorize this sensitive action
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

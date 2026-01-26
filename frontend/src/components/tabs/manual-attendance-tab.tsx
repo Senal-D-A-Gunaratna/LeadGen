@@ -301,7 +301,7 @@ export function ManualAttendanceTab() {
         <CardHeader>
           <CardTitle className="font-headline text-primary">Manual Attendance Marking</CardTitle>
           <CardDescription>
-            Select a date and manually set the attendance status for students. Changes are saved in bulk.
+            Select a date and manually set the attendance status for students, Changes are saved in bulk
           </CardDescription>
         </CardHeader>
         <CardContent>

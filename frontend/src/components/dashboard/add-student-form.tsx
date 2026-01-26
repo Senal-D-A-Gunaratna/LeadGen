@@ -172,7 +172,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
         <DialogHeader className="text-center">
           <DialogTitle className="font-headline text-primary">Add New Student</DialogTitle>
           <DialogDescription>
-             Enter the details for the new student below. Fingerprint IDs are generated automatically but can be manually set by a Developer.
+             Enter the details for the new student below, Fingerprint IDs are generated automatically but can be manually set by a Developer
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -290,7 +290,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
                 {(isDev || isAdmin) && (
                   <div className="space-y-2">
                       <FormLabel>Fingerprint IDs {isDev ? "(Editable)" : "(Read-only)"}</FormLabel>
-                      {isAdmin && <p className="text-xs text-destructive">Fingerprint IDs are auto-generated and cannot be edited.</p>}
+                      {isAdmin && <p className="text-xs text-destructive">Fingerprint IDs are auto-generated and cannot be edited</p>}
                       <div className="grid grid-cols-2 gap-4">
                           <FormField control={form.control} name="fingerprint1" render={({ field }) => (
                               <FormItem><FormControl><Input {...field} className="glassmorphic disabled:cursor-not-allowed" readOnly={!isDev} disabled={!isDev} /></FormControl><FormMessage /></FormItem>

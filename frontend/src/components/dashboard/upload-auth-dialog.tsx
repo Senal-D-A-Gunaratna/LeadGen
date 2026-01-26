@@ -82,7 +82,7 @@ export function UploadAuthDialog({ role, open, onOpenChange, onSuccess }: Upload
         <DialogHeader>
           <DialogTitle className="font-headline text-primary">Authenticate to Upload</DialogTitle>
           <DialogDescription>
-            As a {roleName}, please enter your password to authorize this bulk data upload.
+            As a {roleName}, please enter your password to authorize this bulk data upload
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
