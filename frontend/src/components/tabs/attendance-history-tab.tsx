@@ -441,6 +441,38 @@ export function AttendanceHistoryTab() {
 
   const percentageFormatter = (value: number) => `${(Math.round(value * 100 * 10) / 10).toFixed(1)}%`;
 
+  const GradeTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const p = payload[0]?.payload || {};
+    const total = (p.onTimeCount || 0) + (p.lateCount || 0) + (p.absentCount || 0);
+
+    const wrapperStyle: any = {
+      background: 'linear-gradient(180deg, rgba(14,16,20,1), rgba(20,22,26,1))',
+      border: '1px solid rgba(255,255,255,0.06)',
+      borderRadius: 8,
+      padding: 8,
+      color: 'hsl(var(--foreground))',
+      minWidth: 120,
+      boxShadow: '0 6px 18px rgba(2,6,23,0.55)'
+    };
+
+    const lineStyle: any = { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 12, lineHeight: '14px', padding: '2px 0' };
+    const titleStyle: any = { opacity: 0.95, fontWeight: 700 };
+    const countStyle = (col: string) => ({ fontWeight: 800, color: col });
+
+    return (
+      <div style={wrapperStyle}>
+        <div style={{ fontWeight: 900, marginBottom: 6, fontSize: 13 }}>{label}</div>
+
+        <div style={lineStyle}><div style={titleStyle}>On Time:</div><div style={countStyle(COLORS['on time'])}>{p.onTimeCount || 0}</div></div>
+        <div style={lineStyle}><div style={titleStyle}>Late:</div><div style={countStyle(COLORS.late)}>{p.lateCount || 0}</div></div>
+        <div style={lineStyle}><div style={titleStyle}>Absent:</div><div style={countStyle(COLORS.absent)}>{p.absentCount || 0}</div></div>
+
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: 6, paddingTop: 6, fontWeight: 800, fontSize: 12 }}>Total: {total}</div>
+      </div>
+    );
+  };
+
 
   return (
     <div className="space-y-4">
@@ -498,21 +530,10 @@ export function AttendanceHistoryTab() {
                       <XAxis type="number" domain={[0, 1]} tickFormatter={percentageFormatter} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                       <YAxis type="category" dataKey="grade" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                       <Tooltip
-                        contentStyle={{
-                          background: "hsl(var(--background))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "var(--radius)",
-                        }}
+                        content={<GradeTooltip />}
                         cursor={{ fill: "hsla(var(--muted), 0.5)" }}
-                        formatter={(value: number, name: string, props: any) => {
-                          const count = name === 'On Time' ? props.payload.onTimeCount : 
-                                       name === 'Late' ? props.payload.lateCount : 
-                                       props.payload.absentCount;
-                          return `${count}`;
-                       }}
-                       itemStyle={{ textTransform: 'capitalize' }}
-                       labelStyle={{ fontWeight: 'bold' }}
-                       separator=": "
+                        itemStyle={{ textTransform: 'capitalize' }}
+                        separator=": "
                       />
                       <Legend />
                       <Bar dataKey="onTime" name="On Time" stackId="a" fill={COLORS["on time"]} isAnimationActive={true} animationDuration={500} animationBegin={0} animationEasing="ease-out" />
