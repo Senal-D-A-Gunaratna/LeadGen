@@ -327,6 +327,9 @@ export function AttendanceHistoryTab() {
   const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
   const monthPickerNodeRef = useRef<HTMLElement | null>(null);
 
+  // Local UI filter for attendance status (overrides pie selection when set)
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
   const isMonthWithinRange = (month: Date) => {
     // backend 'month' aggregate covers last ~30 days ending today; consider month has possible data if it overlaps last 30 days
     const today = new Date();
@@ -408,6 +411,33 @@ export function AttendanceHistoryTab() {
     if (!selectedStatus) return students;
     return students.filter((student: Student) => student.status === selectedStatus);
   }, [students, selectedStatus]);
+
+  // Keep the status dropdown and the pie chart selection in sync (two-way)
+  useEffect(() => {
+    // statusFilter -> pie selection
+    if (!attendanceData || attendanceData.length === 0) {
+      setActiveIndex(-1);
+      return;
+    }
+
+    if (statusFilter === 'all') {
+      setActiveIndex(-1);
+      return;
+    }
+
+    const idx = attendanceData.findIndex((d) => d.name.toLowerCase() === statusFilter);
+    setActiveIndex(idx >= 0 ? idx : -1);
+  }, [statusFilter, attendanceData]);
+
+  useEffect(() => {
+    // pie selection -> statusFilter
+    if (activeIndex === -1) {
+      setStatusFilter('all');
+      return;
+    }
+    const s = attendanceData[activeIndex]?.name?.toLowerCase();
+    if (s) setStatusFilter(s);
+  }, [activeIndex, attendanceData]);
 
   const percentageFormatter = (value: number) => `${(Math.round(value * 100 * 10) / 10).toFixed(1)}%`;
 
@@ -657,6 +687,17 @@ export function AttendanceHistoryTab() {
                   ))}
                 </SelectContent>
                 </Select>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="glassmorphic w-full sm:w-[160px]">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="on time">On Time</SelectItem>
+                    <SelectItem value="late">Late</SelectItem>
+                    <SelectItem value="absent">Absent</SelectItem>
+                  </SelectContent>
+                </Select>
                  <Select value={roleFilter} onValueChange={setRoleFilter}>
                     <SelectTrigger className="glassmorphic w-full sm:w-[180px]">
                         <SelectValue placeholder="Filter by role" />
@@ -677,7 +718,9 @@ export function AttendanceHistoryTab() {
                           // Clear global filters in the store
                           useStudentStore.getState().actions.clearFilters();
                           // Reset pie selection local state
-                          setActiveIndex(-1);
+                            setActiveIndex(-1);
+                            // Reset new local status filter as well
+                            setStatusFilter('all');
                         }}
                         aria-label="Clear filters"
                       >
