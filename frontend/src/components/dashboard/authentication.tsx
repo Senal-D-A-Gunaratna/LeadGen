@@ -98,7 +98,7 @@ export function Authentication() {
                 onOpenChange={(isOpen) => !isOpen && setDialogRole(null)}
                 onSuccess={(password) => handleSuccessfulLogin(dialogRole)}
                 title={`Sign In as ${dialogRole.charAt(0).toUpperCase() + dialogRole.slice(1)}`}
-                description="Please enter the password to access this role."
+                description="Please enter the password to access this role"
             />
         )}
       </>
