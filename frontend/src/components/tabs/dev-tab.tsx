@@ -369,7 +369,7 @@ function DebugActions({ onUnlockRequest }: { onUnlockRequest: () => void }) {
         }}
         onSuccess={handleAuthorizedAction}
         title="Developer Authorization Required"
-        description="This is a highly destructive action. Please enter the developer password to confirm."
+        description="This is a highly destructive action, Please enter the developer password to confirm"
       />
     </>
   );
@@ -388,8 +388,8 @@ export function DevTab() {
   const handleUnlockRequest = () => {
     if (isDevUnlocked) {
       lockDevMode();
-      addActionLog("[Dev] Locked developer mode.");
-      toast({ title: "Developer Mode Locked", description: "Sensitive actions are now disabled." });
+      addActionLog("[Dev] Locked developer mode");
+      toast({ title: "Developer Mode Locked", description: "Sensitive actions are now disabled" });
     } else {
       setIsAuthDialogOpen(true);
     }
@@ -398,12 +398,12 @@ export function DevTab() {
   const handleUnlockAttempt = async (password: string) => {
     const success = await unlockDevMode(password);
     if(success) {
-      addActionLog("[Dev] Unlocked developer mode.");
-      toast({ title: "Developer Mode Unlocked", description: "Sensitive actions are now enabled." });
+      addActionLog("[Dev] Unlocked developer mode");
+      toast({ title: "Developer Mode Unlocked", description: "Sensitive actions are now enabled" });
       setIsAuthDialogOpen(false);
     } else {
       addLog("Failed dev authorization attempt.");
-      toast({ variant: "destructive", title: "Authorization Failed", description: "Incorrect developer password." });
+      toast({ variant: "destructive", title: "Authorization Failed", description: "Incorrect developer password" });
       return false;
     }
     return true;
@@ -431,19 +431,19 @@ export function DevTab() {
           if (password) {
             const success = await unlockDevMode(password);
             if (success) {
-              addActionLog("[Dev] Unlocked developer mode.");
-              toast({ title: "Developer Mode Unlocked", description: "Sensitive actions are now enabled." });
+              addActionLog("[Dev] Unlocked developer mode");
+              toast({ title: "Developer Mode Unlocked", description: "Sensitive actions are now enabled" });
               setIsAuthDialogOpen(false);
               return true;
             } else {
-              addLog("Failed dev authorization attempt.");
+              addLog("Failed dev authorization attempt");
               return false;
             }
           }
           return true;
         }}
         title="Developer Authorization"
-        description="Enter the developer password to unlock sensitive controls."
+        description="Enter the developer password to unlock sensitive controls"
         isUnlockAttempt={true}
       />
     </>
