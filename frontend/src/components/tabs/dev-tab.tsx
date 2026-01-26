@@ -69,7 +69,7 @@ function CurrentAppTime() {
             <div>
                 <CardTitle className="font-headline text-primary">Application Time</CardTitle>
                 <CardDescription>
-                    {fakeDate ? "Time is currently frozen." : "Using live system time."}
+                    {fakeDate ? "Time is currently frozen" : "Using live system time"}
                 </CardDescription>
             </div>
             <Clock className="h-6 w-6 text-muted-foreground"/>
@@ -117,16 +117,16 @@ function TimeFreeze({ onUnlockRequest }: { onUnlockRequest: () => void }) {
         addActionLog(`[Dev] Froze time to ${formattedDate}.`);
         toast({
           title: "Time Frozen",
-          description: `App time is now set to ${formattedDate}.`,
+          description: `App time is now set to ${formattedDate}`,
         });
     };
     
     const handleResetFakeDate = () => {
         actions.setFakeDate(null);
-        addActionLog(`[Dev] Reset time to live.`);
+        addActionLog(`[Dev] Reset time to live`);
         toast({
             title: "Time Reset",
-            description: "Application is now using live time.",
+            description: "Application is now using live time",
         });
     }
 
@@ -214,14 +214,14 @@ function DebugActions({ onUnlockRequest }: { onUnlockRequest: () => void }) {
          toast({
             variant: "destructive",
             title: "No fingerprint to scan",
-            description: `${randomStudent.name} does not have a registered fingerprint to simulate a scan with.`,
+            description: `${randomStudent.name} does not have a registered fingerprint to simulate a scan with`,
          });
       }
     } else {
       toast({
         variant: "destructive",
         title: "No students to scan",
-        description: "Please add students before simulating a scan.",
+        description: "Please add students before simulating a scan",
       });
     }
   };
@@ -251,24 +251,24 @@ function DebugActions({ onUnlockRequest }: { onUnlockRequest: () => void }) {
 
     if (actionToConfirm === 'delete-history') {
       await actions.deleteEntireHistory();
-      addActionLog('[Dev] Deleted all attendance history.');
+      addActionLog('[Dev] Deleted all attendance history');
       toast({
         title: "Attendance History Deleted",
-        description: "All historical attendance data has been cleared.",
+        description: "All historical attendance data has been cleared",
       });
     } else if (actionToConfirm === 'delete-students') {
       await actions.deleteAllStudentData();
-      addActionLog('[Dev] Deleted all student data.');
+      addActionLog('[Dev] Deleted all student data');
       toast({
         title: "All Student Data Deleted",
-        description: "All student profiles and related history have been cleared.",
+        description: "All student profiles and related history have been cleared",
       });
     } else if (actionToConfirm === 'reset-daily') {
         await actions.resetDailyData();
-        addActionLog('[Dev] Reset daily data.');
+        addActionLog('[Dev] Reset daily data');
         toast({
             title: "Daily Data Reset",
-            description: "All student statuses have been reset to 'absent'.",
+            description: "All student statuses have been reset to 'absent'",
         });
     }
     setActionToConfirm(null);
