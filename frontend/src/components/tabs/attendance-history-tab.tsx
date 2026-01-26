@@ -688,9 +688,9 @@ export function AttendanceHistoryTab() {
                     </div>
                   </div>
                 </div>
-                 <p className="text-sm text-muted-foreground mb-4">
-                Showing {filteredStudentsForTable.length} student(s)
-            </p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Showing {filteredStudentsForTable.length} {filteredStudentsForTable.length === 1 ? 'student' : 'students'}
+                </p>
             <div className="h-[300px] overflow-y-auto rounded-md border border-border/40">
                 {isLoading ? (
                   <Skeleton className="h-full w-full" />
