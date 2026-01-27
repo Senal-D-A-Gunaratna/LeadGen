@@ -72,14 +72,29 @@ export default function Home() {
     // WebSocket real-time updates (replaces long-polling)
     wsClient.connect();
 
-    const handleDataChange = async (data: { type: string; data: any }) => {
-      // Only refetch in the visible (active) tab and if time is not frozen
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !fakeDate) {
-        await fetchAndSetStudents();
-      }
+    // Debounced, event-driven staleness: on 'data_changed' request a snapshot refresh
+    let dataChangeTimer: number | null = null;
+    const debouncedRefresh = () => {
+      if (dataChangeTimer) window.clearTimeout(dataChangeTimer);
+      dataChangeTimer = window.setTimeout(() => {
+        useStudentStore.getState().actions.refreshCurrentView();
+        dataChangeTimer = null;
+      }, 300);
     };
 
-    wsClient.on('data_changed', handleDataChange);
+    const onDataChanged = (payload: any) => {
+      // Received notification that DB changed; fetch snapshot (preserves filters)
+      debouncedRefresh();
+    };
+
+    const onRealtimePatch = (patch: any) => {
+      // Incremental patch for immediate UI update without resetting filters
+      useStudentStore.getState().actions.applyRealtimeUpdate(patch);
+    };
+
+    wsClient.on('data_changed', onDataChanged);
+    // Optional incremental patches from server
+    wsClient.on('realtime_patch', onRealtimePatch);
 
     // Clear cache when tab is hidden and refetch when it becomes visible
     const handleVisibilityChange = () => {
@@ -115,7 +130,8 @@ export default function Home() {
 
     return () => {
       clearInterval(dayCheckIntervalId);
-      wsClient.off('data_changed', handleDataChange);
+      wsClient.off('data_changed', onDataChanged);
+      wsClient.off('realtime_patch', onRealtimePatch);
       if (typeof window !== 'undefined') {
         window.removeEventListener('visibilitychange', handleVisibilityChange);
         window.removeEventListener('beforeunload', handleBeforeUnload);

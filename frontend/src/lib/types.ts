@@ -111,6 +111,10 @@ export type StudentStore = {
     updateStudentSummaries: (
       summaries: { studentId: number; summary: AttendanceSummary }[]
     ) => void;
+    // Merge a server-sent realtime patch (no filter reset)
+    applyRealtimeUpdate?: (payload: any) => void;
+    // Refresh the currently selected view (preserves filters/UI state)
+    refreshCurrentView?: () => Promise<void>;
   };
 };
 

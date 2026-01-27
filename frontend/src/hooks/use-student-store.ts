@@ -45,36 +45,53 @@ const toLocalDate = (d?: any) => {
 export const useStudentStore = create<StudentStore>()(
   devtools(
     (set, get) => {
-      // Initialize real-time listener for multi-user database changes (only once)
-      let realtimeListenerInitialized = false;
-      const initializeRealtimeListener = () => {
-        if (realtimeListenerInitialized) return;
-        realtimeListenerInitialized = true;
-        
-        // Listen for data changes from other users and automatically refetch
-        wsClient.on('data_changed', () => {
-          // Immediately refetch current data to detect changes made by other users
-          get().actions.fetchAndSetStudents().catch(err => 
-            console.error('Failed to refetch on data_changed event:', err)
-          );
-        });
+      // lastFetchAt: timestamp (ms) of the last successful snapshot fetch
+      let lastFetchAt: number | null = null;
 
-        // Request initial static filters from server (best-effort)
-        wsClient.getStaticFilters().then((resp) => {
-          set({
-            availableGrades: resp.grades || [],
-            availableClasses: resp.classes || [],
-            availableRoles: resp.roles || [],
-          });
-        }).catch((err) => {
-          console.warn('Could not fetch initial static filters via WebSocket:', err);
-        });
+      // Apply a server-sent realtime diff/patch into the in-memory lists.
+      // Payload expected to be { id, server_ts, changes } or { op: 'upsert'|'delete', id, server_ts, fields }
+      const applyRealtimeUpdate = (payload: any) => {
+        try {
+          set(produce((state: StudentStore) => {
+            const op = payload.op || 'upsert';
+            const id = payload.id;
+            if (!id) return;
+
+            if (op === 'delete') {
+              state.students = state.students.filter((s: any) => s.id !== id);
+              state.fullRoster = state.fullRoster.filter((s: any) => s.id !== id);
+              state.studentSummaries.delete(id);
+              return;
+            }
+
+            // upsert/patch
+            const changes = payload.fields || payload.changes || {};
+            // Use server_ts for conflict resolution where provided
+            const serverTs = payload.server_ts || payload.server_ts_ms || null;
+
+            const mergeInto = (arr: any[]) => {
+              const idx = arr.findIndex((s: any) => s.id === id);
+              if (idx === -1) {
+                const base = { id, ...changes };
+                arr.push(shrinkStudentForList(base as any));
+              } else {
+                const existing = arr[idx];
+                // prefer server timestamp if present; otherwise just shallow merge
+                const existingTs = existing.server_ts || existing.server_ts_ms || 0;
+                if (!serverTs || serverTs >= existingTs) {
+                  arr[idx] = { ...existing, ...changes, server_ts: serverTs || existingTs };
+                }
+              }
+            };
+
+            mergeInto(state.students as any);
+            mergeInto(state.fullRoster as any);
+            if (payload.summary) state.studentSummaries.set(id, payload.summary);
+          }));
+        } catch (err) {
+          console.warn('applyRealtimeUpdate failed', err, payload);
+        }
       };
-
-      // Trigger initialization when store is first used
-      if (typeof window !== 'undefined') {
-        initializeRealtimeListener();
-      }
 
       const fetchAndSetStudents = async () => {
         set({ isLoading: true });
@@ -342,6 +359,21 @@ export const useStudentStore = create<StudentStore>()(
           },
           clearPendingAttendanceChanges: () => {
             set({ pendingAttendanceChanges: {} });
+          },
+          // Apply a realtime patch/diff into the in-memory lists (no filter/state reset)
+          applyRealtimeUpdate: (payload: any) => {
+            // cast to any so TypeScript doesn't complain about closure usage
+            try { (applyRealtimeUpdate as any)(payload); } catch (e) { console.warn('applyRealtimeUpdate action failed', e); }
+          },
+          // Refresh the currently selected view (preserves filters/UI state)
+          refreshCurrentView: async () => {
+            try {
+              await fetchAndSetStudents();
+              // update local lastFetchAt for staleness checks
+              try { lastFetchAt = Date.now(); } catch (e) {}
+            } catch (err) {
+              console.error('refreshCurrentView failed', err);
+            }
           },
           // Clear UI filters (search + grade/class/role/status) and reset selected date to today (or fakeDate if set)
           // Also aggressively clear all cached data when leaving a tab

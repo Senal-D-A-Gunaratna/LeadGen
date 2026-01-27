@@ -194,32 +194,7 @@ export function AttendanceHistoryTab() {
 
   const activeTab = useUIStateStore(state => state.activeTab);
   const { setActiveTab } = useUIStateStore();
-  let visibilityTimer: number | undefined;
-
-  const runTrigger = () => {
-    setAnimateKey((k) => k + 1);
-    setAnimateNow(true);
-    if (visibilityTimer) window.clearTimeout(visibilityTimer);
-    visibilityTimer = window.setTimeout(() => setAnimateNow(false), 900);
-  };
-
-  useEffect(() => {
-    const handler = () => {
-      if (document.visibilityState === "visible") runTrigger();
-    };
-    document.addEventListener("visibilitychange", handler);
-    if (typeof document !== "undefined" && document.visibilityState === "visible") runTrigger();
-    return () => {
-      document.removeEventListener("visibilitychange", handler);
-      if (visibilityTimer) window.clearTimeout(visibilityTimer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "attendance-history") runTrigger();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  // Visibility and websocket-driven refreshes are handled centrally in `page.tsx`.
 
   // Animate on data changes (filters) for smooth transitions
   useEffect(() => {
