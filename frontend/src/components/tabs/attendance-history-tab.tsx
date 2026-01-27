@@ -460,27 +460,27 @@ export function AttendanceHistoryTab() {
 
     return (
       <div style={wrapperStyle}>
-        <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 13 }}>{label}</div>
+        <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 16 }}>{label}</div>
 
         <div style={rowStyle}>
-          <div style={{ color: COLORS['on time'], fontWeight: 400, fontSize: 15 }}>On Time</div>
-          <div style={{ fontWeight: 400, color: COLORS['on time'], fontSize: 15 }}>{p.onTimeCount || 0}</div>
+          <div style={{ color: COLORS['on time'], fontWeight: 400, fontSize: 16 }}>On Time</div>
+          <div style={{ fontWeight: 400, color: COLORS['on time'], fontSize: 18 }}>{p.onTimeCount || 0}</div>
         </div>
 
         <div style={rowStyle}>
-          <div style={{ color: COLORS.late, fontWeight: 400, fontSize: 15 }}>Late</div>
-          <div style={{ fontWeight: 400, color: COLORS.late, fontSize: 15 }}>{p.lateCount || 0}</div>
+          <div style={{ color: COLORS.late, fontWeight: 400, fontSize: 16 }}>Late</div>
+          <div style={{ fontWeight: 400, color: COLORS.late, fontSize: 18 }}>{p.lateCount || 0}</div>
         </div>
 
         <div style={rowStyle}>
-          <div style={{ color: COLORS.absent, fontWeight: 400, fontSize: 15 }}>Absent</div>
-          <div style={{ fontWeight: 400, color: COLORS.absent, fontSize: 15 }}>{p.absentCount || 0}</div>
+          <div style={{ color: COLORS.absent, fontWeight: 400, fontSize: 16 }}>Absent</div>
+          <div style={{ fontWeight: 400, color: COLORS.absent, fontSize: 18 }}>{p.absentCount || 0}</div>
         </div>
 
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: 6, paddingTop: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
-            <div style={{ color: 'hsl(var(--muted-foreground))' }}>Total</div>
-            <div style={{ fontWeight: 400, color: 'hsl(var(--foreground))' }}>{total}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 16 }}>
+              <div style={{ color: 'hsl(var(--muted-foreground))', fontWeight: 400, fontSize: 16 }}>Total</div>
+              <div style={{ fontWeight: 400, color: 'hsl(var(--muted-foreground))', fontSize: 18 }}>{total}</div>
           </div>
         </div>
       </div>
