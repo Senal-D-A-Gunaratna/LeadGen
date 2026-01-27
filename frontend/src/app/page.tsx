@@ -47,7 +47,9 @@ const ServerTab = dynamic(() => import('@/components/tabs/server-tab').then(mod 
 
 export default function Home() {
   const { user } = useAuthStore();
-  const { actions, fakeDate } = useStudentStore();
+  const store = useStudentStore();
+  const actions = store.actions!;
+  const fakeDate = store.fakeDate;
   const { activeTab, setActiveTab } = useUIStateStore();
   const { setStatusFilter, setGradeFilter, setClassFilter, setSearchQuery, setRoleFilter, fetchAndSetStudents, getCurrentAppTime, setSelectedDate } = actions;
   const isDev = user?.role === 'dev';
@@ -77,9 +79,9 @@ export default function Home() {
     // Debounced, event-driven staleness: on 'data_changed' request a snapshot refresh
     let dataChangeTimer: number | null = null;
     const debouncedRefresh = () => {
-      if (dataChangeTimer) window.clearTimeout(dataChangeTimer);
+        if (dataChangeTimer) window.clearTimeout(dataChangeTimer);
       dataChangeTimer = window.setTimeout(() => {
-        actions.refreshCurrentView();
+        actions.refreshCurrentView!();
         dataChangeTimer = null;
       }, 300);
     };
@@ -97,7 +99,7 @@ export default function Home() {
           try {
             const student = await getStudentByIdAction(data.studentId);
             if (student) {
-              actions.applyRealtimeUpdate({ op: 'upsert', id: student.id, fields: shrinkStudentForList(student), server_ts: Date.now() });
+              actions.applyRealtimeUpdate!({ op: 'upsert', id: student.id, fields: shrinkStudentForList(student), server_ts: Date.now() });
             }
             return;
           } catch (e) {
@@ -116,7 +118,7 @@ export default function Home() {
 
     const onRealtimePatch = (patch: any) => {
       // Incremental patch for immediate UI update without resetting filters
-      actions.applyRealtimeUpdate(patch);
+      actions.applyRealtimeUpdate!(patch);
     };
 
     wsClient.on('data_changed', onDataChanged);
