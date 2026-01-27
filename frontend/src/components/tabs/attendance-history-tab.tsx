@@ -508,7 +508,7 @@ export function AttendanceHistoryTab() {
                     activeShape={renderActiveShape}
                     data={tweenedAttendance}
                     cx="50%"
-                    cy="55%"
+                    cy="60%"
                     innerRadius={100}
                     outerRadius={130}
                     dataKey="value"
