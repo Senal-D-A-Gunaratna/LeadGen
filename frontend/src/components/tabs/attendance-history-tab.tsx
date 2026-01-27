@@ -675,6 +675,18 @@ export function AttendanceHistoryTab() {
                     </div>
                     </PopoverContent>
                 </Popover>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="glassmorphic w-full sm:w-[160px]">
+                    <SelectValue placeholder="Filter by status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="on time">On Time</SelectItem>
+                    <SelectItem value="late">Late</SelectItem>
+                    <SelectItem value="absent">Absent</SelectItem>
+                  </SelectContent>
+                </Select>
+
                 <Select value={gradeFilter} onValueChange={setGradeFilter}>
                 <SelectTrigger className="glassmorphic w-full sm:w-[140px]">
                     <SelectValue placeholder="Filter by grade" />
@@ -696,17 +708,6 @@ export function AttendanceHistoryTab() {
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
-                </Select>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="glassmorphic w-full sm:w-[160px]">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="on time">On Time</SelectItem>
-                    <SelectItem value="late">Late</SelectItem>
-                    <SelectItem value="absent">Absent</SelectItem>
-                  </SelectContent>
                 </Select>
                  <Select value={roleFilter} onValueChange={setRoleFilter}>
                     <SelectTrigger className="glassmorphic w-full sm:w-[180px]">
