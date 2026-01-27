@@ -420,42 +420,29 @@ export function AttendanceHistoryTab() {
     if (!active || !payload || payload.length === 0) return null;
     const p = payload[0]?.payload || {};
     const total = (p.onTimeCount || 0) + (p.lateCount || 0) + (p.absentCount || 0);
-
-    const wrapperStyle: any = {
-      background: 'linear-gradient(180deg, rgba(14,16,20,1), rgba(20,22,26,1))',
-      border: '1px solid rgba(255,255,255,0.06)',
-      borderRadius: 8,
-      padding: 8,
-      color: 'hsl(var(--foreground))',
-      minWidth: 120,
-      boxShadow: '0 6px 20px rgba(2,6,23,0.6)'
-    };
-
-    const rowStyle: any = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', fontSize: 12 };
-
     return (
-      <div style={wrapperStyle}>
-        <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 16 }}>{label}</div>
+      <div className="rounded-md border border-border/40 px-3 py-2 min-w-[120px] bg-background text-foreground shadow-lg">
+        <div className="font-extrabold mb-1 text-base">{label}</div>
 
-        <div style={rowStyle}>
-          <div style={{ color: COLORS['on time'], fontWeight: 400, fontSize: 16 }}>On Time</div>
-          <div style={{ fontWeight: 400, color: COLORS['on time'], fontSize: 18 }}>{p.onTimeCount || 0}</div>
+        <div className="flex justify-between items-center py-1 text-sm">
+          <div className="font-medium text-[16px]" style={{ color: COLORS['on time'] }}>On Time</div>
+          <div className="font-medium text-[18px]" style={{ color: COLORS['on time'] }}>{p.onTimeCount || 0}</div>
         </div>
 
-        <div style={rowStyle}>
-          <div style={{ color: COLORS.late, fontWeight: 400, fontSize: 16 }}>Late</div>
-          <div style={{ fontWeight: 400, color: COLORS.late, fontSize: 18 }}>{p.lateCount || 0}</div>
+        <div className="flex justify-between items-center py-1 text-sm">
+          <div className="font-medium text-[16px]" style={{ color: COLORS.late }}>Late</div>
+          <div className="font-medium text-[18px]" style={{ color: COLORS.late }}>{p.lateCount || 0}</div>
         </div>
 
-        <div style={rowStyle}>
-          <div style={{ color: COLORS.absent, fontWeight: 400, fontSize: 16 }}>Absent</div>
-          <div style={{ fontWeight: 400, color: COLORS.absent, fontSize: 18 }}>{p.absentCount || 0}</div>
+        <div className="flex justify-between items-center py-1 text-sm">
+          <div className="font-medium text-[16px]" style={{ color: COLORS.absent }}>Absent</div>
+          <div className="font-medium text-[18px]" style={{ color: COLORS.absent }}>{p.absentCount || 0}</div>
         </div>
 
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: 6, paddingTop: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 16 }}>
-              <div style={{ color: 'hsl(var(--muted-foreground))', fontWeight: 400, fontSize: 16 }}>Total</div>
-              <div style={{ fontWeight: 400, color: 'hsl(var(--muted-foreground))', fontSize: 18 }}>{total}</div>
+        <div className="border-t border-border/40 mt-2 pt-2">
+          <div className="flex justify-between items-center text-sm">
+              <div className="text-muted-foreground font-medium" style={{ fontSize: 16 }}>Total</div>
+              <div className="text-muted-foreground font-medium text-[18px]">{total}</div>
           </div>
         </div>
       </div>
