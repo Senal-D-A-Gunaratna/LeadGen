@@ -756,6 +756,64 @@ def handle_get_filtered_students(data):
     emit('filtered_students_response', {'success': True, 'students': filtered})
 
 
+@app.route('/api/students', methods=['GET'])
+def http_get_filtered_students():
+    """HTTP endpoint returning filtered students for a given date and filters.
+
+    Query params:
+      - date (YYYY-MM-DD)
+      - statusFilter
+      - gradeFilter
+      - classFilter
+      - roleFilter
+      - searchQuery
+    """
+    try:
+        filters = {
+            'date': request.args.get('date'),
+            'statusFilter': request.args.get('statusFilter'),
+            'gradeFilter': request.args.get('gradeFilter'),
+            'classFilter': request.args.get('classFilter'),
+            'roleFilter': request.args.get('roleFilter'),
+            'searchQuery': request.args.get('searchQuery'),
+        }
+
+        target_date = filters.get('date') or date.today().isoformat()
+        all_students = get_all_students_with_history(target_date)
+
+        filtered = all_students
+        if filters.get('statusFilter'):
+            filtered = [s for s in filtered if s['status'] == filters['statusFilter']]
+        if filters.get('gradeFilter') and filters['gradeFilter'] != 'all':
+            filtered = [s for s in filtered if s['grade'] == int(filters['gradeFilter'])]
+        if filters.get('classFilter') and filters['classFilter'] != 'all':
+            filtered = [s for s in filtered if s['className'] == filters['classFilter']]
+        if filters.get('roleFilter') and filters['roleFilter'] != 'all':
+            if filters['roleFilter'] == 'none':
+                filtered = [s for s in filtered if not s.get('role')]
+            else:
+                filtered = [s for s in filtered if s.get('role') == filters['roleFilter']]
+        if filters.get('searchQuery'):
+            query = filters['searchQuery'].lower()
+            filtered = [s for s in filtered if query in s['name'].lower() or query in s['contact']['phone'].lower()]
+
+        filtered.sort(key=lambda x: x['name'])
+        return jsonify({'success': True, 'students': filtered})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error fetching students', 'error': str(e)}), 500
+
+
+@app.route('/api/students/<int:student_id>', methods=['GET'])
+def http_get_student_by_id(student_id):
+    try:
+        student = get_student_by_id(student_id)
+        if not student:
+            return jsonify({'success': False, 'message': 'Student not found'}), 404
+        return jsonify({'success': True, 'student': student})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error fetching student', 'error': str(e)}), 500
+
+
 @socketio.on('get_static_filters')
 def handle_get_static_filters():
     """Respond with server-side computed static filters via WebSocket."""
@@ -842,8 +900,10 @@ def handle_save_attendance(data):
     conn_attendance.commit()
     conn_attendance.close()
     
-    broadcast_data_change('attendance_updated')
+    # Determine affected student ids and broadcast with details so clients can
+    # apply lightweight merges or perform a full snapshot refresh if needed.
     affected_ids = [student.get('id') for student in students]
+    broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
     broadcast_summary_update(affected_ids)
     emit('save_attendance_response', {'success': True})
 

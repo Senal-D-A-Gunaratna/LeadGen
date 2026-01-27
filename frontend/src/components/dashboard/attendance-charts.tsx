@@ -38,22 +38,7 @@ export function AttendanceCharts() {
     timerRef.current = window.setTimeout(() => setAnimateNow(false), 900);
   };
 
-  useEffect(() => {
-    const handler = () => {
-      if (document.visibilityState === "visible") triggerAnimation();
-    };
-    document.addEventListener("visibilitychange", handler);
-    if (typeof document !== "undefined" && document.visibilityState === "visible") triggerAnimation();
-    return () => {
-      document.removeEventListener("visibilitychange", handler);
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "dashboard") triggerAnimation();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  // Animations are driven by store updates and centralized WS notifications in page.tsx.
 
   useEffect(() => {
     setIsClient(true);

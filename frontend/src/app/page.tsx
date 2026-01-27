@@ -18,6 +18,8 @@ import { useActionLogStore } from '@/hooks/use-action-log-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { wsClient } from '@/lib/websocket-client';
+import { getStudentByIdAction } from '@/app/actions';
+import { shrinkStudentForList } from '@/lib/utils';
 
 // Dynamically import heavy tab components
 const AttendanceHistoryTab = dynamic(() => import('@/components/tabs/attendance-history-tab').then(mod => mod.AttendanceHistoryTab), {
@@ -82,9 +84,34 @@ export default function Home() {
       }, 300);
     };
 
-    const onDataChanged = (payload: any) => {
-      // Received notification that DB changed; fetch snapshot (preserves filters)
-      debouncedRefresh();
+    const onDataChanged = async (payload: any) => {
+      // Received notification that DB changed. Prefer incremental updates when
+      // the server provides a specific studentId (e.g. scan/student_updated).
+      try {
+        const type = payload?.type;
+        const data = payload?.data || {};
+
+        // If server indicates a single student changed, fetch that student's
+        // latest snapshot and apply as an incremental update to avoid resetting UI state.
+        if ((type === 'scan' || type === 'student_updated' || type === 'student_added') && data?.studentId && !fakeDate) {
+          try {
+            const student = await getStudentByIdAction(data.studentId);
+            if (student) {
+              useStudentStore.getState().actions.applyRealtimeUpdate({ op: 'upsert', id: student.id, fields: shrinkStudentForList(student), server_ts: Date.now() });
+            }
+            return;
+          } catch (e) {
+            // Fall through to debounced full refresh if incremental fails
+            console.warn('Incremental fetch failed, falling back to full refresh', e);
+          }
+        }
+
+        // Otherwise, request a debounced snapshot refresh (preserves filters)
+        if (!fakeDate) debouncedRefresh();
+      } catch (e) {
+        console.error('onDataChanged handler error', e);
+        if (!fakeDate) debouncedRefresh();
+      }
     };
 
     const onRealtimePatch = (patch: any) => {
@@ -102,10 +129,8 @@ export default function Home() {
       if (document.visibilityState === 'hidden') {
         // Clear in-memory store in this background tab to remain lightweight
         useStudentStore.getState().actions.clearCache();
-      } else if (document.visibilityState === 'visible') {
-        // When the tab becomes active again, refresh data
-        fetchAndSetStudents();
       }
+      // Do NOT auto-refresh on visibility; staleness is event-driven via WS 'data_changed'.
     };
 
     const handleBeforeUnload = () => {

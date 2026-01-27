@@ -98,11 +98,23 @@ export async function getFilteredStudents(filters: {
   classFilter?: string | null;
   roleFilter?: string | null;
 }) {
-  return wsClient.getFilteredStudents(filters);
+  // Prefer HTTP snapshot fetch for stable data retrieval. Build query params.
+  const params = new URLSearchParams();
+  if (filters?.date) params.set('date', filters.date);
+  if (filters?.searchQuery) params.set('searchQuery', String(filters.searchQuery));
+  if (filters?.statusFilter) params.set('statusFilter', String(filters.statusFilter));
+  if (filters?.gradeFilter) params.set('gradeFilter', String(filters.gradeFilter));
+  if (filters?.classFilter) params.set('classFilter', String(filters.classFilter));
+  if (filters?.roleFilter) params.set('roleFilter', String(filters.roleFilter));
+
+  const endpoint = `/api/students?${params.toString()}`;
+  const result = await fetchAPI(endpoint);
+  return result.students || [];
 }
 
 export async function getStudentById(studentId: number) {
-  return wsClient.getStudentById(studentId);
+  const result = await fetchAPI(`/api/students/${studentId}`);
+  return result.student || null;
 }
 
 export async function saveAttendance(students: any[]) {
