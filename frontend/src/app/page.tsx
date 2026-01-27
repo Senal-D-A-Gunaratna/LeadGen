@@ -79,7 +79,7 @@ export default function Home() {
     const debouncedRefresh = () => {
       if (dataChangeTimer) window.clearTimeout(dataChangeTimer);
       dataChangeTimer = window.setTimeout(() => {
-        useStudentStore.getState().actions.refreshCurrentView();
+        actions.refreshCurrentView();
         dataChangeTimer = null;
       }, 300);
     };
@@ -97,7 +97,7 @@ export default function Home() {
           try {
             const student = await getStudentByIdAction(data.studentId);
             if (student) {
-              useStudentStore.getState().actions.applyRealtimeUpdate({ op: 'upsert', id: student.id, fields: shrinkStudentForList(student), server_ts: Date.now() });
+              actions.applyRealtimeUpdate({ op: 'upsert', id: student.id, fields: shrinkStudentForList(student), server_ts: Date.now() });
             }
             return;
           } catch (e) {
@@ -116,7 +116,7 @@ export default function Home() {
 
     const onRealtimePatch = (patch: any) => {
       // Incremental patch for immediate UI update without resetting filters
-      useStudentStore.getState().actions.applyRealtimeUpdate(patch);
+      actions.applyRealtimeUpdate(patch);
     };
 
     wsClient.on('data_changed', onDataChanged);
@@ -128,14 +128,14 @@ export default function Home() {
       if (typeof document === 'undefined') return;
       if (document.visibilityState === 'hidden') {
         // Clear in-memory store in this background tab to remain lightweight
-        useStudentStore.getState().actions.clearCache();
+        actions.clearCache();
       }
       // Do NOT auto-refresh on visibility; staleness is event-driven via WS 'data_changed'.
     };
 
     const handleBeforeUnload = () => {
       // Ensure no stale in-memory data remains when the tab is closed
-      useStudentStore.getState().actions.clearCache();
+      actions.clearCache();
     };
 
     if (typeof window !== 'undefined') {
@@ -183,7 +183,7 @@ export default function Home() {
   const handleTabChange = (value: string) => {
     // Immediately clear all filters, cache, and reset state when leaving a tab
     // This ensures: 1) Fresh data on tab return, 2) Multi-user changes are visible, 3) No state bleed between tabs
-    useStudentStore.getState().actions.clearFilters();
+    actions.clearFilters();
     setActiveTab(value);
   };
 
