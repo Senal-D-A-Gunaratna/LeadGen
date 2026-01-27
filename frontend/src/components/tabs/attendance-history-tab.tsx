@@ -453,22 +453,36 @@ export function AttendanceHistoryTab() {
       padding: 8,
       color: 'hsl(var(--foreground))',
       minWidth: 120,
-      boxShadow: '0 6px 18px rgba(2,6,23,0.55)'
+      boxShadow: '0 6px 20px rgba(2,6,23,0.6)'
     };
 
-    const lineStyle: any = { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', fontSize: 12, lineHeight: '14px', padding: '2px 0' };
-    const titleStyle: any = { opacity: 0.95, fontWeight: 700 };
-    const countStyle = (col: string) => ({ fontWeight: 800, color: col });
+    const rowStyle: any = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', fontSize: 12 };
 
     return (
       <div style={wrapperStyle}>
-        <div style={{ fontWeight: 900, marginBottom: 6, fontSize: 13 }}>{label}</div>
+        <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 13 }}>{label}</div>
 
-        <div style={lineStyle}><div style={titleStyle}>On Time:</div><div style={countStyle(COLORS['on time'])}>{p.onTimeCount || 0}</div></div>
-        <div style={lineStyle}><div style={titleStyle}>Late:</div><div style={countStyle(COLORS.late)}>{p.lateCount || 0}</div></div>
-        <div style={lineStyle}><div style={titleStyle}>Absent:</div><div style={countStyle(COLORS.absent)}>{p.absentCount || 0}</div></div>
+        <div style={rowStyle}>
+          <div style={{ color: COLORS['on time'], fontWeight: 400, fontSize: 15 }}>On Time</div>
+          <div style={{ fontWeight: 400, color: COLORS['on time'], fontSize: 15 }}>{p.onTimeCount || 0}</div>
+        </div>
 
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: 6, paddingTop: 6, fontWeight: 800, fontSize: 12 }}>Total: {total}</div>
+        <div style={rowStyle}>
+          <div style={{ color: COLORS.late, fontWeight: 400, fontSize: 15 }}>Late</div>
+          <div style={{ fontWeight: 400, color: COLORS.late, fontSize: 15 }}>{p.lateCount || 0}</div>
+        </div>
+
+        <div style={rowStyle}>
+          <div style={{ color: COLORS.absent, fontWeight: 400, fontSize: 15 }}>Absent</div>
+          <div style={{ fontWeight: 400, color: COLORS.absent, fontSize: 15 }}>{p.absentCount || 0}</div>
+        </div>
+
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: 6, paddingTop: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 14 }}>
+            <div style={{ color: 'hsl(var(--muted-foreground))' }}>Total</div>
+            <div style={{ fontWeight: 400, color: 'hsl(var(--foreground))' }}>{total}</div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -779,7 +793,7 @@ export function AttendanceHistoryTab() {
                           ) : (
                               <TableRow>
                                   <TableCell colSpan={3} className="text-center text-muted-foreground h-24">
-                                      No students match the current filters.
+                                      No students match the current filters
                                   </TableCell>
                               </TableRow>
                           )}
