@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import favicon from '@/icons/favicon.ico';
+import iconPng from '@/icons/icon.png';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
@@ -22,7 +24,13 @@ const fontSpaceGrotesk = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: 'LeadGen',
-  description: 'A cutting-edge school management application with a futuristic GUI and real-time fingerprint attendance tracking.',
+  description: 'A cutting-edge school management application with a futuristic GUI and real-time fingerprint attendance tracking',
+  icons: {
+    icon: [
+      { url: (favicon as any).src ?? (favicon as any), sizes: '48x48', type: 'image/x-icon' },
+      { url: (iconPng as any).src ?? (iconPng as any), sizes: '512x512', type: 'image/png' },
+    ],
+  },
 };
 
 export default function RootLayout({
