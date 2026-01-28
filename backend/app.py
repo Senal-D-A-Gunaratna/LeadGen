@@ -719,41 +719,21 @@ def handle_scan(data):
 
 @socketio.on('get_filtered_students')
 def handle_get_filtered_students(data):
-    """Get filtered students matching criteria via WebSocket."""
-    # Allow unauthenticated access for basic viewing
-    filters = data or {}
-    target_date = filters.get('date') or date.today().isoformat()
-    
-    all_students = get_all_students_with_history(target_date)
-    
-    # Apply filters
-    filtered = all_students
-    
-    if filters.get('statusFilter'):
-        filtered = [s for s in filtered if s['status'] == filters['statusFilter']]
-    
-    if filters.get('gradeFilter') and filters['gradeFilter'] != 'all':
-        filtered = [s for s in filtered if s['grade'] == int(filters['gradeFilter'])]
-    
-    if filters.get('classFilter') and filters['classFilter'] != 'all':
-        filtered = [s for s in filtered if s['className'] == filters['classFilter']]
-    
-    if filters.get('roleFilter') and filters['roleFilter'] != 'all':
-        if filters['roleFilter'] == 'none':
-            filtered = [s for s in filtered if not s.get('role')]
-        else:
-            filtered = [s for s in filtered if s.get('role') == filters['roleFilter']]
-    
-    if filters.get('searchQuery'):
-        query = filters['searchQuery'].lower()
-        filtered = [s for s in filtered if 
-                   query in s['name'].lower() or 
-                   query in s['contact']['phone'].lower()]
-    
-    # Sort by name
-    filtered.sort(key=lambda x: x['name'])
-    
-    emit('filtered_students_response', {'success': True, 'students': filtered})
+    """Deprecated WebSocket RPC for filtered students.
+
+    Frontend now uses the HTTP endpoint `GET /api/students` for snapshots.
+    This handler remains for backward compatibility but returns a deprecation
+    notice and an empty result set to avoid expensive realtime computation via socket.
+    """
+    try:
+        print("Deprecated socket RPC called: get_filtered_students. Use HTTP GET /api/students instead.")
+    except Exception:
+        pass
+    emit('filtered_students_response', {
+        'success': False,
+        'message': 'Deprecated: use HTTP GET /api/students?date=...&statusFilter=...&gradeFilter=...',
+        'students': []
+    })
 
 
 @app.route('/api/students', methods=['GET'])
@@ -835,20 +815,19 @@ def handle_get_static_filters():
 
 @socketio.on('get_student_by_id')
 def handle_get_student_by_id(data):
-    """Get a single student by ID via WebSocket."""
-    # Allow unauthenticated access for viewing student profiles
-    
-    student_id = data.get('studentId')
-    if not student_id:
-        emit('student_by_id_response', {'success': False, 'message': 'Missing studentId'})
-        return
-    
-    student = get_student_by_id(student_id)
-    if not student:
-        emit('student_by_id_response', {'success': False, 'message': 'Student not found'})
-        return
-    
-    emit('student_by_id_response', {'success': True, 'student': student})
+    """Deprecated WebSocket RPC for fetching a student by ID.
+
+    Use the HTTP endpoint `GET /api/students/<id>` instead. This handler
+    returns a deprecation message to encourage migration away from socket RPCs.
+    """
+    try:
+        print("Deprecated socket RPC called: get_student_by_id. Use HTTP GET /api/students/<id> instead.")
+    except Exception:
+        pass
+    emit('student_by_id_response', {
+        'success': False,
+        'message': 'Deprecated: use HTTP GET /api/students/<id>'
+    })
 
 @socketio.on('save_attendance')
 def handle_save_attendance(data):
