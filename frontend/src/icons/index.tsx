@@ -1,4 +1,2 @@
-import { LeadGenLogo } from './LeadGenLogo';
-
-export { LeadGenLogo };
-export default LeadGenLogo;
+export { LeadGenLogo } from './LeadGenLogo';
+export { LeadGenLogo as default } from './LeadGenLogo';
