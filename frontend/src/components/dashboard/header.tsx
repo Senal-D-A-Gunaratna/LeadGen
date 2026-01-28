@@ -1,7 +1,7 @@
 
 "use client";
 
-import { LeadGenLogo } from "@/components/icons";
+import { LeadGenLogo } from "@/icons";
 import { Wifi, WifiOff, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { wsClient } from "@/lib/websocket-client";
