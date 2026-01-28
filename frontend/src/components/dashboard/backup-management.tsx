@@ -71,7 +71,7 @@ export function BackupManagement() {
     fetchBackups();
 
     // Keep backup list in sync with server via WebSocket events
-    wsClient.connect();
+    // Connection handled centrally in `frontend/src/app/page.tsx`
     const handler = (payload: { type: string; data: any }) => {
       if (payload.type === "backups_changed") {
         fetchBackups();

@@ -6,12 +6,7 @@ import { useStudentStore } from '@/hooks/use-student-store';
 
 export default function WsInitializer(): null {
   useEffect(() => {
-    // Ensure socket tries to connect early
-    try {
-      wsClient.connect();
-    } catch (e) {
-      console.warn('WsInitializer: connect failed', e);
-    }
+    // Connection handled centrally in `frontend/src/app/page.tsx`
 
     let mounted = true;
 

@@ -33,14 +33,9 @@ export function LineGraphTab() {
   ];
   const [status, setStatus] = useState<string>('overview');
 
-  // Ensure websocket connection is established when the component mounts
+  // WebSocket connection is handled centrally in `frontend/src/app/page.tsx`
   useEffect(() => {
-    try {
-      wsClient.connect();
-    } catch (e) {
-      // ignore
-    }
-    // Intentionally do not disconnect here; keep singleton socket alive for the app
+    // noop: connection performed at app root
   }, []);
 
   useEffect(() => {

@@ -28,8 +28,7 @@ export function ServerTab() {
   };
 
   useEffect(() => {
-    // Ensure websocket connection and subscribe to connection count updates
-    wsClient.connect();
+    // WebSocket connection is handled centrally in `frontend/src/app/page.tsx`
     const handler = (data: { total: number; authenticated: number }) => {
       setTotalConnections(data.total ?? 0);
       setAuthenticatedConnections(data.authenticated ?? 0);

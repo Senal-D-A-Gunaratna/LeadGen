@@ -24,12 +24,7 @@ export function Header() {
     const handler = (connected: boolean) => setIsOnline(connected);
     wsClient.on('connection', handler);
 
-    // Ensure websocket client attempts to connect
-    try {
-      wsClient.connect();
-    } catch (e) {
-      // ignore
-    }
+    // Connection established centrally in `frontend/src/app/page.tsx`
 
     // Force dark theme by default. Remove device detection and client-side caching.
     setTheme("dark");
