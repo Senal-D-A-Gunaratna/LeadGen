@@ -348,26 +348,24 @@ def register_endpoints(app, socketio, helpers):
 
                 # Copy all students into backup items
                 cursor_students.execute('''
-                    SELECT id, name, grade, className, role, email, phone,
-                           fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                           specialRoles, notes
+                    SELECT id, name, grade, className, role, phone, whatsapp_no, email,
+                           specialRoles, notes, fingerprint1, fingerprint2, fingerprint3, fingerprint4
                     FROM students
                 ''')
                 for row in cursor_students.fetchall():
                     cursor_students.execute('''
                         INSERT INTO student_backup_items (
                             backup_id, student_id, name, grade, className, role,
-                            email, phone,
-                            fingerprint1, fingerprint2, fingerprint3, fingerprint4,
-                            specialRoles, notes
+                            phone, whatsapp_no, email,
+                            specialRoles, notes, fingerprint1, fingerprint2, fingerprint3, fingerprint4
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         backup_id,
                         row['id'], row['name'], row['grade'], row['className'], row['role'],
-                        row['email'], row['phone'],
-                        row['fingerprint1'], row['fingerprint2'], row['fingerprint3'], row['fingerprint4'],
-                        row['specialRoles'], row['notes']
+                        row.get('phone', ''), row.get('whatsapp_no', ''), row.get('email', ''),
+                        row.get('specialRoles', ''), row.get('notes', ''),
+                        row.get('fingerprint1', ''), row.get('fingerprint2', ''), row.get('fingerprint3', ''), row.get('fingerprint4', '')
                     ))
 
                 conn_students.commit()

@@ -113,14 +113,15 @@ def init_database():
             grade INTEGER NOT NULL,
             className TEXT NOT NULL,
             role TEXT,
-            email TEXT NOT NULL,
             phone TEXT NOT NULL,
+            whatsapp_no TEXT DEFAULT '',
+            email TEXT NOT NULL,
+            specialRoles TEXT,
+            notes TEXT,
             fingerprint1 TEXT DEFAULT '',
             fingerprint2 TEXT DEFAULT '',
             fingerprint3 TEXT DEFAULT '',
             fingerprint4 TEXT DEFAULT '',
-            specialRoles TEXT,
-            notes TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -174,14 +175,15 @@ def init_database():
             grade INTEGER NOT NULL,
             className TEXT NOT NULL,
             role TEXT,
-            email TEXT NOT NULL,
             phone TEXT NOT NULL,
+            whatsapp_no TEXT,
+            email TEXT NOT NULL,
+            specialRoles TEXT,
+            notes TEXT,
             fingerprint1 TEXT DEFAULT '',
             fingerprint2 TEXT DEFAULT '',
             fingerprint3 TEXT DEFAULT '',
-            fingerprint4 TEXT DEFAULT '',
-            specialRoles TEXT,
-            notes TEXT
+            fingerprint4 TEXT DEFAULT ''
         )
     ''')
 
@@ -225,6 +227,93 @@ def init_database():
                             ''', (student_id, value, position))
     except Exception:
         # If the table doesn't exist or other error, skip migration
+        pass
+    # Ensure `whatsapp_no` column exists on students table for older DBs
+    try:
+        cursor_students.execute("PRAGMA table_info(students)")
+        cols = [r[1] for r in cursor_students.fetchall()]
+        if 'whatsapp_no' not in cols:
+            try:
+                cursor_students.execute("ALTER TABLE students ADD COLUMN whatsapp_no TEXT DEFAULT ''")
+            except Exception:
+                # Best-effort: if ALTER fails (locked/busy), skip but do not crash
+                pass
+    except Exception:
+        pass
+    # Ensure `whatsapp_no` column is positioned after `phone` in the table schema.
+    # SQLite doesn't support reordering columns directly, so recreate the table
+    # with the desired column order and copy data if necessary.
+    try:
+        cursor_students.execute("PRAGMA table_info(students)")
+        cols = [r[1] for r in cursor_students.fetchall()]
+        desired_order = [
+            'id', 'name', 'grade', 'className', 'role', 'phone', 'whatsapp_no', 'email',
+            'specialRoles', 'notes', 'fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4',
+            'created_at', 'updated_at'
+        ]
+        # If whatsapp_no exists but not directly after phone, rebuild table
+        if 'whatsapp_no' in cols:
+            try:
+                phone_index = cols.index('phone')
+                # Safe check: if whatsapp_no not immediately after phone, rebuild
+                needs_rebuild = not (phone_index + 1 < len(cols) and cols[phone_index + 1] == 'whatsapp_no')
+            except ValueError:
+                needs_rebuild = True
+        else:
+            needs_rebuild = False
+
+        if needs_rebuild:
+            try:
+                # Build CREATE TABLE statement with desired column order matching existing constraints
+                cursor_students.execute('BEGIN')
+                cursor_students.execute('''
+                    CREATE TABLE IF NOT EXISTS students_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        grade INTEGER NOT NULL,
+                        className TEXT NOT NULL,
+                        role TEXT,
+                        phone TEXT NOT NULL,
+                        whatsapp_no TEXT DEFAULT '',
+                        email TEXT NOT NULL,
+                        specialRoles TEXT,
+                        notes TEXT,
+                        fingerprint1 TEXT DEFAULT '',
+                        fingerprint2 TEXT DEFAULT '',
+                        fingerprint3 TEXT DEFAULT '',
+                        fingerprint4 TEXT DEFAULT '',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+                # Prepare column list for insert/select mapping. For any missing columns in the
+                # source table, provide empty/default values.
+                cursor_students.execute("PRAGMA table_info(students)")
+                src_cols = [r[1] for r in cursor_students.fetchall()]
+
+                select_expressions = []
+                for col in desired_order:
+                    if col in src_cols:
+                        select_expressions.append(col)
+                    else:
+                        # Provide reasonable default for missing columns
+                        if col in ('id', 'grade'):
+                            select_expressions.append('0 AS ' + col)
+                        else:
+                            select_expressions.append("'' AS " + col)
+
+                cursor_students.execute(f"INSERT INTO students_new ({', '.join(desired_order)}) SELECT {', '.join(select_expressions)} FROM students")
+                cursor_students.execute('DROP TABLE students')
+                cursor_students.execute('ALTER TABLE students_new RENAME TO students')
+                cursor_students.execute('COMMIT')
+            except Exception:
+                try:
+                    cursor_students.execute('ROLLBACK')
+                except Exception:
+                    pass
+    except Exception:
+        # Don't crash initialization on rebuild errors; it's best-effort.
         pass
     
     conn_students.commit()

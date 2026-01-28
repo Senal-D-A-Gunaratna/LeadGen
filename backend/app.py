@@ -921,7 +921,7 @@ def handle_add_student(data):
     
     cursor_students.execute('''
         INSERT INTO students (id, name, grade, className, role, email, phone,
-                            fingerprint1, fingerprint2, fingerprint3, fingerprint4,
+                            whatsapp_no, fingerprint1, fingerprint2, fingerprint3, fingerprint4,
                             specialRoles, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
@@ -930,8 +930,10 @@ def handle_add_student(data):
         data['grade'],
         data['className'],
         data.get('role'),
-        data['contact']['email'],
-        data['contact']['phone'],
+        data['contact'].get('email'),
+        data['contact'].get('phone'),
+        # Accept either `whatsapp` or `whatsapp_no` from client contact
+        data['contact'].get('whatsapp') or data['contact'].get('whatsapp_no') or '',
         fingerprints[0] if len(fingerprints) > 0 else '',
         fingerprints[1] if len(fingerprints) > 1 else '',
         fingerprints[2] if len(fingerprints) > 2 else '',
@@ -1021,6 +1023,7 @@ def handle_update_student(data):
     role = update_data.get('role', existing_dict['role'])
     email = update_data.get('contact', {}).get('email', existing_dict['email'])
     phone = update_data.get('contact', {}).get('phone', existing_dict['phone'])
+    whatsapp_no = update_data.get('contact', {}).get('whatsapp') or update_data.get('contact', {}).get('whatsapp_no') or existing_dict.get('whatsapp_no', '')
     specialRoles = update_data.get('specialRoles', existing_dict.get('specialRoles', ''))
     notes = update_data.get('notes', existing_dict.get('notes', ''))
     
@@ -1054,11 +1057,12 @@ def handle_update_student(data):
     cursor_students.execute('''
         UPDATE students
         SET name = ?, grade = ?, className = ?, role = ?, email = ?, phone = ?,
-            fingerprint1 = ?, fingerprint2 = ?, fingerprint3 = ?, fingerprint4 = ?,
+            whatsapp_no = ?, fingerprint1 = ?, fingerprint2 = ?, fingerprint3 = ?, fingerprint4 = ?,
             specialRoles = ?, notes = ?, updated_at = ?
         WHERE id = ?
     ''', (
         name, grade, className, role, email, phone,
+        whatsapp_no,
         fingerprints[0] if len(fingerprints) > 0 else '',
         fingerprints[1] if len(fingerprints) > 1 else '',
         fingerprints[2] if len(fingerprints) > 2 else '',
