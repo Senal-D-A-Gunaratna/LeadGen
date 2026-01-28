@@ -318,6 +318,14 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
         
         students.append(student)
     
+    # Ensure consistent alphabetical ordering across all consumers by
+    # normalizing names (trim + case-insensitive) before returning.
+    try:
+        students.sort(key=lambda s: (s.get('name') or '').strip().lower())
+    except Exception:
+        # If sorting fails for any reason, fall back to original DB order.
+        pass
+
     conn_students.close()
     return students
 
@@ -777,7 +785,11 @@ def http_get_filtered_students():
             query = filters['searchQuery'].lower()
             filtered = [s for s in filtered if query in s['name'].lower() or query in s['contact']['phone'].lower()]
 
-        filtered.sort(key=lambda x: x['name'])
+        # Use trimmed, case-insensitive ordering to match UX expectations
+        try:
+            filtered.sort(key=lambda x: (x.get('name') or '').strip().lower())
+        except Exception:
+            filtered.sort(key=lambda x: x.get('name') or '')
         return jsonify({'success': True, 'students': filtered})
     except Exception as e:
         return jsonify({'success': False, 'message': 'Error fetching students', 'error': str(e)}), 500
