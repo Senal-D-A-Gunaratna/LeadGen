@@ -80,6 +80,7 @@ const editFormSchema = z.object({
   contact: z.object({
     email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
     phone: z.string().length(10, { message: "Phone number must be exactly 10 digits." }),
+    whatsapp: z.string().optional(),
   }),
   specialRoles: z.string().optional(),
   notes: z.string().optional(),
@@ -185,6 +186,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
       contact: {
         email: student.contact.email,
         phone: student.contact.phone,
+        whatsapp: (student.contact as any).whatsapp || '',
       },
       specialRoles: student.specialRoles || '',
       notes: student.notes || '',
@@ -391,6 +393,17 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                 <FormItem>
                   <FormLabel>Phone</FormLabel>
                   <FormControl><Input placeholder="xxx xxx xxxx" {...field} className="glassmorphic" /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="contact.whatsapp"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>WhatsApp</FormLabel>
+                  <FormControl><Input placeholder="WhatsApp number (optional)" {...field} className="glassmorphic" /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -854,6 +867,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                       )}
                       {student.role && <Separator />}
                       <div className="flex items-center gap-3"><Phone className="h-4 w-4 text-primary" />{student.contact.phone}</div>
+                      { (student.contact as any).whatsapp ? (
+                        <div className="flex items-center gap-3"><Phone className="h-4 w-4 text-primary" /> <span className="font-medium">{(student.contact as any).whatsapp}</span></div>
+                      ) : null}
                       <div className="flex items-center gap-3"><Mail className="h-4 w-4 text-primary" /> <span className="font-medium">{student.contact.email || 'N/A'}</span></div>
                     </div>
 

@@ -30,6 +30,7 @@ export type Student = {
   contact: {
     email: string;
     phone: string;
+    whatsapp?: string;
   };
   attendanceHistory: AttendanceRecord[];
 };

@@ -209,15 +209,16 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
     
     student['fingerprints'] = fingerprints
     student['contact'] = {
-        'email': student['email'],
-        'phone': student['phone']
+        'email': student.get('email'),
+        'phone': student.get('phone'),
+        'whatsapp': student.get('whatsapp_no') or ''
     }
     student['attendanceHistory'] = history
     student['status'] = today_record['status'] if today_record else 'absent'
     student['hasScannedToday'] = today_record is not None and today_record['status'] != 'absent'
     
     # Remove SQLite-specific fields
-    for key in ['fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4', 'email', 'phone']:
+    for key in ['fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4', 'email', 'phone', 'whatsapp_no']:
         student.pop(key, None)
     
     conn_students.close()
@@ -300,8 +301,9 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
         
         student['fingerprints'] = fingerprints_by_student.get(student_id, [''] * 4)
         student['contact'] = {
-            'email': student['email'],
-            'phone': student['phone']
+            'email': student.get('email'),
+            'phone': student.get('phone'),
+            'whatsapp': student.get('whatsapp_no') or ''
         }
         student['attendanceHistory'] = history
         if is_weekend:
@@ -313,7 +315,7 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
         student['hasScannedToday'] = date_record is not None and date_record['status'] != 'absent'
         
         # Remove SQLite-specific fields
-        for key in ['fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4', 'email', 'phone', 'created_at', 'updated_at']:
+        for key in ['fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4', 'email', 'phone', 'whatsapp_no', 'created_at', 'updated_at']:
             student.pop(key, None)
         
         students.append(student)
@@ -783,7 +785,15 @@ def http_get_filtered_students():
                 filtered = [s for s in filtered if s.get('role') == filters['roleFilter']]
         if filters.get('searchQuery'):
             query = filters['searchQuery'].lower()
-            filtered = [s for s in filtered if query in s['name'].lower() or query in s['contact']['phone'].lower()]
+            def contact_field(s, k):
+                return (s.get('contact', {}).get(k) or '').lower()
+            filtered = [
+                s for s in filtered
+                if query in (s.get('name') or '').lower()
+                or query in contact_field(s, 'phone')
+                or query in contact_field(s, 'whatsapp')
+                or query in contact_field(s, 'email')
+            ]
 
         # Use trimmed, case-insensitive ordering to match UX expectations
         try:
