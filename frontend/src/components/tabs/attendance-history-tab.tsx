@@ -547,7 +547,7 @@ export function AttendanceHistoryTab() {
                 <div className="relative flex-grow min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                    placeholder="Search by name, email, phone or WhatsApp"
+                    placeholder="Search by name, phone, WhatsApp or email"
                     className="pl-9 pr-9 glassmorphic"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
