@@ -637,7 +637,7 @@ export function AttendanceHistoryTab() {
                           <div className="min-w-[280px] min-h-[280px] p-3 rounded-md border border-border/40 bg-background"></div>
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-muted-foreground">
                             <div className="text-lg font-semibold mb-2">No Data Available</div>
-                            <div className="text-sm">There is no attendance data for this month.</div>
+                            <div className="text-sm">There is no attendance data for this month</div>
                           </div>
                         </div>
                       ) : (
@@ -756,7 +756,7 @@ export function AttendanceHistoryTab() {
                           ) : (
                               <TableRow>
                                   <TableCell colSpan={3} className="text-center text-muted-foreground h-24">
-                                      No students match the current filters
+                                      No matches found
                                   </TableCell>
                               </TableRow>
                           )}
