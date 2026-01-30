@@ -290,7 +290,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                       name="fingerprint2"
                       render={({ field }) => (
                           <FormItem>
-                          <FormControl><Input placeholder="fp2" {...field} className="glassmorphic disabled:cursor-not-allowed" readOnly={!isDev} disabled={!isDev} /></FormControl>
+                          <FormControl><Input placeholder="fp2" {...field} className="disabled:cursor-not-allowed" readOnly={!isDev} disabled={!isDev} /></FormControl>
                           <FormMessage />
                           </FormItem>
                       )}
@@ -300,7 +300,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                       name="fingerprint3"
                       render={({ field }) => (
                           <FormItem>
-                          <FormControl><Input placeholder="fp3" {...field} className="glassmorphic disabled:cursor-not-allowed" readOnly={!isDev} disabled={!isDev} /></FormControl>
+                          <FormControl><Input placeholder="fp3" {...field} className="disabled:cursor-not-allowed" readOnly={!isDev} disabled={!isDev} /></FormControl>
                           <FormMessage />
                           </FormItem>
                       )}
@@ -310,7 +310,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                       name="fingerprint4"
                       render={({ field }) => (
                           <FormItem>
-                          <FormControl><Input placeholder="fp4" {...field} className="glassmorphic disabled:cursor-not-allowed" readOnly={!isDev} disabled={!isDev} /></FormControl>
+                          <FormControl><Input placeholder="fp4" {...field} className="disabled:cursor-not-allowed" readOnly={!isDev} disabled={!isDev} /></FormControl>
                           <FormMessage />
                           </FormItem>
                       )}
@@ -327,7 +327,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                     <FormLabel>Grade</FormLabel>
                     <Select onValueChange={(value) => field.onChange(Number(value))} defaultValue={String(field.value)}>
                         <FormControl>
-                            <SelectTrigger className="glassmorphic">
+                            <SelectTrigger>
                             <SelectValue placeholder="Select a grade" />
                             </SelectTrigger>
                         </FormControl>
@@ -349,7 +349,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                     <FormLabel>Class</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                            <SelectTrigger className="glassmorphic">
+                            <SelectTrigger>
                             <SelectValue placeholder="Select a class" />
                             </SelectTrigger>
                         </FormControl>
@@ -372,7 +372,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                       <FormLabel>Prefect Role</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger className="glassmorphic">
+                          <SelectTrigger>
                             <SelectValue placeholder="Select a role" />
                           </SelectTrigger>
                         </FormControl>
@@ -393,7 +393,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Phone</FormLabel>
-                  <FormControl><Input placeholder="xxx xxx xxxx" {...field} className="glassmorphic" /></FormControl>
+                          <FormControl><Input placeholder="xxx xxx xxxx" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -404,7 +404,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>WhatsApp</FormLabel>
-                  <FormControl><Input placeholder="WhatsApp number (optional)" {...field} className="glassmorphic" /></FormControl>
+                  <FormControl><Input placeholder="WhatsApp number (optional)" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -415,7 +415,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Email</FormLabel>
-                  <FormControl><Input placeholder="example@example.com" {...field} className="glassmorphic" /></FormControl>
+                  <FormControl><Input placeholder="example@example.com" {...field} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -426,8 +426,8 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Special Roles</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Hall monitor" {...field} className="glassmorphic"/>
+                    <FormControl>
+                    <Textarea placeholder="Hall monitor" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -439,8 +439,8 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
-                  <FormControl>
-                    <Textarea placeholder="Any relevant notes about the student..." {...field} className="glassmorphic"/>
+                    <FormControl>
+                    <Textarea placeholder="Any relevant notes about the student..." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -820,7 +820,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   
   return (
     <Dialog open={open} onOpenChange={handleDialogClose}>
-      <DialogContent className="sm:max-w-3xl glassmorphic glowing-border">
+      <DialogContent className="sm:max-w-3xl glowing-border">
         <style>{`
           .day-on-time { background-color: ${statusColors["on time"]}; color: white; border-radius: 999px; }
           .day-absent { background-color: ${statusColors.absent}; color: white; border-radius: 999px; }
@@ -860,7 +860,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                   <div className="space-y-4">
                     <h3 className="font-headline text-lg text-accent-foreground">Contact & Role</h3>
-                    <div className="space-y-3 glassmorphic p-4 rounded-lg">
+                    <div className="space-y-3 p-4 rounded-lg">
                       {student.role && (
                         <div className="flex items-center gap-3">
                           <Badge variant="secondary">{student.role}</Badge>
@@ -879,7 +879,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
                     <h3 className="font-headline text-lg text-accent-foreground">Attendance Statistics</h3>
                     {isClient && attendanceStats ? (
-                      <div className="space-y-2 glassmorphic px-4 pt-3 pb-0.5 rounded-lg min-h-[180px]">
+                      <div className="space-y-2 px-4 pt-3 pb-0.5 rounded-lg min-h-[180px]">
                         <div className="flex justify-between items-center">
                           <span className="flex items-center gap-2 text-sm text-muted-foreground"><GraduationCap className="h-4 w-4 text-primary" /> Overall Presence</span>
                           <span className="font-bold text-lg">{attendanceStats.overallPercentage.toFixed(1)}%</span>
@@ -913,7 +913,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                      {isDev && (
                         <div className="space-y-2">
                            <h3 className="font-headline text-lg text-accent-foreground">Fingerprint IDs</h3>
-                            <div className="glassmorphic p-4 rounded-lg space-y-2 text-sm">
+                            <div className="p-4 rounded-lg space-y-2 text-sm">
                                 {student.fingerprints.map((fp, index) => (
                                     <div key={index} className="flex items-center gap-2">
                                         <Fingerprint className="h-4 w-4 text-primary"/>
@@ -932,7 +932,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                       </Button>
                     </div>
                       {isClient ? (
-                        <div className="p-4 rounded-md month-picker-glass relative">
+                        <div className="p-4 rounded-md relative">
                             <MonthYearSelector
                               displayedMonth={displayedMonth}
                               onMonthChange={setDisplayedMonth}
@@ -998,13 +998,13 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                           <h3 className="font-headline text-lg text-accent-foreground">Special Roles</h3>
-                          <div className="p-4 glassmorphic rounded-md text-sm text-muted-foreground min-h-[300px]">
+                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px]">
                             <p className="whitespace-pre-wrap">{student.specialRoles || "No special roles assigned."}</p>
                           </div>
                       </div>
                       <div className="space-y-2">
                            <h3 className="font-headline text-lg text-accent-foreground">Notes</h3>
-                          <div className="p-4 glassmorphic rounded-md text-sm text-muted-foreground min-h-[300px]">
+                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px]">
                             <p className="whitespace-pre-wrap">{student.notes || "No notes available."}</p>
                           </div>
                       </div>
