@@ -57,4 +57,4 @@ CLASSES = [
     "Diri",
 ]
 
-# End of backend/config.py
+# End of config.py

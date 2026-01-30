@@ -177,7 +177,7 @@ export const MonthYearSelector = React.forwardRef<
             ref={monthPickerRef}
             className="absolute z-50 left-1/2 top-12 -translate-x-1/2 w-64"
           >
-            <div className="w-full p-3 glassmorphic rounded-md border border-border">
+            <div className="w-full p-3 month-picker-glass rounded-md border border-border">
               {/* Year navigation */}
               <div className="flex items-center justify-between mb-3">
                 <button

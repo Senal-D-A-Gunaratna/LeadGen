@@ -90,6 +90,9 @@
   .glassmorphic {
     @apply bg-card/40 backdrop-blur-lg border border-border;
   }
+  .month-picker-glass {
+    @apply bg-card/70 backdrop-blur-3xl border border-border;
+  }
   .holographic-text {
     @apply text-primary;
   }
