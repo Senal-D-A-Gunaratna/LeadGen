@@ -87,11 +87,16 @@
 }
 
 @layer utilities {
+  /* Generic glass wrapper: keep translucent background but NO blur
+     Month picker uses its own stronger blur via `.month-picker-glass`. */
   .glassmorphic {
     @apply bg-card/40 backdrop-blur-lg border border-border;
   }
+
+  /* Month picker specific glass: stronger blur + slightly darker background */
+  /* Month picker specific glass: translucent background + stronger blur */
   .month-picker-glass {
-    @apply bg-card/70 backdrop-blur-3xl border border-border;
+    @apply bg-card/60 backdrop-blur border border-border rounded-md;
   }
   .holographic-text {
     @apply text-primary;

@@ -932,7 +932,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                       </Button>
                     </div>
                       {isClient ? (
-                        <div className="p-4 rounded-md glassmorphic relative">
+                        <div className="p-4 rounded-md month-picker-glass relative">
                             <MonthYearSelector
                               displayedMonth={displayedMonth}
                               onMonthChange={setDisplayedMonth}
