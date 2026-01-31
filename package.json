@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm:dev-next\" \"npm:dev-backend\"",
+    "dev": "npm run dev-next",
     "dev-next": "cd frontend && npm run dev",
     "dev-backend": "cd backend && python3 app.py",
     "build": "cd frontend && npm run build",
