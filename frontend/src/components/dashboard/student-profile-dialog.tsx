@@ -349,7 +349,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                     <FormLabel>Class</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className="glassmorphic">
                             <SelectValue placeholder="Select a class" />
                             </SelectTrigger>
                         </FormControl>
@@ -372,7 +372,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                       <FormLabel>Prefect Role</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger>
+                            <SelectTrigger className="glassmorphic">
                             <SelectValue placeholder="Select a role" />
                           </SelectTrigger>
                         </FormControl>
@@ -820,7 +820,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   
   return (
     <Dialog open={open} onOpenChange={handleDialogClose}>
-      <DialogContent className="sm:max-w-3xl glowing-border">
+      <DialogContent className="sm:max-w-3xl glassmorphic glowing-border">
         <style>{`
           .day-on-time { background-color: ${statusColors["on time"]}; color: white; border-radius: 999px; }
           .day-absent { background-color: ${statusColors.absent}; color: white; border-radius: 999px; }
@@ -998,13 +998,13 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                           <h3 className="font-headline text-lg text-accent-foreground">Special Roles</h3>
-                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px]">
+                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px] glassmorphic">
                             <p className="whitespace-pre-wrap">{student.specialRoles || "No special roles assigned."}</p>
                           </div>
                       </div>
                       <div className="space-y-2">
                            <h3 className="font-headline text-lg text-accent-foreground">Notes</h3>
-                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px]">
+                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px] glassmorphic">
                             <p className="whitespace-pre-wrap">{student.notes || "No notes available."}</p>
                           </div>
                       </div>
