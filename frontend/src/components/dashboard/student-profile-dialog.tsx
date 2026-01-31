@@ -998,13 +998,13 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
                           <h3 className="font-headline text-lg text-accent-foreground">Special Roles</h3>
-                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px] glassmorphic">
+                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[380px] glassmorphic">
                             <p className="whitespace-pre-wrap">{student.specialRoles || "No special roles assigned."}</p>
                           </div>
                       </div>
                       <div className="space-y-2">
                            <h3 className="font-headline text-lg text-accent-foreground">Notes</h3>
-                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[300px] glassmorphic">
+                          <div className="p-4 rounded-md text-sm text-muted-foreground min-h-[380px] glassmorphic">
                             <p className="whitespace-pre-wrap">{student.notes || "No notes available."}</p>
                           </div>
                       </div>
