@@ -577,3 +577,30 @@ def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
         except Exception:
             pass
 
+
+def recalculate_school_days():
+    """Rebuild the `school_days` table from attendance_records.
+
+    A date is considered a school day if at least one student has status
+    'on time' or 'late' for that date.
+    """
+    try:
+        conn = get_db_connection('attendance')
+        cur = conn.cursor()
+        # Replace contents atomically using a transaction
+        cur.execute('BEGIN IMMEDIATE')
+        # Clear table then insert distinct dates that have on time/late records
+        cur.execute('DELETE FROM school_days')
+        cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE status IN ('on time','late') GROUP BY date")
+        conn.commit()
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+

@@ -4,7 +4,7 @@ Additional API endpoints for backups, CSV/PDF exports, and logs.
 from flask import request, jsonify, send_file
 import os
 from flask_socketio import emit
-from database import get_db_connection, DatabaseContext, create_db_file_backup
+from database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days
 from datetime import datetime, date
 import json
 import csv
@@ -161,7 +161,14 @@ def register_endpoints(app, socketio, helpers):
             main_db_path = Path(__file__).parent / 'data' / 'attendance.db'
             import shutil
             shutil.copy2(file_path, main_db_path)
+            # After replacing the attendance DB file, recalculate derived school_days
+            try:
+                recalculate_school_days()
+            except Exception as e:
+                emit('restore_backup_response', {'success': False, 'message': 'Failed to recalculate school days', 'error': str(e)})
+                return
         
+        # Broadcast that a backup was restored (recalculation already performed for attendance)
         broadcast_data_change('backup_restored')
         # Notify clients and attempt to broadcast summaries. If broadcasting fails
         # treat the restore as failed and inform the caller (do not conceal errors).
@@ -1067,7 +1074,12 @@ def register_endpoints(app, socketio, helpers):
         cursor_attendance.execute('DELETE FROM attendance_records')
         conn_attendance.commit()
         conn_attendance.close()
-        
+        # Recalculate derived school_days after clearing attendance records
+        try:
+            recalculate_school_days()
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Failed to recalculate after delete: {str(e)}'}), 500
+
         broadcast_data_change('history_deleted')
         broadcast_summary_update()  # Emit all summaries after history deletion
         return jsonify({'success': True})
@@ -1086,7 +1098,12 @@ def register_endpoints(app, socketio, helpers):
         cursor_attendance.execute('DELETE FROM attendance_records')
         conn_attendance.commit()
         conn_attendance.close()
-        
+        # Recalculate derived school_days after removing all data
+        try:
+            recalculate_school_days()
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Failed to recalculate after delete all: {str(e)}'}), 500
+
         broadcast_data_change('all_data_deleted')
         broadcast_summary_update()  # Emit all summaries after all data deletion
         return jsonify({'success': True})

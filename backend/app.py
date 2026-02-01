@@ -11,7 +11,7 @@ from datetime import datetime, date, timezone
 from pathlib import Path
 import os
 from typing import Dict, List, Optional
-from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin
+from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH
 from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
 from utils import compute_attendance_status
 import csv
@@ -920,6 +920,11 @@ def handle_save_attendance(data):
     
     # Determine affected student ids and broadcast with details so clients can
     # apply lightweight merges or perform a full snapshot refresh if needed.
+    # Recalculate school days after writes and broadcast updates
+    try:
+        recalculate_school_days()
+    except Exception:
+        pass
     affected_ids = [student.get('id') for student in students]
     broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
     broadcast_summary_update(affected_ids)
@@ -981,6 +986,11 @@ def api_save_attendance():
 
     conn_attendance.commit()
     conn_attendance.close()
+    # Recalculate school days after writes and broadcast updates
+    try:
+        recalculate_school_days()
+    except Exception:
+        pass
 
     affected_ids = [s.get('id') for s in students]
     broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
@@ -1701,4 +1711,39 @@ if __name__ == '__main__':
     migrate_json_to_sqlite()
     print("Flask backend starting on http://0.0.0.0:5000")
     print("WebSocket support enabled (HTTP, threading mode)")
+    # Start a background watcher that monitors the attendance DB file for external changes
+    try:
+        import threading, time
+
+        def _watch_attendance_db(poll_interval: float = 2.0):
+            try:
+                last_mtime = None
+                db_path = ATTENDANCE_DB_PATH
+                while True:
+                    try:
+                        mtime = db_path.stat().st_mtime
+                    except Exception:
+                        mtime = None
+                    if last_mtime is None:
+                        last_mtime = mtime
+                    elif mtime is not None and mtime != last_mtime:
+                        # File changed externally: recalc school days and broadcast updates
+                        try:
+                            recalculate_school_days()
+                        except Exception:
+                            pass
+                        try:
+                            broadcast_data_change('attendance_db_changed', {})
+                            broadcast_summary_update(None)
+                        except Exception:
+                            pass
+                        last_mtime = mtime
+                    time.sleep(poll_interval)
+            except Exception:
+                pass
+
+        watcher = threading.Thread(target=_watch_attendance_db, daemon=True)
+        watcher.start()
+    except Exception:
+        pass
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
