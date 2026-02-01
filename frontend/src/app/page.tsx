@@ -125,25 +125,7 @@ export default function Home() {
     // Optional incremental patches from server
     wsClient.on('realtime_patch', onRealtimePatch);
 
-    // Clear cache when tab is hidden and refetch when it becomes visible
-    const handleVisibilityChange = () => {
-      if (typeof document === 'undefined') return;
-      if (document.visibilityState === 'hidden') {
-        // Clear in-memory store in this background tab to remain lightweight
-        actions.clearCache();
-      }
-      // Do NOT auto-refresh on visibility; staleness is event-driven via WS 'data_changed'.
-    };
-
-    const handleBeforeUnload = () => {
-      // Ensure no stale in-memory data remains when the tab is closed
-      actions.clearCache();
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('beforeunload', handleBeforeUnload);
-    }
+    // Note: tab visibility / beforeunload handlers removed per request.
 
     const dayCheckIntervalId = setInterval(async () => {
         const currentAppTime = await getCurrentAppTime();
@@ -159,10 +141,7 @@ export default function Home() {
       clearInterval(dayCheckIntervalId);
       wsClient.off('data_changed', onDataChanged);
       wsClient.off('realtime_patch', onRealtimePatch);
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('visibilitychange', handleVisibilityChange);
-        window.removeEventListener('beforeunload', handleBeforeUnload);
-      }
+      // cleanup note: visibility/beforeunload handlers removed earlier
       // Do not disconnect the global WebSocket here — keep connections open per-tab as requested
     };
   }, []);
