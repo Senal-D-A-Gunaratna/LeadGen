@@ -62,13 +62,15 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
                   statusColor = statusColors['absent'] || '#ef4444';
                 }
                 
-                const arrivalTime = typeof data.arrival_minutes === 'number' ? minutesToHHMM(data.arrival_minutes) : 'N/A';
-                
+                const arrivalTime = typeof data.arrival_minutes === 'number' ? minutesToHHMM(data.arrival_minutes) : null;
+
                 return (
                   <div className="p-2 space-y-1 text-sm">
                     <div className="font-medium">Day {data.day}</div>
                     <div style={{ color: statusColor }}>Status: <span className="font-semibold">{status}</span></div>
-                    <div style={{ color: statusColor }}>Arrival: {arrivalTime}</div>
+                    {(!data.absent && arrivalTime) ? (
+                      <div style={{ color: statusColor }}>Arrival: {arrivalTime}</div>
+                    ) : null}
                   </div>
                 );
               }
