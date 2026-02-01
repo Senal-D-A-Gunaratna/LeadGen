@@ -73,7 +73,11 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
           // throwing the entire HTML blob into the UI overlay. Log the body
           // for debugging and provide a concise message instead.
           if (contentType && contentType.includes('text/html')) {
-            console.error('Backend returned HTML error body:', text);
+            // Truncate HTML error bodies and log at debug level to avoid
+            // flooding the browser console/Next overlay with huge HTML pages.
+            const MAX_LOG_CHARS = 1000;
+            const snippet = text.length > MAX_LOG_CHARS ? text.slice(0, MAX_LOG_CHARS) + '... [truncated]' : text;
+            console.debug('Backend returned HTML error body (truncated):', snippet);
             errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
           } else {
             errorData = { error: text || `HTTP ${response.status}: ${response.statusText}` };
@@ -141,10 +145,23 @@ export async function getStudentById(studentId: number) {
 export async function saveAttendance(arg: any) {
   // Accept an array of students and POST to backend. Do NOT request weekend saves from client.
   const students = Array.isArray(arg) ? arg : (arg && arg.students) ? arg.students : [];
-  return fetchAPI('/api/save-attendance', {
-    method: 'POST',
-    body: JSON.stringify({ students }),
-  });
+  // Prefer WebSocket RPC for saving attendance so server can immediately
+  // broadcast updates to connected clients. Fall back to HTTP if WebSocket
+  // is unavailable to preserve reliability in mixed environments.
+  try {
+    await wsClient.saveAttendance(students);
+    return { success: true };
+  } catch (err) {
+    // If wsClient reports not connected or times out, fall back to HTTP.
+    try {
+      return await fetchAPI('/api/save-attendance', {
+        method: 'POST',
+        body: JSON.stringify({ students }),
+      });
+    } catch (httpErr) {
+      throw httpErr;
+    }
+  }
 }
 
 export async function addStudent(studentData: any) {

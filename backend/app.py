@@ -17,6 +17,7 @@ from utils import compute_attendance_status
 import csv
 import io
 import base64
+import traceback
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
@@ -38,6 +39,30 @@ else:
 
 # Use threading mode instead of eventlet (eventlet incompatible with Python 3.14)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+
+@app.errorhandler(Exception)
+def handle_uncaught_exception(e):
+    """Global exception handler: log traceback and return JSON for API clients.
+
+    This prevents Flask's default HTML 500 page from being returned to
+    API consumers (frontend), avoiding large HTML blobs reaching the UI.
+    """
+    tb = traceback.format_exc()
+    try:
+        print(f"[error] Uncaught exception:\n{tb}")
+    except Exception:
+        pass
+
+    try:
+        accept = request.headers.get('Accept', '')
+        if (request.path and request.path.startswith('/api')) or ('application/json' in accept) or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': False, 'message': 'Internal server error', 'error': str(e)}), 500
+    except Exception:
+        pass
+
+    # Fallback: return a concise JSON error to avoid HTML responses
+    return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 # Password file path
 PASSWORDS_JSON_PATH = Path(__file__).parent.parent / 'backend' / 'data' / 'passwords.json'
@@ -101,10 +126,25 @@ def broadcast_data_change(event_type: str, data: Optional[dict] = None):
         print(f"[broadcast] emitting data_changed -> type={event_type} data_keys={list((data or {}).keys())}")
     except Exception:
         pass
-    socketio.emit('data_changed', {
-        'type': event_type,
-        'data': data or {}
-    }, namespace='/', broadcast=True)
+    payload = {'type': event_type, 'data': data or {}}
+    try:
+        # Prefer explicit broadcast when supported
+        socketio.emit('data_changed', payload, namespace='/', broadcast=True)
+    except TypeError:
+        # Older/newer python-socketio server implementations may not accept
+        # the `broadcast` kwarg. Retry without it to reach all clients.
+        try:
+            socketio.emit('data_changed', payload, namespace='/')
+        except Exception as e:
+            try:
+                print(f"[broadcast] failed to emit data_changed: {e}")
+            except Exception:
+                pass
+    except Exception as e:
+        try:
+            print(f"[broadcast] failed to emit data_changed: {e}")
+        except Exception:
+            pass
 
 def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     """Broadcast updated attendance summaries for affected students or all if None."""
@@ -125,7 +165,22 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
             print(f"[broadcast] emitting summary_update -> summaries_count={len(summaries)}")
         except Exception:
             pass
-        socketio.emit('summary_update', {'summaries': summaries}, namespace='/', broadcast=True)
+        payload = {'summaries': summaries}
+        try:
+            socketio.emit('summary_update', payload, namespace='/', broadcast=True)
+        except TypeError:
+            try:
+                socketio.emit('summary_update', payload, namespace='/')
+            except Exception as e:
+                try:
+                    print(f"[broadcast] failed to emit summary_update: {e}")
+                except Exception:
+                    pass
+        except Exception as e:
+            try:
+                print(f"[broadcast] failed to emit summary_update: {e}")
+            except Exception:
+                pass
 
 
 def compute_static_filters_from_db() -> Dict[str, List[str]]:
@@ -760,13 +815,16 @@ def handle_get_filtered_students(data):
     This handler remains for backward compatibility but returns a deprecation
     notice and an empty result set to avoid expensive realtime computation via socket.
     """
+    # Removed: this RPC was deprecated and is intentionally hard-failed
+    # to avoid accidental use. Clients should call HTTP GET /api/students
+    # for snapshot data.
     try:
-        print("Deprecated socket RPC called: get_filtered_students. Use HTTP GET /api/students instead.")
+        print('Hard-fail: get_filtered_students RPC removed; use HTTP GET /api/students')
     except Exception:
         pass
     emit('filtered_students_response', {
         'success': False,
-        'message': 'Deprecated: use HTTP GET /api/students?date=...&statusFilter=...&gradeFilter=...',
+        'message': 'Removed: use HTTP GET /api/students?date=...&statusFilter=...&gradeFilter=...',
         'students': []
     })
 
@@ -867,13 +925,14 @@ def handle_get_student_by_id(data):
     Use the HTTP endpoint `GET /api/students/<id>` instead. This handler
     returns a deprecation message to encourage migration away from socket RPCs.
     """
+    # Removed: hard-fail to prevent accidental use. Use HTTP GET /api/students/<id> instead.
     try:
-        print("Deprecated socket RPC called: get_student_by_id. Use HTTP GET /api/students/<id> instead.")
+        print('Hard-fail: get_student_by_id RPC removed; use HTTP GET /api/students/<id>')
     except Exception:
         pass
     emit('student_by_id_response', {
         'success': False,
-        'message': 'Deprecated: use HTTP GET /api/students/<id>'
+        'message': 'Removed: use HTTP GET /api/students/<id>'
     })
 
 @socketio.on('save_attendance')
