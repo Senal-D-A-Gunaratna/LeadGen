@@ -334,6 +334,14 @@ def init_database():
             UNIQUE(student_id, date)
         )
     ''')
+    # Table to record which dates are considered school days.
+    # A date becomes a school day when at least one student has an 'on time' or 'late' record.
+    cursor_attendance.execute('''
+        CREATE TABLE IF NOT EXISTS school_days (
+            date TEXT PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     # Ensure `check_in_time` column exists; if not, add it and populate existing rows.
     # Make migration resilient to busy/locked DB and run multiple retries if necessary.
     try:
@@ -432,6 +440,16 @@ def init_database():
     
     conn_attendance.commit()
     conn_attendance.close()
+    # Populate initial school_days from any existing attendance_records where status is on-time or late
+    try:
+        conn_att = get_db_connection('attendance')
+        cur = conn_att.cursor()
+        cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE status IN ('on time','late') GROUP BY date")
+        conn_att.commit()
+        conn_att.close()
+    except Exception:
+        # Non-fatal: if population fails (locked/busy), we'll populate incrementally on new inserts
+        pass
     
     # ========== LOGS DATABASE ==========
     conn_logs = get_db_connection('logs')

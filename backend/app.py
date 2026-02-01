@@ -336,19 +336,26 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
     from datetime import datetime as dt
     from calendar import day_name
     
-    # Get all unique school days (weekdays where at least one student has on-time or late record)
-    school_days = set()
-    for s in all_students:
-        for record in s.get('attendanceHistory', []):
-            try:
-                record_date = dt.fromisoformat(record['date'] + 'T00:00:00')
-                day_of_week = record_date.weekday()
-                # Only count if: weekday (Mon-Fri) AND status is on-time or late (not absent)
-                if 0 <= day_of_week < 5 and record['status'] in ('on time', 'late'):
-                    school_days.add(record['date'])
-            except:
-                pass
-    
+    # Prefer authoritative `school_days` table in attendance DB for school-day determination.
+    try:
+        conn_att = get_db_connection('attendance')
+        cur = conn_att.cursor()
+        cur.execute("SELECT date FROM school_days")
+        school_days = set([r['date'] for r in cur.fetchall()])
+        conn_att.close()
+    except Exception:
+        # Fallback: compute from provided all_students history (legacy behavior)
+        school_days = set()
+        for s in all_students:
+            for record in s.get('attendanceHistory', []):
+                try:
+                    record_date = dt.fromisoformat(record['date'] + 'T00:00:00')
+                    day_of_week = record_date.weekday()
+                    if 0 <= day_of_week < 5 and record['status'] in ('on time', 'late'):
+                        school_days.add(record['date'])
+                except:
+                    pass
+
     total_school_days = len(school_days)
     
     if total_school_days == 0:
@@ -714,6 +721,14 @@ def handle_scan(data):
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (student_id, date_str, status, datetime.utcnow().isoformat(), datetime.utcnow().isoformat(), earliest_utc))
         conn_attendance.commit()
+        # If this checkin denotes an actual presence (on time or late), mark the date as a school day
+        try:
+            if status in ('on time', 'late'):
+                cur.execute('INSERT OR IGNORE INTO school_days (date, created_at) VALUES (?, ?)', (date_str, datetime.utcnow().isoformat()))
+                conn_attendance.commit()
+        except Exception:
+            # Non-fatal — if the table isn't present or insert fails, continue
+            pass
     except Exception as e:
         try:
             conn_attendance.rollback()
@@ -1549,19 +1564,46 @@ def handle_request_attendance_trend(data):
                 'arrival_minutes': arrival_minutes,
             }
 
-        # Only include days with actual attendance records (school days)
+        # Build points for every recorded school day in the month.
+        # Use the `school_days` table as the authoritative list of school days;
+        # if the student has no record for a school day, treat that day as absent for that student.
         points = []
-        for iso_date in sorted(rows.keys()):
-            counts = rows[iso_date]
-            points.append({
-                'date': iso_date,
-                'on_time': int(counts.get('on_time', 0)),
-                'late': int(counts.get('late', 0)),
-                'absent': int(counts.get('absent', 0)),
-                'arrival_ts': counts.get('arrival_ts'),
-                'arrival_local': counts.get('arrival_local'),
-                'arrival_minutes': counts.get('arrival_minutes')
-            })
+        try:
+            cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+            sd_rows = cur.fetchall()
+            school_dates = [r['date'] for r in sd_rows]
+        except Exception:
+            # If school_days table is not present or the query fails, fall back to weekday heuristic
+            school_dates = []
+            for day in range(1, last_day + 1):
+                d = date(year, month, day)
+                if d.weekday() >= 5:
+                    continue
+                school_dates.append(d.isoformat())
+
+        for iso_date in school_dates:
+            if iso_date in rows:
+                counts = rows[iso_date]
+                points.append({
+                    'date': iso_date,
+                    'on_time': int(counts.get('on_time', 0)),
+                    'late': int(counts.get('late', 0)),
+                    'absent': int(counts.get('absent', 0)),
+                    'arrival_ts': counts.get('arrival_ts'),
+                    'arrival_local': counts.get('arrival_local'),
+                    'arrival_minutes': counts.get('arrival_minutes')
+                })
+            else:
+                # No attendance record for this student on this school day -> mark absent
+                points.append({
+                    'date': iso_date,
+                    'on_time': 0,
+                    'late': 0,
+                    'absent': 1,
+                    'arrival_ts': None,
+                    'arrival_local': None,
+                    'arrival_minutes': None
+                })
 
         conn_att.close()
         print(f"attendance_trend_response -> student={student_id} year={year} month={month} points={len(points)}")
