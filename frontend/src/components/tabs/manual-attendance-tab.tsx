@@ -255,10 +255,10 @@ export function ManualAttendanceTab() {
         if (!selectedDate) {
             throw new Error("No date selected.");
         }
-        if (isWeekend(selectedDate)) {
-            throw new Error("Cannot save attendance for weekend dates.");
-        }
-        // Build a properly typed changes map from the store pending cache
+      if (isWeekend(selectedDate)) {
+        throw new Error("Cannot save attendance for weekend dates.");
+      }
+      // Build a properly typed changes map from the store pending cache
         const changesToSave: Record<number, any> = {};
         const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : null;
         const pending = pendingAttendanceChanges || {};

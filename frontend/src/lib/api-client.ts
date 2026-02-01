@@ -17,7 +17,20 @@ async function getBackendUrlFromServer(): Promise<string> {
       throw new Error(`API config request failed: ${response.status}`);
     }
     const data = await response.json();
-    const backendUrl = data.backendURL;
+    let backendUrl = data.backendURL;
+    // If the Next dev server detected a non-localhost IP but the browser
+    // is running on localhost, prefer localhost to avoid cross-host network
+    // issues when both servers are on the same machine.
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      try {
+        const u = new URL(backendUrl);
+        if (u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') {
+          backendUrl = 'http://localhost:5000';
+        }
+      } catch (e) {
+        // ignore and keep original
+      }
+    }
     console.debug('Backend URL from server:', backendUrl);
     return backendUrl;
   } catch (error) {
@@ -117,8 +130,13 @@ export async function getStudentById(studentId: number) {
   return result.student || null;
 }
 
-export async function saveAttendance(students: any[]) {
-  return wsClient.saveAttendance(students);
+export async function saveAttendance(arg: any) {
+  // Accept an array of students and POST to backend. Do NOT request weekend saves from client.
+  const students = Array.isArray(arg) ? arg : (arg && arg.students) ? arg.students : [];
+  return fetchAPI('/api/save-attendance', {
+    method: 'POST',
+    body: JSON.stringify({ students }),
+  });
 }
 
 export async function addStudent(studentData: any) {

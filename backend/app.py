@@ -925,6 +925,69 @@ def handle_save_attendance(data):
     broadcast_summary_update(affected_ids)
     emit('save_attendance_response', {'success': True})
 
+
+@app.route('/api/save-attendance', methods=['POST'])
+def api_save_attendance():
+    """HTTP endpoint to save attendance records. Accepts JSON payload:
+    { students: [ { id, attendanceHistory: [ { date, status, checkInTime? } ] } ] }
+    Weekend dates are rejected by the server.
+    """
+    try:
+        payload = request.get_json(force=True)
+    except Exception:
+        return jsonify({'success': False, 'message': 'Invalid JSON payload'}), 400
+
+    students = payload.get('students') if isinstance(payload, dict) else None
+    if students is None:
+        return jsonify({'success': False, 'message': 'Missing students array in payload'}), 400
+
+
+    inserts = []
+    for student in students:
+        student_id = student.get('id')
+        for record in student.get('attendanceHistory', []):
+            date_str = record.get('date')
+            if not date_str:
+                return jsonify({'success': False, 'message': f'Invalid or missing date for student {student_id}'}), 400
+            try:
+                parsed_date = date.fromisoformat(date_str)
+            except Exception:
+                return jsonify({'success': False, 'message': f'Invalid date format for student {student_id}: {date_str}'}), 400
+            # Reject weekend dates (Sat=5, Sun=6)
+            if parsed_date.weekday() >= 5:
+                return jsonify({'success': False, 'message': 'Weekend attendance cannot be marked. Please select a weekday (Monday-Friday).'}), 400
+
+            supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
+            check_in_time = supplied_check_in if supplied_check_in else datetime.now(timezone.utc).isoformat()
+            inserts.append((
+                student_id,
+                parsed_date.isoformat(),
+                record.get('status'),
+                datetime.now(timezone.utc).isoformat(),
+                check_in_time
+            ))
+
+    if not inserts:
+        return jsonify({'success': False, 'message': 'No attendance records to save.'}), 400
+
+    conn_attendance = get_db_connection('attendance')
+    cursor_attendance = conn_attendance.cursor()
+    # Perform inserts
+    for ins in inserts:
+        cursor_attendance.execute('''
+            INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
+            VALUES (?, ?, ?, ?, ?)
+        ''', ins)
+
+    conn_attendance.commit()
+    conn_attendance.close()
+
+    affected_ids = [s.get('id') for s in students]
+    broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
+    broadcast_summary_update(affected_ids)
+
+    return jsonify({'success': True})
+
 @socketio.on('add_student')
 def handle_add_student(data):
     """Add a new student via WebSocket."""
