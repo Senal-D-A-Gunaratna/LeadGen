@@ -137,7 +137,7 @@ export function AttendanceTable() {
           <div className="overflow-y-auto h-[506px] pr-2">
             <Table>
               <TableHeader>
-                <TableRow className="border-border/40 hover:bg-muted/60">
+                <TableRow className="border-border/40 hover:bg-transparent">
                   <TableHead>Student</TableHead>
                   <TableHead className="text-center">Check-in Time</TableHead>
                   <TableHead className="text-center">Status</TableHead>
