@@ -480,6 +480,17 @@ const computeMonthHasDataFromPoints = (points: any[], month: Date) => {
   return false;
 };
 
+// Determine whether trend points contain any attendance data
+const trendHasData = (points: any[] | null) => {
+  if (!points || points.length === 0) return false;
+  for (const p of points) {
+    const hasCount = (p.on_time || p.late || p.absent) && ((p.on_time || 0) + (p.late || 0) + (p.absent || 0) > 0);
+    const hasPercent = typeof p.percent === 'number' ? (p.percent > 0) : false;
+    if (hasCount || hasPercent) return true;
+  }
+  return false;
+};
+
 const isMonthWithinRange = (month: Date) => {
   // backend 'month' aggregate covers last ~30 days ending today; consider month has possible data if it overlaps last 30 days
   const today = new Date();
@@ -519,7 +530,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const [fetchError, setFetchError] = useState<boolean>(false);
   const fetchTimerRef = useRef<number | null>(null);
   // Trend (line chart) state + cache
-  const [showTrend, setShowTrend] = useState<boolean>(false);
+  const [showTrend, setShowTrend] = useState<boolean>(true);
   const [trendLoading, setTrendLoading] = useState<boolean>(false);
   const [trendError, setTrendError] = useState<boolean>(false);
   const [attendanceTrend, setAttendanceTrend] = useState<any[] | null>(null);
@@ -942,14 +953,26 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
                           {showTrend ? (
                             <div className="w-full h-[250px]">
-                              {trendLoading || trendError ? (
+                              {trendLoading ? (
                                 <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
-                              ) : attendanceTrend ? (
+                              ) : trendError ? (
+                                <div className="w-full h-full flex items-center justify-center">
+                                  <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
+                                    <div className="text-lg font-semibold mb-1">No Data Available</div>
+                                    <div className="text-sm">There is no attendance data for this month</div>
+                                  </div>
+                                </div>
+                              ) : (!attendanceTrend || !trendHasData(attendanceTrend)) ? (
+                                <div className="w-full h-[250px] flex items-center justify-center">
+                                  <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
+                                    <div className="text-lg font-semibold mb-1">No Data Available</div>
+                                    <div className="text-sm">There is no attendance data for this month</div>
+                                  </div>
+                                </div>
+                              ) : (
                                 <div className="w-full h-full">
                                   <MiniTrendChart points={attendanceTrend} statusColors={statusColors} />
                                 </div>
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
                               )}
                             </div>
                             ) : (
