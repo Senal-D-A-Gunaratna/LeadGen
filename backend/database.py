@@ -325,13 +325,13 @@ def init_database():
     
     cursor_attendance.execute('''
         CREATE TABLE IF NOT EXISTS attendance_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
             student_id INTEGER NOT NULL,
             date TEXT NOT NULL,
             status TEXT NOT NULL CHECK(status IN ('on time', 'late', 'absent')),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(student_id, date)
+            check_in_time TEXT,
+            PRIMARY KEY (student_id, date)
         )
     ''')
     # Table to record which dates are considered school days.
@@ -522,7 +522,7 @@ def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
     try:
         # Begin an immediate transaction to avoid write/write races on SQLite
         cur.execute('BEGIN IMMEDIATE')
-        cur.execute('SELECT id, check_in_time FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
+        cur.execute('SELECT check_in_time FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
         row = cur.fetchone()
         if not row:
             # Insert new record; status will be computed by caller after we return the earliest time
@@ -536,7 +536,7 @@ def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
         existing_iso = row['check_in_time']
         # If existing is None or incoming is earlier, update
         if existing_iso is None:
-            cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE id = ?', (incoming_utc_iso, datetime.now(timezone.utc).isoformat(), row['id']))
+            cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE student_id = ? AND date = ?', (incoming_utc_iso, datetime.now(timezone.utc).isoformat(), student_id, date_str))
             conn.commit()
             return incoming_utc_iso
 
@@ -564,7 +564,7 @@ def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
                 incoming_dt = incoming_dt.replace(tzinfo=timezone.utc)
             if incoming_dt < existing_dt:
                 # Update to earlier time
-                cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE id = ?', (incoming_utc_iso, datetime.utcnow().isoformat(), row['id']))
+                cur.execute('UPDATE attendance_records SET check_in_time = ?, updated_at = ? WHERE student_id = ? AND date = ?', (incoming_utc_iso, datetime.utcnow().isoformat(), student_id, date_str))
                 conn.commit()
                 chosen = incoming_utc_iso
             else:

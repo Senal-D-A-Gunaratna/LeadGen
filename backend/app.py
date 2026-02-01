@@ -707,7 +707,9 @@ def handle_scan(data):
     cur = conn_attendance.cursor()
     try:
         # If a row exists, update it; otherwise insert a new row.
-        cur.execute('SELECT id FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
+        # attendance_records no longer has an auto-increment `id` column —
+        # check existence using a scalar select.
+        cur.execute('SELECT 1 FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
         existing_row = cur.fetchone()
         if existing_row:
             cur.execute('''
