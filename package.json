@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npm run dev-next",
+    "dev": "concurrently \"npm:dev-next\" \"npm:dev-backend\"",
     "dev-next": "cd frontend && npm run dev",
     "dev-backend": "cd backend && python3 app.py",
     "build": "cd frontend && npm run build",
@@ -13,5 +13,8 @@
     "install": "cd frontend && npm install",
     "install-backend": "cd backend && pip3 install -r requirements.txt",
     "install-all": "npm run install && npm run install-backend"
+  },
+  "devDependencies": {
+    "concurrently": "^7.6.0"
   }
 }
