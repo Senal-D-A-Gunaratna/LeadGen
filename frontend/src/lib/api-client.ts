@@ -69,7 +69,15 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
           errorData = await response.json();
         } else {
           const text = await response.text();
-          errorData = { error: text || `HTTP ${response.status}: ${response.statusText}` };
+          // If server returned an HTML error page (e.g. Flask 500), avoid
+          // throwing the entire HTML blob into the UI overlay. Log the body
+          // for debugging and provide a concise message instead.
+          if (contentType && contentType.includes('text/html')) {
+            console.error('Backend returned HTML error body:', text);
+            errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+          } else {
+            errorData = { error: text || `HTTP ${response.status}: ${response.statusText}` };
+          }
         }
       } catch (parseError) {
         // If we can't parse the error, use status text

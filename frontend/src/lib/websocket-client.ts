@@ -130,6 +130,19 @@ class WebSocketClient {
         console.log('WebSocket connected');
         this.connecting = false;
         this.emitConnectionState(true);
+        // Notify listeners that connection is established so they can refresh state
+        try {
+          const listeners = this.listeners.get('data_changed') || new Set();
+          listeners.forEach((listener) => {
+            try {
+              listener({ type: 'connected', data: {} });
+            } catch (e) {
+              console.error('data_changed listener error on connect', e);
+            }
+          });
+        } catch (e) {
+          console.error('failed to notify data_changed listeners on connect', e);
+        }
       });
 
       this.socket.on('disconnect', (reason: any) => {
@@ -156,6 +169,19 @@ class WebSocketClient {
       this.socket.on('reconnect', (attempt: number) => {
         console.log('WebSocket reconnected after', attempt, 'attempts');
         this.emitConnectionState(true);
+        // Trigger a data_changed event so components refetch current state after reconnect
+        try {
+          const listeners = this.listeners.get('data_changed') || new Set();
+          listeners.forEach((listener) => {
+            try {
+              listener({ type: 'reconnected', data: {} });
+            } catch (e) {
+              console.error('data_changed listener error on reconnect', e);
+            }
+          });
+        } catch (e) {
+          console.error('failed to notify data_changed listeners on reconnect', e);
+        }
       });
 
       this.socket.on('reconnect_failed', () => {

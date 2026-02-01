@@ -97,10 +97,14 @@ if os.environ.get('DEV_FORCE_FULL_ACCESS') == '1':
 # Broadcast data changes to all connected clients
 def broadcast_data_change(event_type: str, data: Optional[dict] = None):
     """Broadcast data changes to all authenticated WebSocket clients."""
+    try:
+        print(f"[broadcast] emitting data_changed -> type={event_type} data_keys={list((data or {}).keys())}")
+    except Exception:
+        pass
     socketio.emit('data_changed', {
         'type': event_type,
         'data': data or {}
-    }, namespace='/')
+    }, namespace='/', broadcast=True)
 
 def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     """Broadcast updated attendance summaries for affected students or all if None."""
@@ -117,7 +121,11 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
                 'className': student['className'],
                 'summary': summary
             })
-        socketio.emit('summary_update', {'summaries': summaries}, namespace='/')
+        try:
+            print(f"[broadcast] emitting summary_update -> summaries_count={len(summaries)}")
+        except Exception:
+            pass
+        socketio.emit('summary_update', {'summaries': summaries}, namespace='/', broadcast=True)
 
 
 def compute_static_filters_from_db() -> Dict[str, List[str]]:
