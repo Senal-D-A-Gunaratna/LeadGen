@@ -37,8 +37,10 @@ else:
     ssl_context = None
     print('SSL certificates not found in backend/certificates. Starting without TLS (HTTP).')
 
-# Use threading mode instead of eventlet (eventlet incompatible with Python 3.14)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+# Use asyncio mode for Flask-SocketIO to avoid threading/blocking issues
+# with Python 3.14 and to provide a proper async event loop for websocket
+# handling. This requires an asyncio-capable python-socketio installation.
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='asyncio')
 
 
 @app.errorhandler(Exception)
@@ -1777,7 +1779,7 @@ if __name__ == '__main__':
     init_database()
     migrate_json_to_sqlite()
     print("Flask backend starting on http://0.0.0.0:5000")
-    print("WebSocket support enabled (HTTP, threading mode)")
+    print("WebSocket support enabled (HTTP, asyncio mode)")
     # Start a background watcher that monitors the attendance DB file for external changes
     try:
         import threading, time

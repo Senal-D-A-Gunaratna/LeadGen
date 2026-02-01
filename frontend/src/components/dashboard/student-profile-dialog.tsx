@@ -770,6 +770,34 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     return () => { cancelled = true };
   }, [student, studentSummaries, updateStudentSummaries]);
 
+  // Listen for server summary updates and refresh the displayed student summary
+  useEffect(() => {
+    if (!student) return;
+    const handler = (data: { summaries: any[] }) => {
+      try {
+        if (!data || !Array.isArray(data.summaries)) return;
+        const found = data.summaries.find((s: any) => s.studentId === student.id);
+        if (!found || !found.summary) return;
+        const s = found.summary;
+        setAttendanceStats({
+          onTimeCount: s.onTimeDays,
+          lateCount: s.lateDays,
+          absentCount: s.absentDays,
+          onTimePercentage: s.onTimePercentage,
+          latePercentage: s.latePercentage,
+          absentPercentage: s.absencePercentage,
+          overallPercentage: s.presencePercentage,
+          totalSchoolDays: s.totalSchoolDays,
+        });
+      } catch (e) {
+        console.error('summary_update handler error', e);
+      }
+    };
+
+    try { wsClient.on('summary_update', handler); } catch (e) {}
+    return () => { try { wsClient.off('summary_update', handler); } catch (e) {} };
+  }, [student]);
+
   const handleDownload = async (format: 'csv' | 'pdf') => {
     if (!student) return;
     setIsDownloading(true);

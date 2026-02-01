@@ -435,9 +435,12 @@ export const useStudentStore = create<StudentStore>()(
           },
           updateStudentSummaries: (summaries: { studentId: number; summary: any }[]) => {
             set(produce((state) => {
+              // create a new Map instance so React/Zustand see a new reference
+              const newMap = new Map(state.studentSummaries);
               summaries.forEach(({ studentId, summary }) => {
-                state.studentSummaries.set(studentId, summary);
+                newMap.set(studentId, summary);
               });
+              state.studentSummaries = newMap;
             }));
           }
         },
