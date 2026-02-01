@@ -670,44 +670,40 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   }, [student, displayedMonth]);
 
   useEffect(() => {
-    if (!showTrend) return;
     if (!student) return;
     const year = displayedMonth.getFullYear();
     const month = displayedMonth.getMonth();
+    // Always fetch the server-provided attendance trend for the displayed month
+    // (calendar should rely only on authoritative server data keyed by student.id)
     fetchAttendanceTrendForMonth(student.id, year, month);
-  }, [showTrend, displayedMonth, student]);
+  }, [displayedMonth, student]);
 
   const modifiers = useMemo(() => {
     if (!student) return { onTime: [], late: [], absent: [] };
 
-    return {
-      onTime: student.attendanceHistory.filter(d => d.status === 'on time').map(d => parseDate(d.date)),
-      late: student.attendanceHistory.filter(d => d.status === 'late').map(d => parseDate(d.date)),
-      absent: student.attendanceHistory.filter(d => d.status === 'absent').map(d => parseDate(d.date)),
-    };
-  }, [student]);
+    // Use only server-provided `attendanceTrend` (authoritative, keyed by student.id).
+    // If no trend points are available for the month, return empty modifier lists
+    // so the calendar does not fall back to local/in-memory history.
+    if (attendanceTrend && attendanceTrend.length > 0) {
+      const pointsForMonth = attendanceTrend.filter((p: any) => {
+        const label = p.label || p.date || p[0];
+        return typeof label === 'string' && label.startsWith(format(displayedMonth, 'yyyy-MM'));
+      });
 
-  // Create a set of null dates (weekdays without attendance records) for the disabled check
-  const nullDatesSet = useMemo(() => {
-    if (!student) return new Set<string>();
-
-    const attendanceDates = new Set(student.attendanceHistory.map(d => d.date));
-    const nullDates = new Set<string>();
-    const today = new Date();
-    const startDate = new Date(2020, 0, 1);
-
-    for (let d = new Date(startDate); d < today; d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay();
-      if (dayOfWeek === 0 || dayOfWeek === 6) continue;
-
-      const dateStr = format(d, 'yyyy-MM-dd');
-      if (!attendanceDates.has(dateStr)) {
-        nullDates.add(dateStr);
-      }
+      return {
+        onTime: pointsForMonth.filter((p: any) => p.on_time).map((p: any) => parseDate(p.label || p.date)),
+        late: pointsForMonth.filter((p: any) => p.late).map((p: any) => parseDate(p.label || p.date)),
+        absent: pointsForMonth.filter((p: any) => p.absent).map((p: any) => parseDate(p.label || p.date)),
+      };
     }
 
-    return nullDates;
-  }, [student]);
+    return { onTime: [], late: [], absent: [] };
+  }, [student, attendanceTrend, displayedMonth]);
+
+  // Do not create 'null' date set — keep all calendar days active (do not dim/disable days)
+  const nullDatesSet = useMemo(() => {
+    return new Set<string>();
+  }, [student, attendanceTrend, displayedMonth]);
 
   const modifiersClassNames = {
     onTime: 'day-on-time',
