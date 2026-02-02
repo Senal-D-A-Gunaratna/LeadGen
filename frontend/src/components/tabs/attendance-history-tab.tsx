@@ -621,9 +621,7 @@ export function AttendanceHistoryTab() {
                             <div className="w-[260px]">
                               <Skeleton className="h-40 w-full" />
                             </div>
-                            <div className="mt-2 pointer-events-auto">
-                              <button className="px-3 py-1 rounded bg-muted text-muted-foreground" onClick={() => fetchMonthAggregate(displayedMonth, gradeFilter)}>Retry</button>
-                            </div>
+                          
                           </div>
                         </div>
                       ) : monthHasData === null ? (
