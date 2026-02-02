@@ -655,10 +655,32 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
               let on_time = 0;
               let late = 0;
               let absent = 0;
+              let arrival_minutes: number | null = null;
+              let arrival_local: string | null = null;
               if (records.length > 0) {
                 for (const r of records) {
                   if (r.status === 'on time') on_time += 1;
                   else if (r.status === 'late') late += 1;
+                  // Prefer explicit checkInTime (ISO) if provided
+                  if (!arrival_minutes && r.checkInTime) {
+                    try {
+                      const d = new Date(r.checkInTime);
+                      if (!isNaN(d.getTime())) {
+                        arrival_minutes = d.getHours() * 60 + d.getMinutes();
+                        arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      }
+                    } catch (e) {}
+                  }
+                  // Fallback to epoch seconds field if present
+                  if (!arrival_minutes && r.arrival_ts) {
+                    try {
+                      const d = new Date(Number(r.arrival_ts) * 1000);
+                      if (!isNaN(d.getTime())) {
+                        arrival_minutes = d.getHours() * 60 + d.getMinutes();
+                        arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      }
+                    } catch (e) {}
+                  }
                 }
                 // presence recorded -> not absent
                 absent = 0;
@@ -668,9 +690,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                 // Weekdays (Mon-Fri) without a record are treated as absent
                 absent = (day > 0 && day < 6) ? 1 : 0;
               }
-              fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null });
+              fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
             }
-            const points = fallbackPoints.map((p: any) => ({ ...p, arrival_minutes: null, arrival_local: null }));
+            const points = fallbackPoints.map((p: any) => ({ ...p }));
             attendanceTrendCache.current.set(key, points);
             setAttendanceTrend(points);
             setTrendLoading(false);
