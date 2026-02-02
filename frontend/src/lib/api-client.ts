@@ -84,7 +84,9 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
     return response.json();
   } catch (error: any) {
     // Better error handling for network issues
-    if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+    const msg = (error && error.message) ? String(error.message) : '';
+    const isNetworkErr = error instanceof TypeError || error?.name === 'TypeError' || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network');
+    if (isNetworkErr) {
       throw new Error(`Cannot connect to backend. Make sure the Flask backend is running on port 5000.`);
     }
     // Re-throw the error if it's already an Error with a message
@@ -197,7 +199,8 @@ export async function downloadBackup(dataType: 'students' | 'attendance', filena
     headers['X-Authorizer-Password'] = authorizerPassword;
   }
 
-  const response = await fetch(`${BACKEND_URL}/api/download-backup`, {
+  const backendUrl = await ensureBackendUrl();
+  const response = await fetch(`${backendUrl}/api/download-backup`, {
     method: 'POST',
     headers,
     body: JSON.stringify({ dataType, filename }),
@@ -229,7 +232,8 @@ export async function deleteAllBackups() {
 
 // CSV/JSON exports
 export async function downloadStudentDataAsCsv(): Promise<string> {
-  const response = await fetch(`${BACKEND_URL}/api/download-student-data-csv`);
+  const backendUrl = await ensureBackendUrl();
+  const response = await fetch(`${backendUrl}/api/download-student-data-csv`);
   return response.text();
 }
 

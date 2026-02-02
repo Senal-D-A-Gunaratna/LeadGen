@@ -55,7 +55,9 @@ else:
 sio = socketio_module.AsyncServer(cors_allowed_origins="*")
 if WsgiToAsgi is not None:
     asgi_flask_app = WsgiToAsgi(app)
-    asgi_app = socketio_module.ASGIApp(sio, other_asgi_app=asgi_flask_app)
+    # Pass the ASGI-wrapped Flask app as the second positional argument
+    # to maintain compatibility with different python-socketio versions.
+    asgi_app = socketio_module.ASGIApp(sio, asgi_flask_app)
 else:
     # Fallback: pass the WSGI app directly (older python-socketio may handle it),
     # but this can trigger Flask.__call__ signature errors under ASGI servers.
