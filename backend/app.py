@@ -933,6 +933,68 @@ def http_get_student_by_id(student_id):
         return jsonify({'success': False, 'message': 'Error fetching student', 'error': str(e)}), 500
 
 
+@app.route('/api/students/<int:student_id>/attendance', methods=['GET'])
+def http_get_student_attendance_month(student_id):
+    """Return attendance records for a single student.
+
+    Query params:
+      - month: optional string in YYYY-MM format. If provided, only records
+        within that month are returned. If omitted, the full attendance
+        history for the student is returned.
+    """
+    try:
+        month = request.args.get('month')
+        student = get_student_by_id(student_id)
+        if not student:
+            return jsonify({'success': False, 'message': 'Student not found'}), 404
+
+        # If no month filter provided, return the pre-computed attendanceHistory
+        if not month:
+            return jsonify({'success': True, 'attendanceHistory': student.get('attendanceHistory', [])})
+
+        # Validate month format YYYY-MM and compute month range
+        try:
+            from datetime import timedelta
+            start_date = date.fromisoformat(f"{month}-01")
+        except Exception:
+            return jsonify({'success': False, 'message': 'Invalid month format (expected YYYY-MM)'}), 400
+
+        if start_date.month == 12:
+            next_month = date(start_date.year + 1, 1, 1)
+        else:
+            next_month = date(start_date.year, start_date.month + 1, 1)
+        end_date = next_month - timedelta(days=1)
+
+        conn_att = get_db_connection('attendance')
+        cur = conn_att.cursor()
+        # Detect check_in_time presence and keep response shape stable
+        cur.execute("PRAGMA table_info(attendance_records)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'check_in_time' in cols:
+            cur.execute('''
+                SELECT date, status, check_in_time
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                ORDER BY date ASC
+            ''', (student_id, start_date.isoformat(), end_date.isoformat()))
+            rows = cur.fetchall()
+            attendance = [{'date': r['date'], 'status': r['status'], 'checkInTime': r['check_in_time']} for r in rows]
+        else:
+            cur.execute('''
+                SELECT date, status, NULL as check_in_time
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                ORDER BY date ASC
+            ''', (student_id, start_date.isoformat(), end_date.isoformat()))
+            rows = cur.fetchall()
+            attendance = [{'date': r['date'], 'status': r['status'], 'checkInTime': None} for r in rows]
+
+        conn_att.close()
+        return jsonify({'success': True, 'attendanceHistory': attendance})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error fetching attendance', 'error': str(e)}), 500
+
+
 @socketio.on('get_static_filters')
 async def handle_get_static_filters(sid):
     """Respond with server-side computed static filters via WebSocket."""

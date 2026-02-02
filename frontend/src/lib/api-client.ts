@@ -126,6 +126,27 @@ export async function getStudentById(studentId: number) {
   return result.student || null;
 }
 
+export async function getStudentMonthlyAttendance(studentId: number, month?: string) {
+  // month format: YYYY-MM
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  try {
+    const result = await fetchAPI(`/api/students/${studentId}/attendance${query}`);
+    return result.attendanceHistory || [];
+  } catch (err) {
+    // Fallback: fetch full student record and filter client-side
+    try {
+      const student = await getStudentById(studentId);
+      const hist = (student && student.attendanceHistory) ? student.attendanceHistory : [];
+      if (!month) return hist;
+      return hist.filter((r: any) => typeof r.date === 'string' && r.date.startsWith(month));
+    } catch (e) {
+      throw err;
+    }
+  }
+}
+
 export async function saveAttendance(arg: any) {
   // Accept an array of students and POST to backend. Do NOT request weekend saves from client.
   const students = Array.isArray(arg) ? arg : (arg && arg.students) ? arg.students : [];
