@@ -620,7 +620,7 @@ export function AttendanceHistoryTab() {
                           />
                           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                             <div className="w-[260px]">
-                              <Skeleton className="h-40 w-full" />
+                              <Skeleton className="h-[240px] w-full" />
                             </div>
                           
                           </div>
