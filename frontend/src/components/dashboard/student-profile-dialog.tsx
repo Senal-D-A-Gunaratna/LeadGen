@@ -46,7 +46,7 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { isWeekday, parseDate } from "@/lib/utils";
 import { format } from "date-fns";
-import { getStudentSummary } from "@/lib/api-client";
+import { getStudentSummary, getStudentById } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
 import { downloadStudentAttendanceSummaryAsCsvAction, downloadStudentAttendanceSummaryAsPdfAction } from "@/app/actions";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
@@ -642,9 +642,46 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         console.error(`attendance trend fetch attempt ${attempt} failed`, err);
         if (attempt >= maxAttempts) {
           console.warn('Failed to fetch attendance trend after retries', err);
-          setTrendError(true);
-          setTrendLoading(false);
-          return;
+          // Attempt HTTP fallback: compute daily points from student's attendanceHistory
+          try {
+            const studentFull = await getStudentById(studentId);
+            const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
+            const fallbackPoints: any[] = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+              const dd = String(d).padStart(2, '0');
+              const mm = String(monthOne).padStart(2, '0');
+              const label = `${year}-${mm}-${dd}`;
+              const records = (studentFull?.attendanceHistory || []).filter((r: any) => r.date === label);
+              let on_time = 0;
+              let late = 0;
+              let absent = 0;
+              if (records.length > 0) {
+                for (const r of records) {
+                  if (r.status === 'on time') on_time += 1;
+                  else if (r.status === 'late') late += 1;
+                }
+                // presence recorded -> not absent
+                absent = 0;
+              } else {
+                const dObj = parseDate(label);
+                const day = dObj.getDay();
+                // Weekdays (Mon-Fri) without a record are treated as absent
+                absent = (day > 0 && day < 6) ? 1 : 0;
+              }
+              fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null });
+            }
+            const points = fallbackPoints.map((p: any) => ({ ...p, arrival_minutes: null, arrival_local: null }));
+            attendanceTrendCache.current.set(key, points);
+            setAttendanceTrend(points);
+            setTrendLoading(false);
+            setTrendError(false);
+            return;
+          } catch (fbErr) {
+            console.error('attendance trend HTTP fallback failed', fbErr);
+            setTrendError(true);
+            setTrendLoading(false);
+            return;
+          }
         }
         // wait before retry
         await new Promise(r => setTimeout(r, delays[Math.min(attempt-1, delays.length-1)]));
