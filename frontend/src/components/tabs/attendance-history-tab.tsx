@@ -607,6 +607,7 @@ export function AttendanceHistoryTab() {
                             onMonthChange={(m) => setDisplayedMonth(m)}
                             selected={selectedDate}
                             onSelect={(date) => setSelectedDate(date)}
+                            className="opacity-0"
                             classNames={{ nav: 'hidden', caption: 'hidden', head_cell: 'invisible', day: 'invisible' }}
                             disabled={(date) => {
                               const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
