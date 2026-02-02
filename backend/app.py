@@ -26,6 +26,11 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # SSL Configuration for HTTPS
 # Prefer project-local certs stored in backend/certificates (localhost.pem/localhost-key.pem).
 from pathlib import Path as _Path
+# Adapter to convert Flask (WSGI) app to ASGI for uvicorn
+try:
+    from asgiref.wsgi import WsgiToAsgi
+except Exception:
+    WsgiToAsgi = None
 _repo_root = _Path(__file__).parent.parent
 _cert_dir = _repo_root / 'backend' / 'certificates'
 _cert_file = _cert_dir / 'localhost.pem'
@@ -45,8 +50,16 @@ else:
 # in environments lacking the required async driver.
 # Create AsyncServer and ASGI app. Pass the Flask `app` positionally for
 # compatibility with different python-socketio versions.
+# Create AsyncServer. Wrap the Flask WSGI app with WsgiToAsgi when available
+# so the ASGIApp receives a proper ASGI callable for HTTP requests.
 sio = socketio_module.AsyncServer(cors_allowed_origins="*")
-asgi_app = socketio_module.ASGIApp(sio, app)
+if WsgiToAsgi is not None:
+    asgi_flask_app = WsgiToAsgi(app)
+    asgi_app = socketio_module.ASGIApp(sio, other_asgi_app=asgi_flask_app)
+else:
+    # Fallback: pass the WSGI app directly (older python-socketio may handle it),
+    # but this can trigger Flask.__call__ signature errors under ASGI servers.
+    asgi_app = socketio_module.ASGIApp(sio, app)
 # Keep the historical name `socketio` for in-file references (handlers,
 # emit helpers) by pointing it at the AsyncServer instance.
 socketio = sio

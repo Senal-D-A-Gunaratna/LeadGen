@@ -10,32 +10,14 @@ async function getBackendUrlFromServer(): Promise<string> {
   if (typeof window === 'undefined') {
     return 'http://localhost:5000';
   }
-  
   try {
-    const response = await fetch('/api/config');
-    if (!response.ok) {
-      throw new Error(`API config request failed: ${response.status}`);
-    }
-    const data = await response.json();
-    let backendUrl = data.backendURL;
-    // If the Next dev server detected a non-localhost IP but the browser
-    // is running on localhost, prefer localhost to avoid cross-host network
-    // issues when both servers are on the same machine.
-    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      try {
-        const u = new URL(backendUrl);
-        if (u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') {
-          backendUrl = 'http://localhost:5000';
-        }
-      } catch (e) {
-        // ignore and keep original
-      }
-    }
-    console.debug('Backend URL from server:', backendUrl);
+    const proto = window.location.protocol || 'http:';
+    const hostname = window.location.hostname || 'localhost';
+    const backendUrl = `${proto}//${hostname}:5000`;
+    console.debug('Derived backend URL from browser location:', backendUrl);
     return backendUrl;
   } catch (error) {
-    console.error('Failed to fetch backend URL from server:', error);
-    // Fallback to localhost
+    console.error('Failed to derive backend URL from window.location:', error);
     return 'http://localhost:5000';
   }
 }
