@@ -40,10 +40,13 @@ else:
 # Create an Async Socket.IO server and wrap the Flask WSGI app in an ASGI app.
 # We create the AsyncServer via the python-socketio package and then build
 # an ASGI application so we can run the whole app with an ASGI server
-# (uvicorn). This avoids the "Invalid async_mode specified" error and
-# gives a proper asyncio-based runtime.
-sio = socketio_module.AsyncServer(async_mode='asyncio', cors_allowed_origins="*")
-asgi_app = socketio_module.ASGIApp(sio, wsgi_app=app)
+# (uvicorn). Let python-socketio auto-detect the best async implementation
+# instead of forcing `async_mode='asyncio'`, which may raise `Invalid async_mode`
+# in environments lacking the required async driver.
+# Create AsyncServer and ASGI app. Pass the Flask `app` positionally for
+# compatibility with different python-socketio versions.
+sio = socketio_module.AsyncServer(cors_allowed_origins="*")
+asgi_app = socketio_module.ASGIApp(sio, app)
 # Keep the historical name `socketio` for in-file references (handlers,
 # emit helpers) by pointing it at the AsyncServer instance.
 socketio = sio
@@ -613,14 +616,13 @@ def api_attendance_history():
 # ==================== WEBSOCKET HANDLERS ====================
 
 @socketio.on('connect')
-def handle_connect():
+async def handle_connect(sid, environ):
     """Handle WebSocket connection."""
     try:
-        sid = request.sid  # type: ignore
         connected_sids.add(sid)
     except Exception:
         pass
-    print(f'Client connected: {request.sid}')  # type: ignore
+    print(f'Client connected: {sid}')
     # Emit current connection counts to all clients
     try:
         socketio.emit('connection_count', {
@@ -630,19 +632,13 @@ def handle_connect():
     except Exception:
         pass
 
-    # Emit current canonical and DB-derived static filters to the newly connected client
-    # Note: removed push 'static_filters_update' emission — clients should
-    # request filters via 'get_static_filters' when needed.
-    
-
-
 @socketio.on('disconnect')
-def handle_disconnect(*args):
+async def handle_disconnect(sid):
     """Handle WebSocket disconnection."""
     try:
         # Use pop to avoid KeyError if session not present
         try:
-            authenticated_sessions.pop(request.sid, None)  # type: ignore
+            authenticated_sessions.pop(sid, None)
         except Exception:
             pass
     except Exception:
@@ -651,11 +647,10 @@ def handle_disconnect(*args):
     try:
         # Remove from connected set and emit updated counts
         try:
-            sid = request.sid  # type: ignore
             connected_sids.discard(sid)
         except Exception:
             pass
-        print(f'Client disconnected: {request.sid}')  # type: ignore
+        print(f'Client disconnected: {sid}')
         try:
             socketio.emit('connection_count', {
                 'total': len(connected_sids),
@@ -667,24 +662,23 @@ def handle_disconnect(*args):
         pass
 
 @socketio.on('authenticate')
-def handle_authentication(data):
+async def handle_authentication(sid, data):
     """Handle authentication via WebSocket."""
-    print(f"Authentication attempt: role={data.get('role')}, password_provided={bool(data.get('password'))}, secure={request.is_secure}, sid={request.sid}")  # type: ignore
-    # NOTE: Authentication allowed over HTTP in LAN/HTTP-only deployments.
-    
+    print(f"Authentication attempt: role={data.get('role')}, password_provided={bool(data.get('password'))}, sid={sid}")
+
     role = data.get('role')
     password = data.get('password')
-    
+
     if not role or not password:
         print("Authentication failed: missing role or password")
-        emit('auth_response', {'success': False, 'message': 'Missing role or password'})
+        socketio.emit('auth_response', {'success': False, 'message': 'Missing role or password'}, to=sid)
         return
-    
+
     if validate_password(role, password):
         print("Password validated successfully")
-        authenticated_sessions[request.sid] = role  # type: ignore
-        emit('auth_response', {'success': True, 'role': role, 'message': 'Authentication successful'})
-        
+        authenticated_sessions[sid] = role
+        socketio.emit('auth_response', {'success': True, 'role': role, 'message': 'Authentication successful'}, to=sid)
+
         # Log authentication
         conn_logs = get_db_connection('logs')
         cursor_logs = conn_logs.cursor()
@@ -704,10 +698,10 @@ def handle_authentication(data):
             pass
     else:
         print("Password validation failed")
-        emit('auth_response', {'success': False, 'message': 'Invalid credentials'})
+        socketio.emit('auth_response', {'success': False, 'message': 'Invalid credentials'}, to=sid)
 
 @socketio.on('scan_student')
-def handle_scan(data):
+async def handle_scan(sid, data):
     """Handle student scan via WebSocket.
 
     Behavior:
@@ -715,27 +709,27 @@ def handle_scan(data):
     - If unauthenticated, require a matching `scanner_token` payload when
       `SCANNER_TOKEN` is set in the environment; otherwise reject.
     """
-    unauthenticated = request.sid not in authenticated_sessions  # type: ignore
+    unauthenticated = sid not in authenticated_sessions
     if unauthenticated:
         # If a scanner token is configured, require it for unauthenticated scans.
         if SCANNER_TOKEN:
             supplied = (data or {}).get('scanner_token')
             if supplied != SCANNER_TOKEN:
-                emit('scan_response', {'success': False, 'message': 'Invalid scanner token'})
+                socketio.emit('scan_response', {'success': False, 'message': 'Invalid scanner token'}, to=sid)
                 return
         else:
-            emit('scan_response', {'success': False, 'message': 'Not authenticated'})
+            socketio.emit('scan_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
     
     # Block weekend scans (Saturday=5, Sunday=6)
     today = date.today()
     if today.weekday() >= 5:
-        emit('scan_response', {'success': False, 'message': 'Scanning not allowed on weekends'})
+        socketio.emit('scan_response', {'success': False, 'message': 'Scanning not allowed on weekends'}, to=sid)
         return
     
     fingerprint = data.get('fingerprint')
     if not fingerprint:
-        emit('scan_response', {'success': False, 'message': 'Missing fingerprint'})
+        socketio.emit('scan_response', {'success': False, 'message': 'Missing fingerprint'}, to=sid)
         return
     
     # Find student by fingerprint using normalized table
@@ -752,7 +746,7 @@ def handle_scan(data):
     row = cursor_students.fetchone()
     if not row:
         conn_students.close()
-        emit('scan_response', {'success': False, 'message': 'Student not found'})
+        socketio.emit('scan_response', {'success': False, 'message': 'Student not found'}, to=sid)
         return
     
     student = dict(row)
@@ -829,11 +823,11 @@ def handle_scan(data):
         conn_attendance.close()
 
     student_data = get_student_by_id(student_id)
-    emit('scan_response', {'success': True, 'student': student_data})
+    socketio.emit('scan_response', {'success': True, 'student': student_data}, to=sid)
     broadcast_data_change('scan', {'studentId': student_id})
 
 @socketio.on('get_filtered_students')
-def handle_get_filtered_students(data):
+async def handle_get_filtered_students(sid, data):
     """Deprecated WebSocket RPC for filtered students.
 
     Frontend now uses the HTTP endpoint `GET /api/students` for snapshots.
@@ -847,11 +841,11 @@ def handle_get_filtered_students(data):
         print('Hard-fail: get_filtered_students RPC removed; use HTTP GET /api/students')
     except Exception:
         pass
-    emit('filtered_students_response', {
+    socketio.emit('filtered_students_response', {
         'success': False,
         'message': 'Removed: use HTTP GET /api/students?date=...&statusFilter=...&gradeFilter=...',
         'students': []
-    })
+    }, to=sid)
 
 
 @app.route('/api/students', methods=['GET'])
@@ -925,13 +919,13 @@ def http_get_student_by_id(student_id):
 
 
 @socketio.on('get_static_filters')
-def handle_get_static_filters():
+async def handle_get_static_filters(sid):
     """Respond with server-side computed static filters via WebSocket."""
     try:
-        print(f"Received get_static_filters request from sid={request.sid}")  # type: ignore
+        print(f"Received get_static_filters request from sid={sid}")
         # Return canonical lists (from config) alongside DB-derived available lists.
         db_payload = compute_static_filters_from_db()
-        emit('get_static_filters_response', {
+        socketio.emit('get_static_filters_response', {
             'success': True,
             'grades': CANONICAL_GRADES,
             'classes': CANONICAL_CLASSES,
@@ -939,12 +933,12 @@ def handle_get_static_filters():
             'availableGrades': db_payload.get('grades', []),
             'availableClasses': db_payload.get('classes', []),
             'availableRoles': db_payload.get('roles', []),
-        })
+        }, to=sid)
     except Exception as e:
-        emit('get_static_filters_response', {'success': False, 'message': 'Error computing filters', 'error': str(e)})
+        socketio.emit('get_static_filters_response', {'success': False, 'message': 'Error computing filters', 'error': str(e)}, to=sid)
 
 @socketio.on('get_student_by_id')
-def handle_get_student_by_id(data):
+async def handle_get_student_by_id(sid, data):
     """Deprecated WebSocket RPC for fetching a student by ID.
 
     Use the HTTP endpoint `GET /api/students/<id>` instead. This handler
@@ -955,18 +949,18 @@ def handle_get_student_by_id(data):
         print('Hard-fail: get_student_by_id RPC removed; use HTTP GET /api/students/<id>')
     except Exception:
         pass
-    emit('student_by_id_response', {
+    socketio.emit('student_by_id_response', {
         'success': False,
         'message': 'Removed: use HTTP GET /api/students/<id>'
-    })
+    }, to=sid)
 
 @socketio.on('save_attendance')
-def handle_save_attendance(data):
+async def handle_save_attendance(sid, data):
     """Save attendance records for students via WebSocket. Strictly forbids weekend dates."""
-    if request.sid not in authenticated_sessions:  # type: ignore
-        emit('save_attendance_response', {'success': False, 'message': 'Not authenticated'})
+    if sid not in authenticated_sessions:
+        socketio.emit('save_attendance_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
         return
-    
+
     students = data.get('students', [])
     
     # Validate all record dates first: reject weekends or invalid dates before any DB writes
@@ -976,16 +970,16 @@ def handle_save_attendance(data):
         for record in student.get('attendanceHistory', []):
             date_str = record.get('date')
             if not date_str:
-                emit('save_attendance_response', {'success': False, 'message': f"Invalid or missing date for student {student_id}"})
+                socketio.emit('save_attendance_response', {'success': False, 'message': f"Invalid or missing date for student {student_id}"}, to=sid)
                 return
             try:
                 parsed_date = datetime.fromisoformat(date_str).date()
             except (ValueError, TypeError):
-                emit('save_attendance_response', {'success': False, 'message': f"Invalid date format for student {student_id}: {date_str}"})
+                socketio.emit('save_attendance_response', {'success': False, 'message': f"Invalid date format for student {student_id}: {date_str}"}, to=sid)
                 return
             # weekday(): Mon=0..Fri=4, Sat=5, Sun=6 -> reject if >=5
             if parsed_date.weekday() >= 5:
-                emit('save_attendance_response', {'success': False, 'message': 'Weekend attendance cannot be marked. Please select a weekday (Monday-Friday).'})
+                socketio.emit('save_attendance_response', {'success': False, 'message': 'Weekend attendance cannot be marked. Please select a weekday (Monday-Friday).'}, to=sid)
                 return
             
             supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
@@ -1020,7 +1014,7 @@ def handle_save_attendance(data):
     affected_ids = [student.get('id') for student in students]
     broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
     broadcast_summary_update(affected_ids)
-    emit('save_attendance_response', {'success': True})
+    socketio.emit('save_attendance_response', {'success': True}, to=sid)
 
 
 @app.route('/api/save-attendance', methods=['POST'])
@@ -1091,14 +1085,14 @@ def api_save_attendance():
     return jsonify({'success': True})
 
 @socketio.on('add_student')
-def handle_add_student(data):
+async def handle_add_student(sid, data):
     """Add a new student via WebSocket."""
-    if request.sid not in authenticated_sessions:  # type: ignore
-        emit('add_student_response', {'success': False, 'message': 'Not authenticated'})
+    if sid not in authenticated_sessions:
+        socketio.emit('add_student_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
         return
-    
+
     if not data:
-        emit('add_student_response', {'success': False, 'message': 'No data provided'})
+        socketio.emit('add_student_response', {'success': False, 'message': 'No data provided'}, to=sid)
         return
     
     conn_students = get_db_connection('students')
@@ -1149,18 +1143,18 @@ def handle_add_student(data):
     broadcast_data_change('student_added', {'studentId': next_id})
     broadcast_summary_update([next_id])
     # static filter pushes removed
-    emit('add_student_response', {'success': True, 'student': student})
+    socketio.emit('add_student_response', {'success': True, 'student': student}, to=sid)
 
 @socketio.on('remove_student')
-def handle_remove_student(data):
+async def handle_remove_student(sid, data):
     """Remove a student via WebSocket."""
-    if request.sid not in authenticated_sessions:  # type: ignore
-        emit('remove_student_response', {'success': False, 'message': 'Not authenticated'})
+    if sid not in authenticated_sessions:
+        socketio.emit('remove_student_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
         return
-    
+
     student_id = data.get('studentId')
     if not student_id:
-        emit('remove_student_response', {'success': False, 'message': 'Missing studentId'})
+        socketio.emit('remove_student_response', {'success': False, 'message': 'Missing studentId'}, to=sid)
         return
     
     conn_students = get_db_connection('students')
@@ -1180,19 +1174,19 @@ def handle_remove_student(data):
     broadcast_data_change('student_removed', {'studentId': student_id})
     broadcast_summary_update()  # Emit all summaries since student removed
     # static filter pushes removed
-    emit('remove_student_response', {'success': True})
+    socketio.emit('remove_student_response', {'success': True}, to=sid)
 
 @socketio.on('update_student')
-def handle_update_student(data):
+async def handle_update_student(sid, data):
     """Update a student's information via WebSocket."""
-    if request.sid not in authenticated_sessions:  # type: ignore
-        emit('update_student_response', {'success': False, 'message': 'Not authenticated'})
+    if sid not in authenticated_sessions:
+        socketio.emit('update_student_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
         return
-    
+
     student_id = data.get('studentId')
     update_data = data.get('data')
     if not student_id or not update_data:
-        emit('update_student_response', {'success': False, 'message': 'Missing studentId or data'})
+        socketio.emit('update_student_response', {'success': False, 'message': 'Missing studentId or data'}, to=sid)
         return
     
     conn_students = get_db_connection('students')
@@ -1203,7 +1197,7 @@ def handle_update_student(data):
     existing = cursor_students.fetchone()
     if not existing:
         conn_students.close()
-        emit('update_student_response', {'success': False, 'message': 'Student not found'})
+        socketio.emit('update_student_response', {'success': False, 'message': 'Student not found'}, to=sid)
         return
     
     existing_dict = dict(existing)
@@ -1279,61 +1273,61 @@ def handle_update_student(data):
     broadcast_data_change('student_updated', {'studentId': student_id})
     broadcast_summary_update([student_id])
     # static filter pushes removed
-    emit('update_student_response', {'success': True, 'student': student})
+    socketio.emit('update_student_response', {'success': True, 'student': student}, to=sid)
 
 @socketio.on('validate_password')
-def handle_validate_password(data):
+async def handle_validate_password(sid, data):
     """Validate a password for a role via WebSocket."""
     role = data.get('role')
     password = data.get('password')
-    
+
     if not role or not password:
-        emit('validate_password_response', {'valid': False})
+        socketio.emit('validate_password_response', {'valid': False}, to=sid)
         return
-    
+
     try:
         valid = validate_password(role, password)
-        emit('validate_password_response', {'valid': valid})
+        socketio.emit('validate_password_response', {'valid': valid}, to=sid)
     except Exception as e:
         print(f"Error validating password: {e}")
-        emit('validate_password_response', {'valid': False})
+        socketio.emit('validate_password_response', {'valid': False}, to=sid)
 
 @socketio.on('update_passwords')
-def handle_update_passwords(data):
+async def handle_update_passwords(sid, data):
     """Update passwords for roles via WebSocket."""
-    if request.sid not in authenticated_sessions:  # type: ignore
-        emit('update_passwords_response', {'success': False, 'message': 'Not authenticated'})
+    if sid not in authenticated_sessions:
+        socketio.emit('update_passwords_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
         return
-    
+
     passwords_to_update = data.get('passwords', {})
     authorizer_role = data.get('authorizerRole')
     authorizer_password = data.get('authorizerPassword')
-    
+
     # Validate authorizer
     if not validate_password(authorizer_role, authorizer_password):
-        emit('update_passwords_response', {'success': False, 'message': 'Unauthorized'})
+        socketio.emit('update_passwords_response', {'success': False, 'message': 'Unauthorized'}, to=sid)
         return
-    
+
     # Update passwords
     current_passwords = get_passwords()
     for role, new_password in passwords_to_update.items():
         if role in ['admin', 'moderator', 'dev']:
             current_passwords[role] = new_password
-    
+
     save_passwords(current_passwords)
-    
+
     broadcast_data_change('passwords_updated')
-    emit('update_passwords_response', {'success': True})
+    socketio.emit('update_passwords_response', {'success': True}, to=sid)
 
 @socketio.on('get_current_time')
-def handle_get_current_time():
+async def handle_get_current_time(sid):
     """Get current server time via WebSocket."""
     # Allow unauthenticated access
-    emit('current_time_response', {'time': datetime.now().isoformat()})
+    socketio.emit('current_time_response', {'time': datetime.now().isoformat()}, to=sid)
 
 
 @socketio.on('request_attendance_aggregate')
-def handle_request_attendance_aggregate(data):
+async def handle_request_attendance_aggregate(sid, data):
     """Compute attendance aggregates for Day/Week/Month/Year and emit response.
 
     Expects data: { range: 'day'|'week'|'month'|'year', grade: 'all' or grade number }
@@ -1615,7 +1609,7 @@ def handle_request_attendance_aggregate(data):
                     points.append({'label': label, 'percent': percent})
 
         else:
-            emit('attendance_aggregate_response', {'success': False, 'message': 'Invalid range'})
+            socketio.emit('attendance_aggregate_response', {'success': False, 'message': 'Invalid range'}, to=sid)
             return
 
         # Debug log: report sample of points and context to help frontend mapping issues
@@ -1623,9 +1617,9 @@ def handle_request_attendance_aggregate(data):
             print(f"attendance_aggregate_response -> range={rng} grade={grade} status={status} student_count={student_count} total_points={len(points)} sample_points={points[:3]}")
         except Exception:
             pass
-        emit('attendance_aggregate_response', {'success': True, 'range': rng, 'grade': grade, 'points': points})
+        socketio.emit('attendance_aggregate_response', {'success': True, 'range': rng, 'grade': grade, 'points': points}, to=sid)
     except Exception as e:
-        emit('attendance_aggregate_response', {'success': False, 'message': str(e)})
+        socketio.emit('attendance_aggregate_response', {'success': False, 'message': str(e)}, to=sid)
     finally:
         try:
             if conn_att:
@@ -1635,7 +1629,7 @@ def handle_request_attendance_aggregate(data):
 
 
 @socketio.on('request_attendance_trend')
-def handle_request_attendance_trend(data):
+async def handle_request_attendance_trend(sid, data):
     """Compute per-day attendance counts for a single student for a given month.
 
     Expects: { studentId: int, year: int, month: int }
@@ -1648,7 +1642,7 @@ def handle_request_attendance_trend(data):
         year = (data or {}).get('year')
         month = (data or {}).get('month')
         if not student_id or not year or not month:
-            emit('attendance_trend_response', {'success': False, 'message': 'Missing parameters'})
+            socketio.emit('attendance_trend_response', {'success': False, 'message': 'Missing parameters'}, to=sid)
             return
 
         # Normalize month/year
@@ -1658,7 +1652,7 @@ def handle_request_attendance_trend(data):
             if month < 1 or month > 12:
                 raise ValueError('Invalid month')
         except Exception:
-            emit('attendance_trend_response', {'success': False, 'message': 'Invalid year/month'})
+            socketio.emit('attendance_trend_response', {'success': False, 'message': 'Invalid year/month'}, to=sid)
             return
 
         import calendar as _cal
@@ -1774,10 +1768,10 @@ def handle_request_attendance_trend(data):
 
         conn_att.close()
         print(f"attendance_trend_response -> student={student_id} year={year} month={month} points={len(points)}")
-        emit('attendance_trend_response', {'success': True, 'studentId': int(student_id), 'year': year, 'month': month, 'points': points})
+        socketio.emit('attendance_trend_response', {'success': True, 'studentId': int(student_id), 'year': year, 'month': month, 'points': points}, to=sid)
     except Exception as e:
         try:
-            emit('attendance_trend_response', {'success': False, 'message': str(e)})
+            socketio.emit('attendance_trend_response', {'success': False, 'message': str(e)}, to=sid)
         except Exception:
             pass
 
@@ -1794,7 +1788,7 @@ register_endpoints(app, socketio, {
     'get_attendance_summary': get_attendance_summary,
     'broadcast_data_change': broadcast_data_change,
     'broadcast_summary_update': broadcast_summary_update,
-    'emit': emit,
+    'emit': socketio.emit,
     'authenticated_sessions': authenticated_sessions
 })
 
@@ -1838,4 +1832,13 @@ if __name__ == '__main__':
         watcher.start()
     except Exception:
         pass
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+    try:
+        import uvicorn
+        # Run the ASGI app (which wraps the Flask WSGI app) under uvicorn for asyncio support
+        uvicorn.run(asgi_app, host='0.0.0.0', port=5000)
+    except Exception:
+        # Fallback for environments without uvicorn: try the Socket.IO runner
+        try:
+            socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+        except Exception:
+            print('Failed to start server with uvicorn and socketio.run')
