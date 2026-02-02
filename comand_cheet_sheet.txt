@@ -1,0 +1,11 @@
+# mini npm comandcheet sheet
+
+clear && npm run dev-next
+
+clear && npm run dev-backend
+
+clear && npm run typecheck
+
+clear && npm run dev
+
+# End of file

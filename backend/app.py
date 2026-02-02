@@ -4,7 +4,7 @@ Handles all API endpoints and real-time updates via WebSocket.
 """
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit, disconnect
+import socketio as socketio_module
 import sqlite3
 import json
 from datetime import datetime, date, timezone
@@ -37,10 +37,16 @@ else:
     ssl_context = None
     print('SSL certificates not found in backend/certificates. Starting without TLS (HTTP).')
 
-# Use asyncio mode for Flask-SocketIO to avoid threading/blocking issues
-# with Python 3.14 and to provide a proper async event loop for websocket
-# handling. This requires an asyncio-capable python-socketio installation.
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='asyncio')
+# Create an Async Socket.IO server and wrap the Flask WSGI app in an ASGI app.
+# We create the AsyncServer via the python-socketio package and then build
+# an ASGI application so we can run the whole app with an ASGI server
+# (uvicorn). This avoids the "Invalid async_mode specified" error and
+# gives a proper asyncio-based runtime.
+sio = socketio_module.AsyncServer(async_mode='asyncio', cors_allowed_origins="*")
+asgi_app = socketio_module.ASGIApp(sio, wsgi_app=app)
+# Keep the historical name `socketio` for in-file references (handlers,
+# emit helpers) by pointing it at the AsyncServer instance.
+socketio = sio
 
 
 @app.errorhandler(Exception)
@@ -125,26 +131,33 @@ if os.environ.get('DEV_FORCE_FULL_ACCESS') == '1':
 def broadcast_data_change(event_type: str, data: Optional[dict] = None):
     """Broadcast data changes to all authenticated WebSocket clients."""
     try:
-        print(f"[broadcast] emitting data_changed -> type={event_type} data_keys={list((data or {}).keys())}")
+        print(f"[broadcast] scheduling data_changed -> type={event_type} data_keys={list((data or {}).keys())}")
     except Exception:
         pass
     payload = {'type': event_type, 'data': data or {}}
-    try:
-        # Prefer explicit broadcast when supported
-        socketio.emit('data_changed', payload, namespace='/', broadcast=True)
-    except TypeError:
-        # Older/newer python-socketio server implementations may not accept
-        # the `broadcast` kwarg. Retry without it to reach all clients.
+
+    async def _emit(payload):
         try:
-            socketio.emit('data_changed', payload, namespace='/')
+            await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
+        except TypeError:
+            try:
+                await socketio.emit('data_changed', payload, namespace='/')
+            except Exception as e:
+                try:
+                    print(f"[broadcast] failed to emit data_changed: {e}")
+                except Exception:
+                    pass
         except Exception as e:
             try:
                 print(f"[broadcast] failed to emit data_changed: {e}")
             except Exception:
                 pass
+
+    try:
+        socketio.start_background_task(_emit, payload)
     except Exception as e:
         try:
-            print(f"[broadcast] failed to emit data_changed: {e}")
+            print(f"[broadcast] failed to schedule data_changed task: {e}")
         except Exception:
             pass
 
@@ -164,23 +177,33 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
                 'summary': summary
             })
         try:
-            print(f"[broadcast] emitting summary_update -> summaries_count={len(summaries)}")
+            print(f"[broadcast] scheduling summary_update -> summaries_count={len(summaries)}")
         except Exception:
             pass
         payload = {'summaries': summaries}
-        try:
-            socketio.emit('summary_update', payload, namespace='/', broadcast=True)
-        except TypeError:
+
+        async def _emit_summary(payload):
             try:
-                socketio.emit('summary_update', payload, namespace='/')
+                await socketio.emit('summary_update', payload, namespace='/', broadcast=True)
+            except TypeError:
+                try:
+                    await socketio.emit('summary_update', payload, namespace='/')
+                except Exception as e:
+                    try:
+                        print(f"[broadcast] failed to emit summary_update: {e}")
+                    except Exception:
+                        pass
             except Exception as e:
                 try:
                     print(f"[broadcast] failed to emit summary_update: {e}")
                 except Exception:
                     pass
+
+        try:
+            socketio.start_background_task(_emit_summary, payload)
         except Exception as e:
             try:
-                print(f"[broadcast] failed to emit summary_update: {e}")
+                print(f"[broadcast] failed to schedule summary_update task: {e}")
             except Exception:
                 pass
 
