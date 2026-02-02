@@ -281,8 +281,29 @@ export async function downloadStudentAttendanceSummaryAsCsv(student: any): Promi
 }
 
 export async function getStudentSummary(studentId: number) {
-  const result = await wsClient.getStudentSummary(studentId);
-  return result;
+  // Prefer WebSocket RPC but gracefully fall back to HTTP when WS is unavailable.
+  try {
+    const result = await wsClient.getStudentSummary(studentId);
+    return result;
+  } catch (wsErr) {
+    console.debug('wsClient.getStudentSummary failed, falling back to HTTP:', wsErr);
+    // Fallback: fetch single student and full student list via HTTP and compute summary locally
+    try {
+      const studentResp = await fetchAPI(`/api/students/${studentId}`);
+      const allResp = await fetchAPI(`/api/students`);
+      const student = studentResp?.student;
+      const allStudents = allResp?.students || [];
+      if (!student) return { success: false, message: 'Student not found (HTTP fallback)' };
+
+      // Lazy-import the client-side summary calculator to avoid circular imports at module load
+      const utils = await import('./utils');
+      const summary = utils.getAttendanceSummary(student as any, allStudents as any[]);
+      return { success: true, studentId, summary };
+    } catch (httpErr) {
+      console.error('getStudentSummary HTTP fallback failed:', httpErr);
+      throw httpErr;
+    }
+  }
 }
 
 export async function getAllStudentsSummaries() {
