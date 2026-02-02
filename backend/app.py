@@ -1847,13 +1847,25 @@ if __name__ == '__main__':
         watcher.start()
     except Exception:
         pass
+    # Default: run the Flask/Socket.IO server via the synchronous `socketio.run`
+    # This avoids ASGI/engineio signature mismatches that appear with some
+    # local dependency combinations. If you explicitly want the ASGI/uvicorn
+    # path (for production async workloads), set the environment variable
+    # `FORCE_ASGI=1` and ensure your environment's packages are compatible.
     try:
-        import uvicorn
-        # Run the ASGI app (which wraps the Flask WSGI app) under uvicorn for asyncio support
-        uvicorn.run(asgi_app, host='0.0.0.0', port=5000)
-    except Exception:
-        # Fallback for environments without uvicorn: try the Socket.IO runner
+        if os.environ.get('FORCE_ASGI') == '1' and WsgiToAsgi is not None:
+            import uvicorn
+            print('FORCE_ASGI=1 and WsgiToAsgi available — starting uvicorn ASGI server')
+            uvicorn.run(asgi_app, host='0.0.0.0', port=5000)
+        else:
+            print('Starting Flask WSGI server (HTTP-only, no WebSocket)')
+            # Run the plain Flask development server to ensure HTTP endpoints
+            # are available for the frontend fallback. This intentionally does
+            # not start the async Socket.IO server; use FORCE_ASGI=1 to run
+            # uvicorn/ASGI if you need WebSocket support and have compatible deps.
+            app.run(host='0.0.0.0', port=5000)
+    except Exception as e:
         try:
-            socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
+            print(f'Server start failed: {e}; exiting')
         except Exception:
-            print('Failed to start server with uvicorn and socketio.run')
+            pass

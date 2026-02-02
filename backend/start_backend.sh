@@ -2,6 +2,10 @@
 # Start script for Flask backend
 
 echo "Starting Flask backend..."
+# Ensure script runs from its own directory so relative paths (requirements, app.py)
+# resolve correctly when the script is invoked from the repo root.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 echo "Installing dependencies if needed..."
 
 # Check if virtual environment exists
