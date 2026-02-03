@@ -723,6 +723,12 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     if (!student) return;
     const year = displayedMonth.getFullYear();
     const month = displayedMonth.getMonth();
+    const monthOne = month + 1;
+    const key = formatTrendKey(student.id, year, monthOne);
+    // If the dialog was just opened, force a fresh server fetch by clearing cache.
+    if (open) {
+      attendanceTrendCache.current.delete(key);
+    }
     // Always fetch the server-provided attendance trend for the displayed month
     // (calendar should rely only on authoritative server data keyed by student.id)
     fetchAttendanceTrendForMonth(student.id, year, month);
