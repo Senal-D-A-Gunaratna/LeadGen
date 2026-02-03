@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { MonthYearSelector } from "@/components/ui/month-year-selector";
 import { wsClient } from "@/lib/websocket-client";
+import { syncClient } from "@/lib/sync-client";
 import type { Student, AttendanceStatus, PrefectRole } from "@/lib/types";
 import { Mail, Phone, GraduationCap, Trash2, Loader2, Save, Pencil, UserCheck, Clock, UserX, Edit, Download, FileText, Fingerprint, File as FileIcon, ChevronLeft, ChevronRight, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
 import WhatsAppIcon from "@/icons/WhatsAppIcon";
@@ -577,12 +578,40 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       await fetchMonthAggregate(displayedMonth);
       if (!mounted) return;
     })();
-    const onDataChanged = () => fetchMonthAggregate(displayedMonth);
+    const onDataChanged = (payload?: any) => {
+      // Only refresh month aggregate for relevant backend events
+      try {
+        const type = payload?.type || null;
+        if (!type) {
+          // unknown payload -> safe refresh
+          fetchMonthAggregate(displayedMonth);
+          return;
+        }
+        const relevantTypes = ['attendance_db_changed', 'attendance_updated', 'student_updated', 'student_added', 'student_removed'];
+        if (relevantTypes.includes(type)) {
+          fetchMonthAggregate(displayedMonth);
+        }
+      } catch (e) {
+        // fallback: refresh
+        fetchMonthAggregate(displayedMonth);
+      }
+    };
+
     const onSummaryUpdate = () => fetchMonthAggregate(displayedMonth);
+
     try { wsClient.on('data_changed', onDataChanged); wsClient.on('summary_update', onSummaryUpdate); } catch (e) {}
+    // Also listen to centralized sync client for higher-level events
+    const syncListener = (event: string, payload?: any) => {
+      if (event === 'all_summaries' || event === 'students_refreshed') {
+        fetchMonthAggregate(displayedMonth);
+      }
+    };
+    try { syncClient.on(syncListener); } catch (e) {}
+
     return () => {
       mounted = false;
       try { wsClient.off('data_changed', onDataChanged); wsClient.off('summary_update', onSummaryUpdate); } catch (e) {}
+      try { syncClient.off(syncListener); } catch (e) {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMonth]);
@@ -811,7 +840,29 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     }
 
     fetchSummary();
-    return () => { cancelled = true };
+    const syncListener = (event: string, payload?: any) => {
+      try {
+        if (!student) return;
+        if (event === 'student_summary' && payload?.studentId === student.id) {
+          // Remote summary updated for this student
+          fetchSummary();
+        }
+        if ((event === 'attendance_updated' || event === 'data_changed') && Array.isArray(payload?.data?.affectedIds)) {
+          const ids: number[] = payload.data.affectedIds;
+          if (ids.includes(student.id)) {
+            // Re-fetch both trend and summary for the displayed month
+            const year = displayedMonth.getFullYear();
+            const monthZero = displayedMonth.getMonth();
+            fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            fetchSummary();
+          }
+        }
+      } catch (e) {}
+    };
+
+    try { syncClient.on(syncListener); } catch (e) {}
+
+    return () => { cancelled = true; try { syncClient.off(syncListener); } catch (e) {} };
   }, [student, studentSummaries, updateStudentSummaries]);
 
   // Ensure we fetch attendance for the currently selected `displayedMonth` whenever
