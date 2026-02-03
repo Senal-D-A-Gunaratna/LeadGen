@@ -995,6 +995,142 @@ def http_get_student_attendance_month(student_id):
         return jsonify({'success': False, 'message': 'Error fetching attendance', 'error': str(e)}), 500
 
 
+@app.route('/api/students/<int:student_id>/attendance/trend', methods=['GET'])
+def http_get_student_attendance_trend(student_id):
+    """HTTP endpoint that returns per-day attendance points for a student for a given month.
+
+    Query params:
+      - month: required YYYY-MM
+
+    Returns: { success: True, studentId, year, month, points: [ { date, on_time, late, absent, arrival_ts, arrival_local, arrival_minutes } ] }
+    """
+    try:
+        month = request.args.get('month')
+        if not month:
+            return jsonify({'success': False, 'message': 'Missing month parameter (expected YYYY-MM)'}), 400
+
+        # Validate month
+        try:
+            from calendar import monthrange
+            year = int(month.split('-')[0])
+            mon = int(month.split('-')[1])
+            if mon < 1 or mon > 12:
+                raise ValueError()
+        except Exception:
+            return jsonify({'success': False, 'message': 'Invalid month format (expected YYYY-MM)'}), 400
+
+        last_day = monthrange(year, mon)[1]
+        start_date = date(year, mon, 1)
+        end_date = date(year, mon, last_day)
+
+        conn_att = get_db_connection('attendance')
+        cur = conn_att.cursor()
+        cur.execute("PRAGMA table_info(attendance_records)")
+        cols = [r['name'] for r in cur.fetchall()]
+        has_check_in = 'check_in_time' in cols
+
+        if has_check_in:
+            cur.execute('''
+                SELECT date,
+                       SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                       SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                       SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
+                       MIN(check_in_time) as arrival_iso
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                GROUP BY date
+                ORDER BY date ASC
+            ''', (int(student_id), start_date.isoformat(), end_date.isoformat()))
+        else:
+            cur.execute('''
+                SELECT date,
+                       SUM(CASE WHEN status = 'on time' THEN 1 ELSE 0 END) as on_time,
+                       SUM(CASE WHEN status = 'late' THEN 1 ELSE 0 END) as late,
+                       SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as absent,
+                       NULL as arrival_iso
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                GROUP BY date
+                ORDER BY date ASC
+            ''', (int(student_id), start_date.isoformat(), end_date.isoformat()))
+
+        fetched = cur.fetchall()
+        rows = {}
+        for r in fetched:
+            arrival_iso = r.get('arrival_iso') if isinstance(r, dict) else r['arrival_iso']
+            arrival_ts = None
+            arrival_local = None
+            arrival_minutes = None
+            if arrival_iso:
+                try:
+                    arrival_dt = datetime.fromisoformat(arrival_iso)
+                    arrival_ts = int(arrival_dt.timestamp())
+                    arrival_local = arrival_dt.strftime('%H:%M')
+                    arrival_minutes = arrival_dt.hour * 60 + arrival_dt.minute
+                except Exception:
+                    arrival_ts = None
+                    arrival_local = None
+                    arrival_minutes = None
+            rows[r['date']] = {
+                'on_time': int(r['on_time'] or 0),
+                'late': int(r['late'] or 0),
+                'absent': int(r['absent'] or 0),
+                'arrival_ts': arrival_ts,
+                'arrival_local': arrival_local,
+                'arrival_minutes': arrival_minutes,
+            }
+
+        # Build list of school dates using school_days table if present
+        try:
+            cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+            sd_rows = cur.fetchall()
+            school_dates = [r['date'] for r in sd_rows]
+        except Exception:
+            # Fallback to weekdays
+            from calendar import monthrange as _mr
+            ld = _mr(year, mon)[1]
+            school_dates = []
+            for day in range(1, ld + 1):
+                d = date(year, mon, day)
+                if d.weekday() >= 5:
+                    continue
+                school_dates.append(d.isoformat())
+
+        points = []
+        for iso_date in school_dates:
+            if iso_date in rows:
+                counts = rows[iso_date]
+                points.append({
+                    'date': iso_date,
+                    'on_time': counts.get('on_time', 0),
+                    'late': counts.get('late', 0),
+                    'absent': counts.get('absent', 0),
+                    'arrival_ts': counts.get('arrival_ts'),
+                    'arrival_local': counts.get('arrival_local'),
+                    'arrival_minutes': counts.get('arrival_minutes'),
+                })
+            else:
+                points.append({
+                    'date': iso_date,
+                    'on_time': 0,
+                    'late': 0,
+                    'absent': 1,
+                    'arrival_ts': None,
+                    'arrival_local': None,
+                    'arrival_minutes': None,
+                })
+
+        conn_att.close()
+        return jsonify({'success': True, 'studentId': int(student_id), 'year': year, 'month': mon, 'points': points})
+    except Exception as e:
+        try:
+            if conn_att:
+                conn_att.close()
+        except Exception:
+            pass
+        return jsonify({'success': False, 'message': 'Error computing trend', 'error': str(e)}), 500
+
+
 @socketio.on('get_static_filters')
 async def handle_get_static_filters(sid):
     """Respond with server-side computed static filters via WebSocket."""

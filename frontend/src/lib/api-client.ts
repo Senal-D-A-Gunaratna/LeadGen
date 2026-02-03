@@ -147,6 +147,62 @@ export async function getStudentMonthlyAttendance(studentId: number, month?: str
   }
 }
 
+export async function getStudentAttendanceTrend(studentId: number, month: string) {
+  // month format: YYYY-MM
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  try {
+    const result = await fetchAPI(`/api/students/${studentId}/attendance/trend${query}`);
+    // Normalize to { points: [...] }
+    return result.points || [];
+  } catch (err) {
+    // Fallback: build points client-side from monthly attendance records
+    try {
+      const monthHist = await getStudentMonthlyAttendance(studentId, month);
+      const year = Number(month.split('-')[0]);
+      const mon = Number(month.split('-')[1]);
+      const daysInMonth = new Date(year, mon, 0).getDate();
+      const points: any[] = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dd = String(d).padStart(2, '0');
+        const mm = String(mon).padStart(2, '0');
+        const label = `${year}-${mm}-${dd}`;
+        const records = (monthHist || []).filter((r: any) => r.date === label);
+        let on_time = 0;
+        let late = 0;
+        let absent = 0;
+        let arrival_ts = null;
+        let arrival_local = null;
+        let arrival_minutes = null;
+        if (records.length > 0) {
+          for (const r of records) {
+            if (r.status === 'on time') on_time += 1;
+            else if (r.status === 'late') late += 1;
+            if (!arrival_ts && r.checkInTime) {
+              try {
+                const dObj = new Date(r.checkInTime);
+                arrival_ts = Math.floor(dObj.getTime() / 1000);
+                arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
+              } catch (e) {}
+            }
+          }
+          absent = 0;
+        } else {
+          const dObj = new Date(label + 'T00:00:00');
+          const day = dObj.getDay();
+          absent = (day > 0 && day < 6) ? 1 : 0;
+        }
+        points.push({ date: label, on_time, late, absent, arrival_ts, arrival_local, arrival_minutes });
+      }
+      return points;
+    } catch (e) {
+      throw err;
+    }
+  }
+}
+
 export async function saveAttendance(arg: any) {
   // Accept an array of students and POST to backend. Do NOT request weekend saves from client.
   const students = Array.isArray(arg) ? arg : (arg && arg.students) ? arg.students : [];
