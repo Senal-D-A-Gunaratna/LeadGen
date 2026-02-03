@@ -1192,7 +1192,7 @@ async def handle_save_attendance(sid, data):
                 return
             # weekday(): Mon=0..Fri=4, Sat=5, Sun=6 -> reject if >=5
             if parsed_date.weekday() >= 5:
-                socketio.emit('save_attendance_response', {'success': False, 'message': 'Weekend attendance cannot be marked. Please select a weekday (Monday-Friday).'}, to=sid)
+                socketio.emit('save_attendance_response', {'success': False, 'message': 'Weekend attendance cannot be marked, Please select a weekday (Monday-Friday)'}, to=sid)
                 return
             
             supplied_check_in = record.get('checkInTime') or record.get('check_in_time')

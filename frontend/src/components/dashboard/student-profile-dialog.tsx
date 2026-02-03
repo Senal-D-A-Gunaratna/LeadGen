@@ -603,127 +603,84 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       return;
     }
 
-    console.debug('fetchAttendanceTrendForMonth', { studentId, year, monthZeroBased, monthOne });
     setTrendLoading(true);
     setTrendError(false);
 
-    let attempt = 0;
-    const maxAttempts = 3;
-    const delays = [500, 1000, 2000];
-    while (attempt < maxAttempts) {
+    try {
+      const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
+      const httpPoints = await getStudentAttendanceTrend(studentId, monthStr);
+      const points = (httpPoints || []).map((p: any) => {
+        const arrival_ts = p.arrival_ts || null;
+        let arrival_minutes: number | null = p.arrival_minutes ?? null;
+        let arrival_local: string | null = p.arrival_local ?? null;
+        if ((arrival_minutes === null || arrival_minutes === undefined) && arrival_ts) {
+          try {
+            const d = new Date(arrival_ts * 1000);
+            arrival_minutes = d.getHours() * 60 + d.getMinutes();
+            arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } catch (e) {
+            arrival_minutes = null;
+            arrival_local = null;
+          }
+        }
+        return { ...p, arrival_minutes, arrival_local };
+      });
+      attendanceTrendCache.current.set(key, points);
+      setAttendanceTrend(points);
+      setTrendLoading(false);
+      setTrendError(false);
+      return;
+    } catch (err) {
+      console.error('Failed to fetch attendance trend via HTTP', err);
+      // Fallback: compute daily points from monthly attendance records
       try {
-        const resp = await wsClient.getStudentAttendanceTrend(studentId, year, monthOne);
-        // normalize points: ensure every day present (server should do this but be defensive)
-        const pointsRaw = resp.points || [];
-        // Convert server arrival_ts (epoch seconds) to minutes-since-midnight and local time string
-        const points = (pointsRaw || []).map((p: any) => {
-          const arrival_ts = p.arrival_ts || null;
+        const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
+        const monthHist = await getStudentMonthlyAttendance(studentId, monthStr);
+        const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
+        const fallbackPoints: any[] = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dd = String(d).padStart(2, '0');
+          const mm = String(monthOne).padStart(2, '0');
+          const label = `${year}-${mm}-${dd}`;
+          const records = (monthHist || []).filter((r: any) => r.date === label);
+          let on_time = 0;
+          let late = 0;
+          let absent = 0;
           let arrival_minutes: number | null = null;
           let arrival_local: string | null = null;
-          if (arrival_ts) {
-            try {
-              const d = new Date(arrival_ts * 1000);
-              arrival_minutes = d.getHours() * 60 + d.getMinutes();
-              arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            } catch (e) {
-              arrival_minutes = null;
-              arrival_local = null;
+          if (records.length > 0) {
+            for (const r of records) {
+              if (r.status === 'on time') on_time += 1;
+              else if (r.status === 'late') late += 1;
+              if (!arrival_minutes && r.checkInTime) {
+                try {
+                  const dObj = new Date(r.checkInTime);
+                  if (!isNaN(dObj.getTime())) {
+                    arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
+                    arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  }
+                } catch (e) {}
+              }
             }
+            absent = 0;
+          } else {
+            const dObj = parseDate(label);
+            const day = dObj.getDay();
+            absent = (day > 0 && day < 6) ? 1 : 0;
           }
-          return { ...p, arrival_minutes, arrival_local };
-        });
+          fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
+        }
+        const points = fallbackPoints.map((p: any) => ({ ...p }));
         attendanceTrendCache.current.set(key, points);
         setAttendanceTrend(points);
         setTrendLoading(false);
         setTrendError(false);
         return;
-      } catch (err) {
-        attempt += 1;
-        console.error(`attendance trend fetch attempt ${attempt} failed`, err);
-        if (attempt >= maxAttempts) {
-          console.warn('Failed to fetch attendance trend after retries', err);
-          // First try the new HTTP trend endpoint
-          try {
-            const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
-            const httpPoints = await getStudentAttendanceTrend(studentId, monthStr);
-            const normalized = (httpPoints || []).map((p: any) => {
-              // ensure arrival_minutes/local are present
-              let arrival_minutes = p.arrival_minutes ?? p.arrival_minutes ?? null;
-              let arrival_local = p.arrival_local ?? null;
-              if (!arrival_minutes && p.arrival_ts) {
-                try {
-                  const d = new Date(p.arrival_ts * 1000);
-                  arrival_minutes = d.getHours() * 60 + d.getMinutes();
-                  arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                } catch (e) { arrival_minutes = null; arrival_local = null; }
-              }
-              return { ...p, arrival_minutes, arrival_local };
-            });
-            attendanceTrendCache.current.set(key, normalized);
-            setAttendanceTrend(normalized);
-            setTrendLoading(false);
-            setTrendError(false);
-            return;
-          } catch (httpErr) {
-            console.warn('HTTP trend endpoint fallback failed, falling back to monthly records', httpErr);
-          }
-
-          // Fallback: compute daily points from monthly attendance records
-          try {
-            const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
-            const monthHist = await getStudentMonthlyAttendance(studentId, monthStr);
-            const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
-            const fallbackPoints: any[] = [];
-            for (let d = 1; d <= daysInMonth; d++) {
-              const dd = String(d).padStart(2, '0');
-              const mm = String(monthOne).padStart(2, '0');
-              const label = `${year}-${mm}-${dd}`;
-              const records = (monthHist || []).filter((r: any) => r.date === label);
-              let on_time = 0;
-              let late = 0;
-              let absent = 0;
-              let arrival_minutes: number | null = null;
-              let arrival_local: string | null = null;
-              if (records.length > 0) {
-                for (const r of records) {
-                  if (r.status === 'on time') on_time += 1;
-                  else if (r.status === 'late') late += 1;
-                  // Prefer explicit checkInTime (ISO) if provided
-                  if (!arrival_minutes && r.checkInTime) {
-                    try {
-                      const d = new Date(r.checkInTime);
-                      if (!isNaN(d.getTime())) {
-                        arrival_minutes = d.getHours() * 60 + d.getMinutes();
-                        arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                      }
-                    } catch (e) {}
-                  }
-                }
-                // presence recorded -> not absent
-                absent = 0;
-              } else {
-                const dObj = parseDate(label);
-                const day = dObj.getDay();
-                // Weekdays (Mon-Fri) without a record are treated as absent
-                absent = (day > 0 && day < 6) ? 1 : 0;
-              }
-              fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
-            }
-            const points = fallbackPoints.map((p: any) => ({ ...p }));
-            attendanceTrendCache.current.set(key, points);
-            setAttendanceTrend(points);
-            setTrendLoading(false);
-            setTrendError(false);
-            return;
-          } catch (fbErr) {
-            console.error('attendance trend HTTP fallback failed', fbErr);
-            setTrendError(true);
-            setTrendLoading(false);
-            return;
-          }
-        }
-        // wait before retry
-        await new Promise(r => setTimeout(r, delays[Math.min(attempt-1, delays.length-1)]));
+      } catch (fbErr) {
+        console.error('attendance trend fallback failed', fbErr);
+        setTrendError(true);
+        setTrendLoading(false);
+        return;
       }
     }
   };
