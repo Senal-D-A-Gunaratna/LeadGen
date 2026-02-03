@@ -687,15 +687,20 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
   // Subscribe to server push updates for attendance_trend to update cache
   useEffect(() => {
+    // WebSocket pushes are used only as a notification to refresh data.
+    // Invalidate the cached HTTP response for the pushed student/month
+    // and trigger an HTTP fetch so the frontend always uses authoritative HTTP data.
     const onPush = (data: any) => {
       if (!data || !data.success) return;
-      console.debug('attendance_trend push received', data);
-      const { studentId, year, month, points } = data;
+      console.debug('attendance_trend push received (invalidating cache)', data);
+      const { studentId, year, month } = data;
       const key = formatTrendKey(studentId, year, month);
-      attendanceTrendCache.current.set(key, points || []);
-      // If it's the currently displayed month for this dialog and same student, update view
-      if (student && student.id === studentId && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth()+1)) {
-        setAttendanceTrend(points || []);
+      attendanceTrendCache.current.delete(key);
+      // If the currently opened dialog is viewing this student/month, refetch via HTTP
+      if (student && student.id === studentId && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth() + 1)) {
+        // fetchAttendanceTrendForMonth will perform an HTTP fetch (and repopulate cache)
+        // month param to fetchAttendanceTrendForMonth expects zero-based month index
+        fetchAttendanceTrendForMonth(studentId, year, displayedMonth.getMonth());
       }
     };
     wsClient.on('attendance_trend', onPush);
