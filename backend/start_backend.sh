@@ -23,7 +23,9 @@ pip install -r requirements.txt
 # Initialize database (SQLite is the only source of truth)
 python -c "from database import init_database; init_database()"
 
-# Start Flask app
-echo "Starting Flask on http://0.0.0.0:5000"
+# Prefer ASGI/uvicorn to enable async WebSocket support (python-socketio AsyncServer)
+echo "Starting backend with ASGI (uvicorn) to enable WebSocket support"
+# Force the app to use the ASGI code path inside app.py
+export FORCE_ASGI=1
 python app.py
 

@@ -9,3 +9,16 @@ clear && npm run typecheck
 clear && npm run dev
 
 # End of file
+
+
+
+
+# show table schema
+sqlite3 backend/data/attendance.db ".schema school_days" ".schema attendance_records"
+
+# list school days for a month
+sqlite3 backend/data/attendance.db "SELECT date FROM school_days WHERE date LIKE '2026-02-%' ORDER BY date;"
+
+# show attendance records for a student/month
+sqlite3 backend/data/attendance.db "SELECT date, status, checkin_utc, arrival_ts FROM attendance_records WHERE student_id=14 AND date LIKE '2026-02-%' ORDER BY date;"
+
