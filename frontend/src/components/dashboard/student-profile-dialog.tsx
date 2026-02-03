@@ -820,6 +820,67 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     return () => { cancelled = true };
   }, [student, studentSummaries, updateStudentSummaries]);
 
+  // Ensure we fetch attendance for the currently selected `displayedMonth` whenever
+  // the dialog opens or the month selection changes. This provides an HTTP fallback
+  // (and warms the cache) so the calendar/trend can render even when WS fails.
+  useEffect(() => {
+    if (!open || !student) return;
+    const year = displayedMonth.getFullYear();
+    const monthZeroBased = displayedMonth.getMonth();
+    const monthOne = monthZeroBased + 1;
+    const key = formatTrendKey(student.id, year, monthOne);
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
+        const monthHist = await getStudentMonthlyAttendance(student.id, monthStr);
+        if (cancelled) return;
+        const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
+        const fallbackPoints: any[] = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dd = String(d).padStart(2, '0');
+          const mm = String(monthOne).padStart(2, '0');
+          const label = `${year}-${mm}-${dd}`;
+          const records = (monthHist || []).filter((r: any) => r.date === label);
+          let on_time = 0;
+          let late = 0;
+          let absent = 0;
+          let arrival_minutes: number | null = null;
+          let arrival_local: string | null = null;
+          if (records.length > 0) {
+            for (const r of records) {
+              if (r.status === 'on time') on_time += 1;
+              else if (r.status === 'late') late += 1;
+              if (!arrival_minutes && r.checkInTime) {
+                try {
+                  const dObj = new Date(r.checkInTime);
+                  if (!isNaN(dObj.getTime())) {
+                    arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
+                    arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  }
+                } catch (e) {}
+              }
+            }
+            absent = 0;
+          } else {
+            const dObj = parseDate(label);
+            const day = dObj.getDay();
+            absent = (day > 0 && day < 6) ? 1 : 0;
+          }
+          fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
+        }
+        const points = fallbackPoints.map((p: any) => ({ ...p }));
+        attendanceTrendCache.current.set(key, points);
+        setAttendanceTrend(points);
+      } catch (e) {
+        console.warn('HTTP monthly attendance fetch failed for displayedMonth', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [open, student, displayedMonth]);
+
   // Listen for server summary updates and refresh the displayed student summary
   useEffect(() => {
     if (!student) return;
