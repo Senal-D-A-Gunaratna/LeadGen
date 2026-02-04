@@ -675,48 +675,47 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
         const monthResp = await getStudentMonthlyAttendance(studentId, monthStr) as any;
         const monthHist = (monthResp && monthResp.attendanceHistory) ? monthResp.attendanceHistory : [];
-        const monthSchoolDays = (monthResp && monthResp.schoolDays) ? new Set<string>(monthResp.schoolDays) : new Set<string>();
-        const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
-        const fallbackPoints: any[] = [];
-          for (let d = 1; d <= daysInMonth; d++) {
-          const dd = String(d).padStart(2, '0');
-          const mm = String(monthOne).padStart(2, '0');
-          const label = `${year}-${mm}-${dd}`;
-          const records = (monthHist || []).filter((r: any) => r.date === label);
+        // Build points only for dates that have records in monthHist. Do not fabricate absent
+        // points for schoolDays or weekdays — leave those dates blank in the chart/calendar.
+        if (!monthHist || monthHist.length === 0) {
+          attendanceTrendCache.current.set(key, []);
+          setAttendanceTrend([]);
+          setTrendLoading(false);
+          setTrendError(false);
+          return;
+        }
+
+        const recordsByDate: Record<string, any[]> = {};
+        for (const r of monthHist) {
+          if (!r || !r.date) continue;
+          if (!recordsByDate[r.date]) recordsByDate[r.date] = [];
+          recordsByDate[r.date].push(r);
+        }
+
+        const sortedDates = Object.keys(recordsByDate).sort();
+        const points = sortedDates.map((label) => {
+          const records = recordsByDate[label];
           let on_time = 0;
           let late = 0;
-          let absent = 0;
           let arrival_minutes: number | null = null;
           let arrival_local: string | null = null;
-          if (records.length > 0) {
-            for (const r of records) {
-              if (r.status === 'on time') on_time += 1;
-              else if (r.status === 'late') late += 1;
-              if (!arrival_minutes && r.checkInTime) {
-                try {
-                  const dObj = new Date(r.checkInTime);
-                  if (!isNaN(dObj.getTime())) {
-                    arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
-                    arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  }
-                } catch (e) {}
-              }
-            }
-            absent = 0;
-          } else {
-            // Only mark absent if the server considers this date a school day.
-            if (monthSchoolDays.size > 0) {
-              absent = monthSchoolDays.has(label) ? 1 : 0;
-            } else {
-              // Fallback: treat weekdays as school days
-              const dObj = parseDate(label);
-              const day = dObj.getDay();
-              absent = (day > 0 && day < 6) ? 1 : 0;
+          for (const r of records) {
+            if (r.status === 'on time') on_time += 1;
+            else if (r.status === 'late') late += 1;
+            if (!arrival_minutes && r.checkInTime) {
+              try {
+                const dObj = new Date(r.checkInTime);
+                if (!isNaN(dObj.getTime())) {
+                  arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
+                  arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+              } catch (e) {}
             }
           }
-          fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
-        }
-        const points = fallbackPoints.map((p: any) => ({ ...p }));
+          const absent = 0; // since there are records for this date
+          return { label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local };
+        });
+
         attendanceTrendCache.current.set(key, points);
         setAttendanceTrend(points);
         setTrendLoading(false);
@@ -901,45 +900,43 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         const monthHist = (monthResp && monthResp.attendanceHistory) ? monthResp.attendanceHistory : [];
         const monthSchoolDays = (monthResp && monthResp.schoolDays) ? new Set<string>(monthResp.schoolDays) : new Set<string>();
         if (cancelled) return;
-        const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
-        const fallbackPoints: any[] = [];
-        for (let d = 1; d <= daysInMonth; d++) {
-          const dd = String(d).padStart(2, '0');
-          const mm = String(monthOne).padStart(2, '0');
-          const label = `${year}-${mm}-${dd}`;
-          const records = (monthHist || []).filter((r: any) => r.date === label);
+        // Build points only for dates that have records in monthHist. Do not fabricate
+        // absent points for other dates — leave them blank.
+        if (!monthHist || monthHist.length === 0) {
+          attendanceTrendCache.current.set(key, []);
+          setAttendanceTrend([]);
+          return;
+        }
+
+        const recordsByDate: Record<string, any[]> = {};
+        for (const r of monthHist) {
+          if (!r || !r.date) continue;
+          if (!recordsByDate[r.date]) recordsByDate[r.date] = [];
+          recordsByDate[r.date].push(r);
+        }
+
+        const sortedDates = Object.keys(recordsByDate).sort();
+        const points = sortedDates.map((label) => {
+          const records = recordsByDate[label];
           let on_time = 0;
           let late = 0;
-          let absent = 0;
           let arrival_minutes: number | null = null;
           let arrival_local: string | null = null;
-          if (records.length > 0) {
-            for (const r of records) {
-              if (r.status === 'on time') on_time += 1;
-              else if (r.status === 'late') late += 1;
-              if (!arrival_minutes && r.checkInTime) {
-                try {
-                  const dObj = new Date(r.checkInTime);
-                  if (!isNaN(dObj.getTime())) {
-                    arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
-                    arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  }
-                } catch (e) {}
-              }
-            }
-            absent = 0;
-          } else {
-            if (monthSchoolDays.size > 0) {
-              absent = monthSchoolDays.has(label) ? 1 : 0;
-            } else {
-              const dObj = parseDate(label);
-              const day = dObj.getDay();
-              absent = (day > 0 && day < 6) ? 1 : 0;
+          for (const r of records) {
+            if (r.status === 'on time') on_time += 1;
+            else if (r.status === 'late') late += 1;
+            if (!arrival_minutes && r.checkInTime) {
+              try {
+                const dObj = new Date(r.checkInTime);
+                if (!isNaN(dObj.getTime())) {
+                  arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
+                  arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+              } catch (e) {}
             }
           }
-          fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
-        }
-        const points = fallbackPoints.map((p: any) => ({ ...p }));
+          return { label, date: label, on_time, late, absent: 0, arrival_ts: null, arrival_minutes, arrival_local };
+        });
         attendanceTrendCache.current.set(key, points);
         setAttendanceTrend(points);
       } catch (e) {
