@@ -760,6 +760,8 @@ def api_attendance_aggregate():
         students_out = []
         grade_buckets = {}
         total_present_days = 0
+        total_on_time_days = 0
+        total_late_days = 0
         for s in filtered_students:
             records = s.get('attendanceHistory', [])
             on_time = 0
@@ -774,6 +776,8 @@ def api_attendance_aggregate():
             present = on_time + late
             absent = max(0, total_school_days - present) if total_school_days > 0 else 0
             total_present_days += present
+            total_on_time_days += on_time
+            total_late_days += late
             perc = round((present / total_school_days) * 100, 1) if total_school_days > 0 else 0
             students_out.append({
                 'id': s.get('id'),
@@ -795,7 +799,16 @@ def api_attendance_aggregate():
 
         # Build pie (overall percentages across all students and school days)
         if student_count == 0 or total_school_days == 0:
-            pie = { 'totalSchoolDays': total_school_days, 'studentCount': student_count, 'presentDays': 0, 'absentDays': 0, 'presencePercentage': 0, 'absencePercentage': 0 }
+            pie = {
+                'totalSchoolDays': total_school_days,
+                'studentCount': student_count,
+                'presentDays': 0,
+                'onTimeDays': 0,
+                'lateDays': 0,
+                'absentDays': 0,
+                'presencePercentage': 0,
+                'absencePercentage': 0
+            }
         else:
             total_possible = student_count * total_school_days
             absent_days = total_possible - total_present_days
@@ -803,6 +816,8 @@ def api_attendance_aggregate():
                 'totalSchoolDays': total_school_days,
                 'studentCount': student_count,
                 'presentDays': total_present_days,
+                'onTimeDays': total_on_time_days,
+                'lateDays': total_late_days,
                 'absentDays': absent_days,
                 'presencePercentage': round((total_present_days / total_possible) * 100, 1),
                 'absencePercentage': round((absent_days / total_possible) * 100, 1)
