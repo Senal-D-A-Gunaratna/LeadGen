@@ -22,3 +22,32 @@ sqlite3 backend/data/attendance.db "SELECT date FROM school_days WHERE date LIKE
 # show attendance records for a student/month
 sqlite3 backend/data/attendance.db "SELECT date, status, checkin_utc, arrival_ts FROM attendance_records WHERE student_id=14 AND date LIKE '2026-02-%' ORDER BY date;"
 
+
+
+# Check what's listening on 5000
+ss -ltnp | grep ':5000' || true
+
+# Kill whatever is on 5000 (if needed)
+lsof -ti:5000 | xargs -r kill
+
+# Start backend (legacy Flask by default)
+cd /home/Senal/leadgen/studio-main/backend
+./start_backend.sh &> /tmp/backend.log &
+
+# Or force FastAPI (if you want uvicorn)
+LEGACY_FLASK=0 ./start_backend.sh &> /tmp/backend.log &
+
+# Tail backend logs
+tail -f /tmp/backend.log
+
+# Run the aggregate curl (pretty-print with jq)
+HOST=http://localhost:5000
+curl -sS "${HOST}/api/attendance/aggregate?month=2026-02&grade=all&class=all&role=all&status=all" | jq .
+
+
+
+
+#ATTENDANCE HISTOY TAB API JASON
+
+
+curl -sS "http://localhost:5000/api/attendance/aggregate?month=2026-02&grade=all&class=all&role=all&status=all" | jq .
