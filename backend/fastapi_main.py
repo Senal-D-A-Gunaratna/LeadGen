@@ -136,67 +136,80 @@ async def create_backup(request: Request):
     is_frozen = data.get('isFrozen', False)
     if data_type not in ('students', 'attendance'):
         return JSONResponse({'error': 'Invalid dataType'}, status_code=400)
-    try:
-        if data_type == 'students':
-            conn_students = get_db_connection('students')
-            cursor_students = conn_students.cursor()
-            filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
-            cursor_students.execute('''
-                INSERT INTO student_backup_sets (filename, is_frozen)
-                VALUES (?, ?)
-            ''', (filename, 1 if is_frozen else 0))
-            backup_id = cursor_students.lastrowid
-            cursor_students.execute('''
-                SELECT id, name, grade, className, role, phone, whatsapp_no, email,
-                       specialRoles, notes, fingerprint1, fingerprint2, fingerprint3, fingerprint4
-                FROM students
-            ''')
-            for row in cursor_students.fetchall():
-                r = dict(row)
-                cursor_students.execute('''
-                    INSERT INTO student_backup_items (
-                        backup_id, student_id, name, grade, className, role,
-                        phone, whatsapp_no, email,
-                        specialRoles, notes, fingerprint1, fingerprint2, fingerprint3, fingerprint4
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    backup_id,
-                    r['id'], r['name'], r.get('grade'), r.get('className'), r.get('role'),
-                    r.get('phone', ''), r.get('whatsapp_no', ''), r.get('email', ''),
-                    r.get('specialRoles', ''), r.get('notes', ''),
-                    r.get('fingerprint1', ''), r.get('fingerprint2', ''), r.get('fingerprint3', ''), r.get('fingerprint4', '')
-                ))
-            conn_students.commit()
-            conn_students.close()
-        else:
-            conn_attendance = get_db_connection('attendance')
-            cursor_attendance = conn_attendance.cursor()
-            filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
-            cursor_attendance.execute('''
-                INSERT INTO attendance_backup_sets (filename, is_frozen)
-                VALUES (?, ?)
-            ''', (filename, 1 if is_frozen else 0))
-            backup_id = cursor_attendance.lastrowid
-            cursor_attendance.execute('''
-                SELECT student_id, date, status FROM attendance_records
-                ORDER BY student_id, date DESC
-            ''')
-            for record in cursor_attendance.fetchall():
-                cursor_attendance.execute('''
-                    INSERT INTO attendance_backup_items (backup_id, student_id, date, status)
-                    VALUES (?, ?, ?, ?)
-                ''', (backup_id, record['student_id'], record['date'], record['status']))
-            conn_attendance.commit()
-            conn_attendance.close()
+    # Retry loop to handle transient sqlite 'database is locked' errors
+    max_attempts = 6
+    for attempt in range(1, max_attempts + 1):
         try:
-            create_db_file_backup(data_type, timestamp)
-        except Exception:
-            pass
-        filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
-        return JSONResponse({'filename': filename})
-    except Exception as e:
-        return JSONResponse({'error': 'Failed to create backup', 'detail': str(e)}, status_code=500)
+            if data_type == 'students':
+                with DatabaseContext('students') as conn_students:
+                    cursor_students = conn_students.cursor()
+                    filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
+                    cursor_students.execute('''
+                        INSERT INTO student_backup_sets (filename, is_frozen)
+                        VALUES (?, ?)
+                    ''', (filename, 1 if is_frozen else 0))
+                    backup_id = cursor_students.lastrowid
+                    cursor_students.execute('''
+                        SELECT id, name, grade, className, role, phone, whatsapp_no, email,
+                               specialRoles, notes, fingerprint1, fingerprint2, fingerprint3, fingerprint4
+                        FROM students
+                    ''')
+                    rows = cursor_students.fetchall()
+                    for row in rows:
+                        r = dict(row)
+                        cursor_students.execute('''
+                            INSERT INTO student_backup_items (
+                                backup_id, student_id, name, grade, className, role,
+                                phone, whatsapp_no, email,
+                                specialRoles, notes, fingerprint1, fingerprint2, fingerprint3, fingerprint4
+                            )
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            backup_id,
+                            r['id'], r.get('name'), r.get('grade'), r.get('className'), r.get('role'),
+                            r.get('phone', ''), r.get('whatsapp_no', ''), r.get('email', ''),
+                            r.get('specialRoles', ''), r.get('notes', ''),
+                            r.get('fingerprint1', ''), r.get('fingerprint2', ''), r.get('fingerprint3', ''), r.get('fingerprint4', '')
+                        ))
+                    conn_students.commit()
+            else:
+                with DatabaseContext('attendance') as conn_attendance:
+                    cursor_attendance = conn_attendance.cursor()
+                    filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
+                    cursor_attendance.execute('''
+                        INSERT INTO attendance_backup_sets (filename, is_frozen)
+                        VALUES (?, ?)
+                    ''', (filename, 1 if is_frozen else 0))
+                    backup_id = cursor_attendance.lastrowid
+                    cursor_attendance.execute('''
+                        SELECT student_id, date, status FROM attendance_records
+                        ORDER BY student_id, date DESC
+                    ''')
+                    for record in cursor_attendance.fetchall():
+                        cursor_attendance.execute('''
+                            INSERT INTO attendance_backup_items (backup_id, student_id, date, status)
+                            VALUES (?, ?, ?, ?)
+                        ''', (backup_id, record['student_id'], record['date'], record['status']))
+                    conn_attendance.commit()
+
+            # Attempt filesystem-level copy; retry on transient errors
+            try:
+                create_db_file_backup(data_type, timestamp)
+            except sqlite3.OperationalError as e:
+                if 'locked' in str(e).lower() and attempt < max_attempts:
+                    time.sleep(0.2 * attempt)
+                    continue
+                # otherwise ignore filesystem copy errors
+            filename = f"{data_type}-backup-{timestamp}{'-FROZEN' if is_frozen else ''}.db"
+            return JSONResponse({'filename': filename})
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e).lower() and attempt < max_attempts:
+                time.sleep(0.15 * attempt)
+                continue
+            return JSONResponse({'error': 'Failed to create backup', 'detail': str(e)}, status_code=500)
+        except Exception as e:
+            return JSONResponse({'error': 'Failed to create backup', 'detail': str(e)}, status_code=500)
+    return JSONResponse({'error': 'Failed to create backup', 'detail': 'max retries exceeded'}, status_code=500)
 
 
 @fastapi_app.post('/api/download-backup')
