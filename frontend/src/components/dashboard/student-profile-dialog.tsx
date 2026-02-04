@@ -673,10 +673,12 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       // Fallback: compute daily points from monthly attendance records
       try {
         const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
-        const monthHist = await getStudentMonthlyAttendance(studentId, monthStr);
+        const monthResp = await getStudentMonthlyAttendance(studentId, monthStr) as any;
+        const monthHist = (monthResp && monthResp.attendanceHistory) ? monthResp.attendanceHistory : [];
+        const monthSchoolDays = (monthResp && monthResp.schoolDays) ? new Set<string>(monthResp.schoolDays) : new Set<string>();
         const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
         const fallbackPoints: any[] = [];
-        for (let d = 1; d <= daysInMonth; d++) {
+          for (let d = 1; d <= daysInMonth; d++) {
           const dd = String(d).padStart(2, '0');
           const mm = String(monthOne).padStart(2, '0');
           const label = `${year}-${mm}-${dd}`;
@@ -702,9 +704,15 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
             }
             absent = 0;
           } else {
-            const dObj = parseDate(label);
-            const day = dObj.getDay();
-            absent = (day > 0 && day < 6) ? 1 : 0;
+            // Only mark absent if the server considers this date a school day.
+            if (monthSchoolDays.size > 0) {
+              absent = monthSchoolDays.has(label) ? 1 : 0;
+            } else {
+              // Fallback: treat weekdays as school days
+              const dObj = parseDate(label);
+              const day = dObj.getDay();
+              absent = (day > 0 && day < 6) ? 1 : 0;
+            }
           }
           fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
         }
@@ -889,7 +897,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     (async () => {
       try {
         const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
-        const monthHist = await getStudentMonthlyAttendance(student.id, monthStr);
+        const monthResp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
+        const monthHist = (monthResp && monthResp.attendanceHistory) ? monthResp.attendanceHistory : [];
+        const monthSchoolDays = (monthResp && monthResp.schoolDays) ? new Set<string>(monthResp.schoolDays) : new Set<string>();
         if (cancelled) return;
         const daysInMonth = new Date(year, monthZeroBased + 1, 0).getDate();
         const fallbackPoints: any[] = [];
@@ -919,9 +929,13 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
             }
             absent = 0;
           } else {
-            const dObj = parseDate(label);
-            const day = dObj.getDay();
-            absent = (day > 0 && day < 6) ? 1 : 0;
+            if (monthSchoolDays.size > 0) {
+              absent = monthSchoolDays.has(label) ? 1 : 0;
+            } else {
+              const dObj = parseDate(label);
+              const day = dObj.getDay();
+              absent = (day > 0 && day < 6) ? 1 : 0;
+            }
           }
           fallbackPoints.push({ label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local });
         }

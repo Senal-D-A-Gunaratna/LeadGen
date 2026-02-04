@@ -133,14 +133,26 @@ export async function getStudentMonthlyAttendance(studentId: number, month?: str
   const query = params.toString() ? `?${params.toString()}` : '';
   try {
     const result = await fetchAPI(`/api/students/${studentId}/attendance${query}`);
-    return result.attendanceHistory || [];
+    // New backend returns both `attendanceHistory` and `schoolDays` for month requests.
+    return {
+      attendanceHistory: result.attendanceHistory || [],
+      schoolDays: result.schoolDays || []
+    };
   } catch (err) {
     // Fallback: fetch full student record and filter client-side
     try {
       const student = await getStudentById(studentId);
       const hist = (student && student.attendanceHistory) ? student.attendanceHistory : [];
-      if (!month) return hist;
-      return hist.filter((r: any) => typeof r.date === 'string' && r.date.startsWith(month));
+      if (!month) return { attendanceHistory: hist, schoolDays: [] };
+      const filtered = hist.filter((r: any) => typeof r.date === 'string' && r.date.startsWith(month));
+      // Best-effort fallback: compute schoolDays from weekday presence in history
+      const sdSet = new Set<string>();
+      for (const r of hist) {
+        try {
+          if (typeof r.date === 'string') sdSet.add(r.date);
+        } catch (e) {}
+      }
+      return { attendanceHistory: filtered, schoolDays: Array.from(sdSet) };
     } catch (e) {
       throw err;
     }
@@ -159,7 +171,8 @@ export async function getStudentAttendanceTrend(studentId: number, month: string
   } catch (err) {
     // Fallback: build points client-side from monthly attendance records
     try {
-      const monthHist = await getStudentMonthlyAttendance(studentId, month);
+      const monthHistResp = await getStudentMonthlyAttendance(studentId, month);
+      const monthHist = (monthHistResp && (monthHistResp as any).attendanceHistory) ? (monthHistResp as any).attendanceHistory : [];
       const year = Number(month.split('-')[0]);
       const mon = Number(month.split('-')[1]);
       const daysInMonth = new Date(year, mon, 0).getDate();
