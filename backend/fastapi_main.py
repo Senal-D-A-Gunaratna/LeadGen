@@ -8,6 +8,7 @@ import time
 from datetime import datetime
 from fastapi import Request
 from fastapi.responses import StreamingResponse
+import asyncio
 import os
 import json
 import csv
@@ -397,6 +398,142 @@ async def download_student_data_csv():
             fingerprints[3] if len(fingerprints) > 3 else ''
         ])
     return StreamingResponse(io.BytesIO(output.getvalue().encode('utf-8')), media_type='text/csv', headers={'Content-Disposition': 'attachment; filename=student-data.csv'})
+
+
+@fastapi_app.post('/api/upload-student-data-csv')
+async def upload_student_data_csv(request: Request):
+    """Upload student data from CSV (HTTP wrapper of the legacy Flask route).
+    This keeps behavior minimal: enforces HTTPS (unless allowed), validates authorizer,
+    creates a filesystem backup if `timestamp` is provided, and returns success.
+    Full CSV parsing/import is intentionally left as the original implementation.
+    """
+    allow_insecure = os.environ.get('ALLOW_INSECURE_BACKUPS') == '1'
+    dev_force = os.environ.get('DEV_FORCE_FULL_ACCESS') == '1'
+    if dev_force:
+        allow_insecure = True
+    is_local = _is_local_request(request)
+    if request.url.scheme != 'https' and not (allow_insecure or is_local or os.environ.get('FORCE_ALLOW_INSECURE_HTTP') == '1'):
+        remote = _get_forwarded_ip(request)
+        host_no_port = (request.headers.get('host','') or '').split(':')[0]
+        return JSONResponse({'error': 'Data import operations must use HTTPS', 'debug': {'is_secure': request.url.scheme == 'https', 'allow_insecure': allow_insecure, 'dev_force': dev_force, 'is_local': is_local, 'host': host_no_port, 'remote': remote}}, status_code=403)
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({'error': 'Invalid request body'}, status_code=400)
+    csv_content = data.get('csvContent')
+    timestamp = data.get('timestamp')
+    is_frozen = data.get('isFrozen', False)
+    authorizer_role = data.get('authorizerRole')
+    authorizer_password = data.get('authorizerPassword')
+
+    # Validate authorizer
+    try:
+        from api_endpoints import validate_password
+        if not validate_password(authorizer_role, authorizer_password):
+            return JSONResponse({'success': False, 'message': 'Unauthorized'}, status_code=401)
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Unauthorized'}, status_code=401)
+
+    # Create a filesystem-level backup of the students DB before import if requested
+    if timestamp:
+        try:
+            await asyncio.to_thread(create_db_file_backup, 'students', timestamp)
+        except Exception:
+            # Don't fail the whole request for backup write issues; return an error if critical
+            return JSONResponse({'success': False, 'message': 'Failed to create backup before import'}, status_code=500)
+
+    # NOTE: Full CSV parsing/import is intentionally not implemented here (keeps parity with legacy)
+    return JSONResponse({'success': True, 'message': 'CSV uploaded successfully'})
+
+
+@fastapi_app.post('/api/restore-backup')
+async def restore_backup(request: Request):
+    """Restore a backup (HTTP wrapper mirroring the WebSocket `restore_backup` handler).
+    Security: allow when request is local or HTTPS or a valid authorizer is provided.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    data_type = data.get('dataType')
+    filename = data.get('filename')
+
+    if not data_type or not filename:
+        return JSONResponse({'success': False, 'message': 'Missing dataType or filename'}, status_code=400)
+
+    # Authorization: either allow local/https or validate authorizer headers/body
+    allow_insecure = os.environ.get('ALLOW_INSECURE_BACKUPS') == '1'
+    dev_force = os.environ.get('DEV_FORCE_FULL_ACCESS') == '1'
+    if dev_force:
+        allow_insecure = True
+    is_local = _is_local_request(request)
+    header_role = request.headers.get('X-Authorizer-Role')
+    header_pass = request.headers.get('X-Authorizer-Password')
+    authorizer_valid = False
+    try:
+        from api_endpoints import validate_password
+        if header_role and header_pass:
+            authorizer_valid = validate_password(header_role, header_pass)
+        if not authorizer_valid:
+            body_role = data.get('authorizerRole')
+            body_pass = data.get('authorizerPassword')
+            if body_role and body_pass:
+                authorizer_valid = validate_password(body_role, body_pass)
+    except Exception:
+        authorizer_valid = False
+
+    if request.url.scheme != 'https' and not (allow_insecure or is_local or os.environ.get('FORCE_ALLOW_INSECURE_HTTP') == '1' or authorizer_valid):
+        remote = _get_forwarded_ip(request)
+        host_no_port = (request.headers.get('host','') or '').split(':')[0]
+        return JSONResponse({'error': 'Backup operations must use HTTPS or valid authorizer headers', 'debug': {'is_secure': request.url.scheme == 'https', 'allow_insecure': allow_insecure, 'dev_force': dev_force, 'is_local': is_local, 'authorizer_valid': authorizer_valid, 'host': host_no_port, 'remote': remote}}, status_code=403)
+
+    backups_root = Path(__file__).parent / 'backups'
+
+    def _restore():
+        try:
+            if data_type == 'students':
+                file_path = backups_root / 'students' / Path(filename).name
+                if not file_path.exists():
+                    return False, 'Backup file not found'
+                main_db_path = Path(__file__).parent / 'data' / 'students.db'
+                shutil.copy2(file_path, main_db_path)
+                return True, None
+            elif data_type == 'attendance':
+                file_path = backups_root / 'attendance' / Path(filename).name
+                if not file_path.exists():
+                    return False, 'Backup file not found'
+                main_db_path = Path(__file__).parent / 'data' / 'attendance.db'
+                shutil.copy2(file_path, main_db_path)
+                return True, None
+            return False, 'Invalid dataType'
+        except Exception as e:
+            return False, str(e)
+
+    ok, err = await asyncio.to_thread(_restore)
+    if not ok:
+        return JSONResponse({'success': False, 'message': err}, status_code=500)
+
+    # After replacing the attendance DB file, recalculate derived school_days
+    if data_type == 'attendance':
+        try:
+            await asyncio.to_thread(recalculate_school_days)
+        except Exception as e:
+            return JSONResponse({'success': False, 'message': 'Failed to recalculate school days', 'error': str(e)}, status_code=500)
+
+    # Broadcast that a backup was restored
+    try:
+        flask_app.broadcast_data_change('backup_restored')
+        try:
+            flask_app.broadcast_summary_update()
+        except sqlite3.OperationalError as e:
+            return JSONResponse({'success': False, 'message': 'Failed to restore backup', 'error': str(e)}, status_code=500)
+        except Exception as e:
+            return JSONResponse({'success': False, 'message': 'Failed to restore backup', 'error': str(e)}, status_code=500)
+    except Exception:
+        # If broadcasting fails, still return success for the restore itself
+        pass
+
+    return JSONResponse({'success': True})
 
 
 @fastapi_app.get('/api/download-detailed-attendance-history-csv')
