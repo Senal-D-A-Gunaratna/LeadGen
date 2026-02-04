@@ -32,6 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
 import { wsClient } from "@/lib/websocket-client";
+import { syncClient } from "@/lib/sync-client";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 

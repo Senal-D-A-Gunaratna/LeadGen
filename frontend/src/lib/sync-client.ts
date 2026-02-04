@@ -23,12 +23,23 @@ class SyncClient {
   start() {
     try { wsClient.on('data_changed', this.handleDataChanged); } catch (e) {}
     try { wsClient.on('summary_update', this.handleSummaryUpdate); } catch (e) {}
+    try { wsClient.on('attendance_trend', this.handleAttendanceTrend); } catch (e) {}
   }
 
   stop() {
     try { wsClient.off('data_changed', this.handleDataChanged); } catch (e) {}
     try { wsClient.off('summary_update', this.handleSummaryUpdate); } catch (e) {}
+    try { wsClient.off('attendance_trend', this.handleAttendanceTrend); } catch (e) {}
   }
+
+  private handleAttendanceTrend = (payload: any) => {
+    try {
+      // Forward attendance_trend payload to listeners; do not treat as authoritative.
+      this.emit('attendance_trend', payload);
+    } catch (e) {
+      console.error('sync-client.handleAttendanceTrend error', e);
+    }
+  };
 
   private handleSummaryUpdate = (data: any) => {
     // Re-emit as higher-level event and provide summaries

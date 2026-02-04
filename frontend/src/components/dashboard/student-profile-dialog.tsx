@@ -741,8 +741,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         fetchAttendanceTrendForMonth(studentId, year, displayedMonth.getMonth());
       }
     };
-    wsClient.on('attendance_trend', onPush);
-    return () => wsClient.off('attendance_trend', onPush);
+    const trendSyncHandler = (event: string, payload?: any) => { if (event === 'attendance_trend') onPush(payload); };
+    try { syncClient.on(trendSyncHandler); } catch (e) {}
+    return () => { try { syncClient.off(trendSyncHandler); } catch (e) {} };
   }, [student, displayedMonth]);
 
   useEffect(() => {
@@ -959,8 +960,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       }
     };
 
-    try { wsClient.on('summary_update', handler); } catch (e) {}
-    return () => { try { wsClient.off('summary_update', handler); } catch (e) {} };
+    const summarySyncHandler = (event: string, payload?: any) => { if (event === 'summary_update') handler(payload); };
+    try { syncClient.on(summarySyncHandler); } catch (e) {}
+    return () => { try { syncClient.off(summarySyncHandler); } catch (e) {} };
   }, [student]);
 
   const handleDownload = async (format: 'csv' | 'pdf') => {

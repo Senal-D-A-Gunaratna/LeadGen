@@ -33,6 +33,7 @@ import { useActionLogStore } from "@/hooks/use-action-log-store";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { RolePasswordDialog } from "./role-password-dialog";
 import { wsClient } from "@/lib/websocket-client";
+import { syncClient } from "@/lib/sync-client";
 
 type DataType = 'students' | 'attendance';
 type AuthActionType = 'restore' | 'delete' | 'deleteAll';
