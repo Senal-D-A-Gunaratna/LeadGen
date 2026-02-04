@@ -25,6 +25,10 @@ python -c "from database import init_database; init_database()"
 
 # Prefer starting the FastAPI/uvicorn server which mounts the legacy Flask+SocketIO ASGI app.
 # This keeps WebSocket support and lets us incrementally migrate HTTP endpoints to FastAPI.
+# Default to the legacy Flask entrypoint to avoid delegating to FastAPI by default.
+# To explicitly start the FastAPI+uvicorn server, set LEGACY_FLASK=0 in the environment.
+LEGACY_FLASK=${LEGACY_FLASK:-1}
+
 if [ "$LEGACY_FLASK" = "1" ]; then
     echo "LEGACY_FLASK=1 -> starting legacy Flask entrypoint (app.py)"
     # Force the app to use the ASGI code path inside app.py
