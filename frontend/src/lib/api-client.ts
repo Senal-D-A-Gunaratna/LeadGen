@@ -400,6 +400,19 @@ export async function getAllStudentsSummaries() {
   return wsClient.getAllStudentsSummaries();
 }
 
+export async function getAttendanceAggregate(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string }) {
+  const params = new URLSearchParams();
+  if (opts.month) params.set('month', opts.month);
+  if (opts.start) params.set('start', opts.start);
+  if (opts.end) params.set('end', opts.end);
+  if (opts.grade) params.set('grade', opts.grade);
+  if (opts.classFilter) params.set('classFilter', opts.classFilter);
+  if (opts.roleFilter) params.set('roleFilter', opts.roleFilter);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const result = await fetchAPI(`/api/attendance/aggregate${qs}`);
+  return result;
+}
+
 // PDF exports
 export async function downloadStudentDataAsPdf(): Promise<string> {
   const response = await fetch(`${BACKEND_URL}/api/download-student-data-pdf`);

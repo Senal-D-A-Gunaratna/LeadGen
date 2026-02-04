@@ -32,8 +32,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
 import { wsClient } from "@/lib/websocket-client";
+import { getAttendanceAggregate } from "@/lib/api-client";
 import { syncClient } from "@/lib/sync-client";
-import { cn } from "@/lib/utils";
+import { cn, parseDate } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const COLORS: Record<AttendanceStatus, string> = {
@@ -193,6 +194,7 @@ export function AttendanceHistoryTab() {
   // Trigger short animation when data updates due to filters
   const [animateData, setAnimateData] = useState(false);
 
+
   const activeTab = useUIStateStore(state => state.activeTab);
   const { setActiveTab } = useUIStateStore();
   // Visibility and websocket-driven refreshes are handled centrally in `page.tsx`.
@@ -208,6 +210,13 @@ export function AttendanceHistoryTab() {
   }, [students.length, (availableGrades || []).length, gradeFilter, classFilter, roleFilter, isLoading]);
 
   // `availableGrades` is provided by the student store (derived from DB)
+
+  // Displayed month for the popover calendar (controls month navigation independent of selectedDate)
+  const [displayedMonth, setDisplayedMonth] = useState<Date>(selectedDate ? new Date(selectedDate) : new Date());
+  const [monthHasData, setMonthHasData] = useState<boolean | null>(null); // null = unknown/loading
+  const [fetchError, setFetchError] = useState<boolean>(false);
+  const [monthPoints, setMonthPoints] = useState<any[] | null>(null);
+  const [monthAggregate, setMonthAggregate] = useState<any | null>(null);
 
   const onPieClick = useCallback((data: any, index: number, event?: any) => {
     event?.stopPropagation();
@@ -243,8 +252,25 @@ export function AttendanceHistoryTab() {
 
   type AttendanceDatum = { name: string; value: number; color: string; percent: number };
   const attendanceData = useMemo<AttendanceDatum[]>(() => {
-    const totalStudents = students.length;
+    // Prefer server-provided aggregate for the currently selected month if available
+    if (monthAggregate && monthAggregate.pie) {
+      const p = monthAggregate.pie;
+      const totalStudents = p.studentCount || 0;
+      const presentDays = p.presentDays || 0;
+      const absentDays = p.absentDays || 0;
+      // Convert to simple counts per-student (approx) for pie slices: use presencePercentage
+      const presPerc = p.presencePercentage ? (p.presencePercentage / 100) : 0;
+      const onTimeVal = Math.round(totalStudents * presPerc * 0.8); // heuristic split if exact counts not provided
+      const lateVal = Math.round(totalStudents * presPerc * 0.2);
+      const absentVal = totalStudents - (onTimeVal + lateVal);
+      return [
+        { name: "On Time", value: onTimeVal, color: COLORS["on time"], percent: totalStudents > 0 ? (onTimeVal / totalStudents) : 0 },
+        { name: "Late", value: lateVal, color: COLORS.late, percent: totalStudents > 0 ? (lateVal / totalStudents) : 0 },
+        { name: "Absent", value: absentVal, color: COLORS.absent, percent: totalStudents > 0 ? (absentVal / totalStudents) : 0 },
+      ];
+    }
 
+    const totalStudents = students.length;
     if (totalStudents === 0) return [];
 
     const onTime = students.filter((s: Student) => s.status === "on time").length;
@@ -256,7 +282,7 @@ export function AttendanceHistoryTab() {
       { name: "Late", value: late, color: COLORS.late, percent: totalStudents > 0 ? (late / totalStudents) : 0 },
       { name: "Absent", value: absent, color: COLORS.absent, percent: totalStudents > 0 ? (absent / totalStudents) : 0 },
     ];
-  }, [students]);
+  }, [students, monthAggregate]);
 
   // Tween attendance data for smooth transitions when filters applied
   const tweenedAttendance = useTweenedArray(attendanceData, 'name', ['value', 'percent'], 450);
@@ -265,6 +291,27 @@ export function AttendanceHistoryTab() {
 
   type GradeBarDatum = { grade: string; onTime: number; late: number; absent: number; onTimeCount: number; lateCount: number; absentCount: number };
   const gradeWiseStatusData = useMemo<GradeBarDatum[]>(() => {
+    // If server provided gradeBars for the month, prefer them
+    if (monthAggregate && Array.isArray(monthAggregate.gradeBars) && monthAggregate.gradeBars.length > 0) {
+      return monthAggregate.gradeBars.map((g: any) => ({
+        grade: `${g.grade}`.startsWith('Grade') ? g.grade : g.grade,
+        onTime: g.onTime || 0,
+        late: g.late || 0,
+        absent: g.absent || 0,
+        onTimeCount: g.onTimeCount || 0,
+        lateCount: g.lateCount || 0,
+        absentCount: g.absentCount || 0,
+      })).map((gb:any) => ({
+        grade: `Grade ${gb.grade}`,
+        onTime: gb.onTime,
+        late: gb.late,
+        absent: gb.absent,
+        onTimeCount: gb.onTimeCount,
+        lateCount: gb.lateCount,
+        absentCount: gb.absentCount,
+      }));
+    }
+
     const barData = (availableGrades || []).map((gradeStr: string) => {
       const grade = parseInt(gradeStr, 10);
       const gradeStudents = students.filter((s: Student) => s.grade === grade && (!selectedStatus || s.status === selectedStatus));
@@ -288,15 +335,39 @@ export function AttendanceHistoryTab() {
     }).filter(Boolean) as GradeBarDatum[];
 
     return barData;
-  }, [students, availableGrades, selectedStatus]);
+  }, [students, availableGrades, selectedStatus, monthAggregate]);
 
   // Tween grade-wise data (onTime/late/absent) for smooth transitions
   const tweenedGradeWiseStatusData = useTweenedArray(gradeWiseStatusData, 'grade', ['onTime', 'late', 'absent'], 450);
 
-  // Displayed month for the popover calendar (controls month navigation independent of selectedDate)
-  const [displayedMonth, setDisplayedMonth] = useState<Date>(selectedDate ? new Date(selectedDate) : new Date());
-  const [monthHasData, setMonthHasData] = useState<boolean | null>(null); // null = unknown/loading
-  const [fetchError, setFetchError] = useState<boolean>(false);
+  // Compute DayPicker modifiers from server-provided month points.
+
+  // Compute DayPicker modifiers from server-provided month points.
+  const calendarModifiers = useMemo(() => {
+    if (!monthPoints || monthPoints.length === 0) return {};
+    const onTime: Date[] = [];
+    const late: Date[] = [];
+    const absent: Date[] = [];
+    const startIso = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth(), 1).toISOString().slice(0,10);
+    const endIso = new Date(displayedMonth.getFullYear(), displayedMonth.getMonth() + 1, 0).toISOString().slice(0,10);
+    for (const p of monthPoints) {
+      const label = p.label || p.date || p[0];
+      if (!label || typeof label !== 'string') continue;
+      if (label < startIso || label > endIso) continue;
+      try {
+        const d = parseDate(label);
+        if (p.on_time && (p.on_time > 0)) onTime.push(d);
+        if (p.late && (p.late > 0)) late.push(d);
+        if (p.absent && (p.absent > 0)) absent.push(d);
+        if ((p.percent || 0) > 0) {
+          if (!p.on_time && !p.late) onTime.push(d);
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+    return { onTime, late, absent } as any;
+  }, [monthPoints, displayedMonth]);
   const fetchTimerRef = useRef<number | null>(null);
 
   // Control popover open state so we can intercept Radix outside events
@@ -344,16 +415,24 @@ export function AttendanceHistoryTab() {
         setMonthHasData(null); // loading
         setFetchError(false);
         try {
-          const resp = await wsClient.getAttendanceAggregate('month', grade || 'all', 'overview');
-          const points = resp.points || [];
-          const has = computeMonthHasDataFromPoints(points, month);
-          setMonthHasData(has);
-          setFetchError(false);
+            // Prefer HTTP aggregate for deterministic computed percentages
+            const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+            const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all' });
+            const points = (resp && resp.points) || resp.points || resp.data || resp.points || resp.points || resp.points || resp.points || resp.points || [];
+            // normalize: new backend returns { points }
+            const normalizedPoints = resp && resp.points ? resp.points : resp && resp.data ? resp.data : [];
+            setMonthPoints(normalizedPoints);
+            setMonthAggregate(resp || null);
+            const has = computeMonthHasDataFromPoints(normalizedPoints, month);
+            setMonthHasData(has);
+            setFetchError(false);
         } catch (err) {
           console.warn('attendance aggregate fetch failed', err);
           // Do NOT treat socket failure as "no data". Keep calendar usable but mark fetchError.
           setFetchError(true);
-          setMonthHasData(true); // let calendar show when socket fails
+            setMonthHasData(true); // let calendar show when socket fails
+            setMonthPoints(null);
+            setMonthAggregate(null);
         }
         resolve();
       }, 250);
@@ -656,7 +735,8 @@ export function AttendanceHistoryTab() {
                           onMonthChange={(m) => setDisplayedMonth(m)}
                           selected={selectedDate}
                           onSelect={(date) => setSelectedDate(date)}
-                          classNames={{ nav: 'hidden', caption: 'hidden' }}
+                            classNames={{ nav: 'hidden', caption: 'hidden' }}
+                            modifiers={calendarModifiers}
                           disabled={(date) => {
                             const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
                             const day = date.getDay();

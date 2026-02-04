@@ -652,6 +652,197 @@ def api_attendance_history():
 
     return jsonify({'success': True, 'data': series})
 
+
+@app.route('/api/attendance/aggregate', methods=['GET'])
+def api_attendance_aggregate():
+    """Return computed aggregate data for attendance history tab.
+
+    Query params:
+      - month: YYYY-MM (optional)
+      - start, end: ISO dates (optional)
+      - grade: grade number or 'all'
+      - classFilter: className or 'all'
+      - roleFilter: role or 'all' or 'none'
+    Returns JSON with: pie, gradeBars, students, points
+    """
+    try:
+        month = request.args.get('month')
+        start = request.args.get('start')
+        end = request.args.get('end')
+        grade = request.args.get('grade', 'all')
+        classFilter = request.args.get('classFilter')
+        roleFilter = request.args.get('roleFilter')
+
+        # Determine date range
+        from datetime import timedelta
+        if month:
+            try:
+                sd = date.fromisoformat(f"{month}-01")
+            except Exception:
+                return jsonify({'success': False, 'message': 'Invalid month format (expected YYYY-MM)'}), 400
+            start_date = sd
+            if sd.month == 12:
+                next_mon = date(sd.year + 1, 1, 1)
+            else:
+                next_mon = date(sd.year, sd.month + 1, 1)
+            end_date = next_mon - timedelta(days=1)
+        else:
+            try:
+                start_date = date.fromisoformat(start) if start else None
+                end_date = date.fromisoformat(end) if end else None
+            except Exception:
+                return jsonify({'success': False, 'message': 'Invalid date format for start/end'}), 400
+
+        # If start/end still None, derive from attendance_records range
+        conn_att = get_db_connection('attendance')
+        cur_att = conn_att.cursor()
+        if start_date is None or end_date is None:
+            cur_att.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
+            row = cur_att.fetchone()
+            if row and row['min_date'] and row['max_date']:
+                if start_date is None:
+                    start_date = date.fromisoformat(row['min_date'])
+                if end_date is None:
+                    end_date = date.fromisoformat(row['max_date'])
+            else:
+                end_date = date.today()
+                start_date = end_date - timedelta(days=29)
+
+        if start_date > end_date:
+            start_date, end_date = end_date, start_date
+
+        # Build authoritative school dates for range
+        try:
+            cur_sd = get_db_connection('attendance').cursor()
+            cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+            sd_rows = cur_sd.fetchall()
+            school_dates = [r['date'] for r in sd_rows]
+            try:
+                cur_sd.connection.close()
+            except Exception:
+                pass
+        except Exception:
+            # Fallback to weekdays in range
+            school_dates = []
+            day = start_date
+            while day <= end_date:
+                if day.weekday() < 5:
+                    school_dates.append(day.isoformat())
+                day = day + timedelta(days=1)
+
+        total_school_days = len(school_dates)
+
+        # Load all students and filter by client-provided filters
+        all_students = get_all_students_with_history()
+        def student_matches(s: dict) -> bool:
+            if grade and grade != 'all':
+                try:
+                    if int(s.get('grade')) != int(grade):
+                        return False
+                except Exception:
+                    return False
+            if classFilter and classFilter != 'all':
+                if s.get('className') != classFilter:
+                    return False
+            if roleFilter and roleFilter != 'all':
+                if roleFilter == 'none':
+                    if s.get('role'):
+                        return False
+                else:
+                    if s.get('role') != roleFilter:
+                        return False
+            return True
+
+        filtered_students = [s for s in all_students if student_matches(s)]
+        student_count = len(filtered_students)
+
+        # Build per-student summaries for the requested date range (using school_dates)
+        students_out = []
+        grade_buckets = {}
+        total_present_days = 0
+        for s in filtered_students:
+            records = s.get('attendanceHistory', [])
+            on_time = 0
+            late = 0
+            for r in records:
+                if r.get('date') in school_dates:
+                    st = r.get('status')
+                    if st == 'on time':
+                        on_time += 1
+                    elif st == 'late':
+                        late += 1
+            present = on_time + late
+            absent = max(0, total_school_days - present) if total_school_days > 0 else 0
+            total_present_days += present
+            perc = round((present / total_school_days) * 100, 1) if total_school_days > 0 else 0
+            students_out.append({
+                'id': s.get('id'),
+                'name': s.get('name'),
+                'grade': s.get('grade'),
+                'className': s.get('className'),
+                'on_time': on_time,
+                'late': late,
+                'absent': absent,
+                'presencePercentage': perc
+            })
+            g = str(s.get('grade') or '')
+            if g not in grade_buckets:
+                grade_buckets[g] = { 'students': 0, 'present': 0, 'on_time': 0, 'late': 0 }
+            grade_buckets[g]['students'] += 1
+            grade_buckets[g]['present'] += present
+            grade_buckets[g]['on_time'] += on_time
+            grade_buckets[g]['late'] += late
+
+        # Build pie (overall percentages across all students and school days)
+        if student_count == 0 or total_school_days == 0:
+            pie = { 'totalSchoolDays': total_school_days, 'studentCount': student_count, 'presentDays': 0, 'absentDays': 0, 'presencePercentage': 0, 'absencePercentage': 0 }
+        else:
+            total_possible = student_count * total_school_days
+            absent_days = total_possible - total_present_days
+            pie = {
+                'totalSchoolDays': total_school_days,
+                'studentCount': student_count,
+                'presentDays': total_present_days,
+                'absentDays': absent_days,
+                'presencePercentage': round((total_present_days / total_possible) * 100, 1),
+                'absencePercentage': round((absent_days / total_possible) * 100, 1)
+            }
+
+        # Grade bars
+        gradeBars = []
+        for g, data in grade_buckets.items():
+            students_in_grade = data['students']
+            if students_in_grade == 0 or total_school_days == 0:
+                gradeBars.append({ 'grade': g, 'onTime': 0, 'late': 0, 'absent': 0, 'onTimeCount': 0, 'lateCount': 0, 'absentCount': 0 })
+            else:
+                total_possible_grade = students_in_grade * total_school_days
+                present_grade = data['present']
+                absent_grade = total_possible_grade - present_grade
+                gradeBars.append({
+                    'grade': g,
+                    'onTime': round((data['on_time'] if data.get('on_time') else data['on_time']) / total_possible_grade, 3) if total_possible_grade > 0 else 0,
+                    'late': round((data['late'] if data.get('late') else data['late']) / total_possible_grade, 3) if total_possible_grade > 0 else 0,
+                    'absent': round((absent_grade) / total_possible_grade, 3) if total_possible_grade > 0 else 0,
+                    'onTimeCount': data.get('on_time', 0),
+                    'lateCount': data.get('late', 0),
+                    'absentCount': absent_grade,
+                })
+
+        # Points series per school date
+        points = []
+        for iso in school_dates:
+            present_count = 0
+            for s in filtered_students:
+                found = next((r for r in s.get('attendanceHistory', []) if r.get('date') == iso), None)
+                if found and found.get('status') != 'absent':
+                    present_count += 1
+            percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
+            points.append({ 'date': iso, 'present': present_count, 'percent': percent })
+
+        return jsonify({'success': True, 'pie': pie, 'gradeBars': gradeBars, 'students': students_out, 'points': points})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error computing attendance aggregate', 'error': str(e)}), 500
+
 # ==================== WEBSOCKET HANDLERS ====================
 
 @socketio.on('connect')
