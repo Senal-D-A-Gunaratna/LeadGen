@@ -616,19 +616,39 @@ def api_attendance_history():
 
     # Map present counts by date
     results_by_date = {r['date']: (r['present'] or 0) for r in rows}
-
-    # Build full day series using student_count as denominator
-    day = start_date
+    # Prefer authoritative `school_days` as the X-axis. If there are no
+    # school_days for the requested range, fall back to a full-day series
+    # (preserving legacy behavior).
     series = []
-    while day <= end_date:
-        iso = day.isoformat()
-        present = results_by_date.get(iso, 0)
-        if student_count > 0:
-            percent = round((present / student_count) * 100, 1)
-        else:
-            percent = 0
-        series.append({'date': iso, 'percent': percent})
-        day = day + timedelta(days=1)
+    try:
+        cur_sd = get_db_connection('attendance').cursor()
+        cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+        sd_rows = cur_sd.fetchall()
+        school_dates = [r['date'] for r in sd_rows]
+        try:
+            cur_sd.connection.close()
+        except Exception:
+            pass
+    except Exception:
+        school_dates = []
+
+    if school_dates:
+        for iso in school_dates:
+            present = results_by_date.get(iso, 0)
+            percent = round((present / student_count) * 100, 1) if student_count > 0 else 0
+            series.append({'date': iso, 'percent': percent})
+    else:
+        # Fallback to daily series across the full range
+        day = start_date
+        while day <= end_date:
+            iso = day.isoformat()
+            present = results_by_date.get(iso, 0)
+            if student_count > 0:
+                percent = round((present / student_count) * 100, 1)
+            else:
+                percent = 0
+            series.append({'date': iso, 'percent': percent})
+            day = day + timedelta(days=1)
 
     return jsonify({'success': True, 'data': series})
 
@@ -993,8 +1013,28 @@ def http_get_student_attendance_month(student_id):
             rows = cur.fetchall()
             attendance = [{'date': r['date'], 'status': r['status'], 'checkInTime': None} for r in rows]
 
+        # Also return school days for the requested month so clients
+        # can distinguish weekdays which were not school days from
+        # actual absences. If `school_days` table is unavailable or
+        # empty for the range, fall back to weekdays.
+        try:
+            cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+            sd_rows = cur.fetchall()
+            school_days = [r['date'] for r in sd_rows]
+            # If table exists but has no rows for the month, return empty list
+        except Exception:
+            # Fallback: compute weekdays in the month
+            from calendar import monthrange as _mr
+            ld = _mr(start_date.year, start_date.month)[1]
+            school_days = []
+            for day_num in range(1, ld + 1):
+                d = date(start_date.year, start_date.month, day_num)
+                if d.weekday() >= 5:
+                    continue
+                school_days.append(d.isoformat())
+
         conn_att.close()
-        return jsonify({'success': True, 'attendanceHistory': attendance})
+        return jsonify({'success': True, 'attendanceHistory': attendance, 'schoolDays': school_days})
     except Exception as e:
         return jsonify({'success': False, 'message': 'Error fetching attendance', 'error': str(e)}), 500
 
