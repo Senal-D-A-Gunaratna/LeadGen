@@ -72,15 +72,22 @@ export function BackupManagement() {
 
     // Keep backup list in sync with server via WebSocket events
     // Connection handled centrally in `frontend/src/app/page.tsx`
-    const handler = (payload: { type: string; data: any }) => {
-      if (payload.type === "backups_changed") {
-        fetchBackups();
-      }
+    const handler = (payload?: any) => {
+      try {
+        const type = payload?.type;
+        if (type === "backups_changed") fetchBackups();
+      } catch (e) {}
     };
-    wsClient.on("data_changed", handler);
+
+    const syncListener = (event: string, payload?: any) => {
+      if (event === 'data_changed') return handler(payload);
+      if (event === 'students_refreshed' || event === 'all_summaries') return fetchBackups();
+    };
+
+    try { syncClient.on(syncListener); } catch (e) {}
 
     return () => {
-      wsClient.off("data_changed", handler);
+      try { syncClient.off(syncListener); } catch (e) {}
     };
   }, []);
   

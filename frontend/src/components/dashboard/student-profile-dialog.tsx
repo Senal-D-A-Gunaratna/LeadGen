@@ -599,18 +599,27 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
     const onSummaryUpdate = () => fetchMonthAggregate(displayedMonth);
 
-    try { wsClient.on('data_changed', onDataChanged); wsClient.on('summary_update', onSummaryUpdate); } catch (e) {}
-    // Also listen to centralized sync client for higher-level events
+    // Use centralized sync client for all data/sync events (keeps behaviour consistent)
     const syncListener = (event: string, payload?: any) => {
-      if (event === 'all_summaries' || event === 'students_refreshed') {
+      try {
+        if (event === 'data_changed') {
+          onDataChanged(payload);
+          return;
+        }
+        if (event === 'summary_update' || event === 'all_summaries' || event === 'students_refreshed') {
+          fetchMonthAggregate(displayedMonth);
+          return;
+        }
+      } catch (e) {
+        // fallback: still fetch
         fetchMonthAggregate(displayedMonth);
       }
     };
+
     try { syncClient.on(syncListener); } catch (e) {}
 
     return () => {
       mounted = false;
-      try { wsClient.off('data_changed', onDataChanged); wsClient.off('summary_update', onSummaryUpdate); } catch (e) {}
       try { syncClient.off(syncListener); } catch (e) {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

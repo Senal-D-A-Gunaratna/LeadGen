@@ -372,12 +372,20 @@ export function AttendanceHistoryTab() {
       await fetchMonthAggregate(displayedMonth, gradeFilter);
       if (!mounted) return;
     })();
-    const onDataChanged = () => fetchMonthAggregate(displayedMonth, gradeFilter);
+    const onDataChanged = (payload?: any) => fetchMonthAggregate(displayedMonth, gradeFilter);
     const onSummaryUpdate = () => fetchMonthAggregate(displayedMonth, gradeFilter);
-    try { wsClient.on('data_changed', onDataChanged); wsClient.on('summary_update', onSummaryUpdate); } catch (e) {}
+    const syncListener = (event: string, payload?: any) => {
+      try {
+        if (event === 'data_changed') return onDataChanged(payload);
+        if (event === 'summary_update' || event === 'all_summaries' || event === 'students_refreshed') return onSummaryUpdate();
+      } catch (e) {
+        onSummaryUpdate();
+      }
+    };
+    try { syncClient.on(syncListener); } catch (e) {}
     return () => {
       mounted = false;
-      try { wsClient.off('data_changed', onDataChanged); wsClient.off('summary_update', onSummaryUpdate); } catch (e) {}
+      try { syncClient.off(syncListener); } catch (e) {}
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMonth, gradeFilter]);

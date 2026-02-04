@@ -18,6 +18,7 @@ import { useActionLogStore } from '@/hooks/use-action-log-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { wsClient } from '@/lib/websocket-client';
+import { syncClient } from '@/lib/sync-client';
 import { getStudentByIdAction } from '@/app/actions';
 import { shrinkStudentForList } from '@/lib/utils';
 
@@ -87,14 +88,10 @@ export default function Home() {
     };
 
     const onDataChanged = async (payload: any) => {
-      // Received notification that DB changed. Prefer incremental updates when
-      // the server provides a specific studentId (e.g. scan/student_updated).
       try {
         const type = payload?.type;
         const data = payload?.data || {};
 
-        // If server indicates a single student changed, fetch that student's
-        // latest snapshot and apply as an incremental update to avoid resetting UI state.
         if ((type === 'scan' || type === 'student_updated' || type === 'student_added') && data?.studentId && !fakeDate) {
           try {
             const student = await getStudentByIdAction(data.studentId);
@@ -103,12 +100,10 @@ export default function Home() {
             }
             return;
           } catch (e) {
-            // Fall through to debounced full refresh if incremental fails
             console.warn('Incremental fetch failed, falling back to full refresh', e);
           }
         }
 
-        // Otherwise, request a debounced snapshot refresh (preserves filters)
         if (!fakeDate) debouncedRefresh();
       } catch (e) {
         console.error('onDataChanged handler error', e);
@@ -117,12 +112,37 @@ export default function Home() {
     };
 
     const onRealtimePatch = (patch: any) => {
-      // Incremental patch for immediate UI update without resetting filters
       actions.applyRealtimeUpdate!(patch);
     };
 
-    wsClient.on('data_changed', onDataChanged);
-    // Optional incremental patches from server
+    // Prefer higher-level sync events; also handle raw 'data_changed' for parity
+    const syncListener = (event: string, payload?: any) => {
+      try {
+        if (event === 'data_changed') {
+          onDataChanged(payload);
+          return;
+        }
+
+        if (event === 'student_summary') {
+          const sid = payload?.studentId;
+          const summary = payload?.summary;
+          if (sid && summary) {
+            actions.applyRealtimeUpdate!({ op: 'upsert', id: sid, fields: shrinkStudentForList(summary), server_ts: Date.now() });
+          }
+          return;
+        }
+
+        if (event === 'students_refreshed' || event === 'all_summaries' || event === 'attendance_updated') {
+          if (!fakeDate) debouncedRefresh();
+          return;
+        }
+      } catch (e) {
+        console.error('syncListener error', e);
+      }
+    };
+
+    syncClient.on(syncListener);
+    // Keep realtime_patch on the raw socket for fast incremental patches
     wsClient.on('realtime_patch', onRealtimePatch);
 
     // Note: tab visibility / beforeunload handlers removed per request.

@@ -7,6 +7,7 @@ import { useAuthStore } from "@/hooks/use-auth-store";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { useEffect } from "react";
 import { wsClient } from "@/lib/websocket-client";
+import { syncClient } from "@/lib/sync-client";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const selectedStudent = useStudentStore((state) => state.selectedStudent);
@@ -21,15 +22,24 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const canDownload = !!user && (user.role === 'moderator' || user.role === 'admin' || user.role === 'dev');
 
   useEffect(() => {
-    // Listen for summary updates from WebSocket
-    const handleSummaryUpdate = (data: { summaries: any[] }) => {
-      updateStudentSummaries(data.summaries);
+    // Listen for summary updates via centralized sync client
+    const handleSummaryUpdate = (event: string, data?: any) => {
+      try {
+        if (event === 'summary_update' && data && Array.isArray(data.summaries)) {
+          updateStudentSummaries(data.summaries);
+        }
+        if (event === 'all_summaries' && Array.isArray(data)) {
+          updateStudentSummaries(data);
+        }
+      } catch (e) {
+        console.error('handleSummaryUpdate', e);
+      }
     };
 
-    wsClient.on('summary_update', handleSummaryUpdate);
+    syncClient.on(handleSummaryUpdate);
 
     return () => {
-      wsClient.off('summary_update', handleSummaryUpdate);
+      syncClient.off(handleSummaryUpdate);
     };
   }, [updateStudentSummaries]);
 
