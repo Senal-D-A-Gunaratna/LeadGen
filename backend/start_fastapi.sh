@@ -16,6 +16,6 @@ pip install -r requirements.txt
 # Initialize DB
 python -c "from database import init_database; init_database()"
 
-# Start uvicorn serving the FastAPI wrapper which mounts the Flask/Socket.IO ASGI app
-# Use --reload in dev if desired
-uvicorn fastapi_app:app --host 0.0.0.0 --port 5000
+# Start uvicorn serving the FastAPI app that dispatches to new FastAPI routes
+# and the legacy Flask+SocketIO ASGI app. Use --reload in dev if desired.
+uvicorn fastapi_main:app --host 0.0.0.0 --port 5000
