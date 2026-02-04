@@ -3,6 +3,9 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 import traceback
+import sqlite3
+import time
+from datetime import datetime
 
 # Import existing helpers from app.py
 import app as flask_app
@@ -66,6 +69,67 @@ async def api_get_student(student_id: int):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ------------------ Log endpoints (migrated from api_endpoints.py) ------------------
+@fastapi_app.post('/api/append-action-log')
+async def append_action_log(data: dict):
+    timestamp = data.get('timestamp')
+    action = data.get('action')
+    if not timestamp or not action:
+        return JSONResponse({'success': False, 'error': 'Missing timestamp or action'}, status_code=400)
+    try:
+        from database import DatabaseContext
+        try:
+            with DatabaseContext('logs') as conn:
+                cursor = conn.cursor()
+                cursor.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (timestamp, action))
+                conn.commit()
+                return JSONResponse({'success': True})
+        except sqlite3.OperationalError as e:
+            if 'locked' in str(e).lower():
+                time.sleep(0.1)
+                with DatabaseContext('logs') as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (timestamp, action))
+                    conn.commit()
+                    return JSONResponse({'success': True})
+            return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
+    except Exception as e:
+        return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
+
+
+@fastapi_app.post('/api/append-auth-log')
+async def append_auth_log(data: dict):
+    timestamp = data.get('timestamp')
+    message = data.get('message')
+    if not timestamp or not message:
+        return JSONResponse({'success': False, 'error': 'Missing timestamp or message'}, status_code=400)
+    try:
+        from database import DatabaseContext
+        with DatabaseContext('logs') as conn:
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO auth_logs (timestamp, message) VALUES (?, ?)', (timestamp, message))
+            conn.commit()
+            return JSONResponse({'success': True})
+    except Exception as e:
+        return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
+
+
+@fastapi_app.post('/api/clear-auth-logs')
+async def clear_auth_logs(data: dict):
+    role = (data or {}).get('role', 'unknown')
+    try:
+        from database import get_db_connection
+        conn_logs = get_db_connection('logs')
+        cursor_logs = conn_logs.cursor()
+        cursor_logs.execute('DELETE FROM auth_logs')
+        cursor_logs.execute('INSERT INTO auth_logs (timestamp, message) VALUES (?, ?)', (datetime.now().isoformat(), f'[{role}] Cleared all auth logs.'))
+        conn_logs.commit()
+        conn_logs.close()
+        return JSONResponse({'success': True})
+    except Exception as e:
+        return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
 
 
 @fastapi_app.get("/api/students/{student_id}/attendance")
