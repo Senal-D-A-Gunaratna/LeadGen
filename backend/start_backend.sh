@@ -23,9 +23,15 @@ pip install -r requirements.txt
 # Initialize database (SQLite is the only source of truth)
 python -c "from database import init_database; init_database()"
 
-# Prefer ASGI/uvicorn to enable async WebSocket support (python-socketio AsyncServer)
-echo "Starting backend with ASGI (uvicorn) to enable WebSocket support"
-# Force the app to use the ASGI code path inside app.py
-export FORCE_ASGI=1
-python app.py
+# Prefer starting the FastAPI/uvicorn server which mounts the legacy Flask+SocketIO ASGI app.
+# This keeps WebSocket support and lets us incrementally migrate HTTP endpoints to FastAPI.
+if [ "$LEGACY_FLASK" = "1" ]; then
+    echo "LEGACY_FLASK=1 -> starting legacy Flask entrypoint (app.py)"
+    # Force the app to use the ASGI code path inside app.py
+    export FORCE_ASGI=1
+    python app.py
+else
+    echo "Delegating to start_fastapi.sh (FastAPI + uvicorn)"
+    ./start_fastapi.sh
+fi
 
