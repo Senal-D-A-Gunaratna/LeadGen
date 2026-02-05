@@ -642,7 +642,8 @@ def recalculate_school_days():
                 cur.execute('BEGIN IMMEDIATE')
                 # Clear table then insert distinct dates that have on time/late records
                 cur.execute('DELETE FROM school_days')
-                cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE status IN ('on time','late') GROUP BY date")
+                # Normalize status comparison to avoid missing rows due to casing/whitespace
+                cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE TRIM(LOWER(status)) IN ('on time','late') GROUP BY date")
                 conn.commit()
             except Exception:
                 try:
@@ -726,4 +727,16 @@ def start_attendance_watcher(poll_interval: float = 1.0):
 
     t = threading.Thread(target=_watcher, daemon=True, name='attendance-db-watcher')
     t.start()
+    # Ensure we perform an initial recalculation on startup so `school_days`
+    # reflects the current attendance records even if the file mtime hasn't
+    # changed since the process started. Do this in a background thread to
+    # avoid blocking the caller.
+    def _initial_recalc():
+        try:
+            recalculate_school_days()
+        except Exception:
+            pass
+
+    ti = threading.Thread(target=_initial_recalc, daemon=True, name='attendance-db-initial-recalc')
+    ti.start()
 
