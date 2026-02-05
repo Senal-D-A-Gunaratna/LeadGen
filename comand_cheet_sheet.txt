@@ -51,3 +51,19 @@ curl -sS "${HOST}/api/attendance/aggregate?month=2026-02&grade=all&class=all&rol
 
 
 curl -sS "http://localhost:5000/api/attendance/aggregate?month=2026-02&grade=all&class=all&role=all&status=all" | jq .
+
+
+
+
+Run this to fetch the student profile for ID 14 (backend on localhost:5000):
+
+curl -sS http://localhost:5000/api/students/14 | jq
+
+If you want the monthly attendance + schoolDays for Feb 2026:
+
+curl -sS "http://localhost:5000/api/students/14/attendance?month=2026-02" | jq
+
+If the backend is on a different host/port, replace localhost:5000. To verify the backend is listening first:
+
+ss -ltnp | grep ':5000'
+

@@ -57,6 +57,31 @@ def get_db_connection(db_type: str = 'students'):
     return conn
 
 
+# Callbacks invoked after a successful `recalculate_school_days()` run.
+# External modules (e.g. app.py) can register a callback to be notified
+# when the authoritative school_days table has been rebuilt.
+_post_recalc_callbacks = []
+
+def register_post_recalc_callback(cb):
+    """Register a callable to be invoked (safely) after each recalc.
+
+    The callback will be called with no arguments. Exceptions raised by
+    callbacks are caught and logged but do not stop other callbacks.
+    """
+    try:
+        if cb not in _post_recalc_callbacks:
+            _post_recalc_callbacks.append(cb)
+    except Exception:
+        pass
+
+def unregister_post_recalc_callback(cb):
+    try:
+        if cb in _post_recalc_callbacks:
+            _post_recalc_callbacks.remove(cb)
+    except Exception:
+        pass
+
+
 def create_db_file_backup(db_type: str, timestamp: Optional[str] = None) -> Path:
     """Create a filesystem-level backup copy of a .db file.
     
@@ -594,6 +619,16 @@ def recalculate_school_days():
         if '_recalc_done_event' not in globals():
             _recalc_done_event = threading.Event()
             _recalc_done_event.set()
+            # Invoke any registered post-recalc callbacks (notify external modules)
+            try:
+                for cb in list(_post_recalc_callbacks):
+                    try:
+                        cb()
+                    except Exception:
+                        # Do not let callback failures affect recalculation
+                        pass
+            except Exception:
+                pass
         if '_last_recalc_mtime' not in globals():
             _last_recalc_mtime = 0
 

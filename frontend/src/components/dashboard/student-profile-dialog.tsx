@@ -47,7 +47,7 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { isWeekday, parseDate } from "@/lib/utils";
 import { format } from "date-fns";
-import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend } from "@/lib/api-client";
+import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend, getAttendanceAggregate } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
 import { downloadStudentAttendanceSummaryAsCsvAction, downloadStudentAttendanceSummaryAsPdfAction } from "@/app/actions";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
@@ -551,8 +551,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         setMonthHasData(null);
         setFetchError(false);
         try {
-          const resp = await wsClient.getAttendanceAggregate('month', 'all', 'overview');
-          const points = resp.points || [];
+          const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+          const resp = await getAttendanceAggregate({ month: monthStr, grade: 'all' });
+          const points = (resp && resp.points) ? resp.points : [];
           const has = computeMonthHasDataFromPoints(points, month);
           setMonthHasData(has);
           setFetchError(false);

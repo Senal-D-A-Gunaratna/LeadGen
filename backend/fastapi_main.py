@@ -15,7 +15,7 @@ import csv
 import io
 import shutil
 from pathlib import Path
-from database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days, start_attendance_watcher
+from database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days, start_attendance_watcher, register_post_recalc_callback
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
@@ -45,6 +45,18 @@ async def _startup_watchers():
     # Start background watcher for attendance DB changes
     try:
         start_attendance_watcher()
+    except Exception:
+        pass
+    # Register callback so the ASGI/Flask app can broadcast updates when
+    # attendance recalculation completes (useful for clients to refresh)
+    try:
+        def _on_recalc():
+            try:
+                # Use existing Flask app helper to broadcast a data_changed event
+                flask_app.broadcast_data_change('attendance_db_changed', {})
+            except Exception:
+                pass
+        register_post_recalc_callback(_on_recalc)
     except Exception:
         pass
 
