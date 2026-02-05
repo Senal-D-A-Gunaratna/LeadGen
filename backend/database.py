@@ -7,6 +7,8 @@ import shutil
 from datetime import datetime
 from typing import Dict, Optional
 from pathlib import Path
+import threading
+import time
 
 # Three separate database files
 DATA_DIR = Path(__file__).parent / 'data'
@@ -584,23 +586,109 @@ def recalculate_school_days():
     A date is considered a school day if at least one student has status
     'on time' or 'late' for that date.
     """
+    # Signal recalculation in progress to any waiters and update last mtime
+    global _recalc_lock, _recalc_done_event, _last_recalc_mtime
     try:
-        conn = get_db_connection('attendance')
-        cur = conn.cursor()
-        # Replace contents atomically using a transaction
-        cur.execute('BEGIN IMMEDIATE')
-        # Clear table then insert distinct dates that have on time/late records
-        cur.execute('DELETE FROM school_days')
-        cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE status IN ('on time','late') GROUP BY date")
-        conn.commit()
+        if '_recalc_lock' not in globals():
+            _recalc_lock = threading.Lock()
+        if '_recalc_done_event' not in globals():
+            _recalc_done_event = threading.Event()
+            _recalc_done_event.set()
+        if '_last_recalc_mtime' not in globals():
+            _last_recalc_mtime = 0
+
+        # Acquire lock to ensure single recalculation at a time
+        with _recalc_lock:
+            _recalc_done_event.clear()
+            conn = get_db_connection('attendance')
+            cur = conn.cursor()
+            try:
+                # Replace contents atomically using a transaction
+                cur.execute('BEGIN IMMEDIATE')
+                # Clear table then insert distinct dates that have on time/late records
+                cur.execute('DELETE FROM school_days')
+                cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE status IN ('on time','late') GROUP BY date")
+                conn.commit()
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+            # Update last mtime for attendance DB file
+            try:
+                _last_recalc_mtime = ATTENDANCE_DB_PATH.stat().st_mtime
+            except Exception:
+                _last_recalc_mtime = time.time()
+            _recalc_done_event.set()
     except Exception:
+        # Ensure event is set on unexpected failure to avoid hangs
         try:
-            conn.rollback()
+            _recalc_done_event.set()
         except Exception:
             pass
-    finally:
+
+
+def ensure_recalculated(timeout: float = 5.0):
+    """Ensure school_days is up-to-date with the attendance DB file.
+
+    If the attendance DB file modification time is newer than the last
+    recalculation, run a recalculation synchronously (or wait for ongoing one).
+    """
+    global _last_recalc_mtime, _recalc_done_event
+    try:
+        mtime = ATTENDANCE_DB_PATH.stat().st_mtime
+    except Exception:
+        mtime = 0
+
+    if '_last_recalc_mtime' not in globals():
+        _last_recalc_mtime = 0
+    if '_recalc_done_event' not in globals():
+        _recalc_done_event = threading.Event()
+        _recalc_done_event.set()
+
+    # If file changed since last recalculation, perform recalc now
+    if mtime > _last_recalc_mtime:
+        # If already recalculating, wait until done
+        if not _recalc_done_event.is_set():
+            _recalc_done_event.wait(timeout=timeout)
+            return
+        # Otherwise perform recalculation synchronously
+        recalculate_school_days()
+
+
+def start_attendance_watcher(poll_interval: float = 1.0):
+    """Start a background thread that watches the attendance DB file for changes
+    and triggers `recalculate_school_days()` when it is modified.
+    """
+    def _watcher():
+        last_mtime = 0
         try:
-            conn.close()
+            last_mtime = ATTENDANCE_DB_PATH.stat().st_mtime
         except Exception:
-            pass
+            last_mtime = 0
+        while True:
+            try:
+                try:
+                    mtime = ATTENDANCE_DB_PATH.stat().st_mtime
+                except Exception:
+                    mtime = 0
+                if mtime != last_mtime:
+                    try:
+                        recalculate_school_days()
+                    except Exception:
+                        pass
+                    last_mtime = mtime
+                time.sleep(poll_interval)
+            except Exception:
+                # On unexpected watcher failure, sleep a bit and continue
+                time.sleep(poll_interval)
+
+    t = threading.Thread(target=_watcher, daemon=True, name='attendance-db-watcher')
+    t.start()
 

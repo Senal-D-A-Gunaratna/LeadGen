@@ -15,7 +15,7 @@ import csv
 import io
 import shutil
 from pathlib import Path
-from database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days
+from database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days, start_attendance_watcher
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
@@ -38,6 +38,15 @@ fastapi_app.add_middleware(
 @fastapi_app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@fastapi_app.on_event('startup')
+async def _startup_watchers():
+    # Start background watcher for attendance DB changes
+    try:
+        start_attendance_watcher()
+    except Exception:
+        pass
 
 
 def _filter_students_list(students: List[dict], search: Optional[str], status: Optional[str], grade: Optional[str], class_name: Optional[str], role: Optional[str]):

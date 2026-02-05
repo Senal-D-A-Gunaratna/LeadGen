@@ -711,6 +711,13 @@ def api_attendance_aggregate():
         if start_date > end_date:
             start_date, end_date = end_date, start_date
 
+        # Ensure attendance-derived school_days are up-to-date before using them
+        try:
+            from database import ensure_recalculated
+            ensure_recalculated()
+        except Exception:
+            pass
+
         # Build authoritative school dates for range
         try:
             cur_sd = get_db_connection('attendance').cursor()
