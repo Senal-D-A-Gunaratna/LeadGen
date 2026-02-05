@@ -45,7 +45,7 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../ui/form";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
-import { isWeekday, parseDate } from "@/lib/utils";
+import { parseDate } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend, getAttendanceAggregate } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
@@ -862,17 +862,41 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       try {
         if (!student) return;
         if (event === 'student_summary' && payload?.studentId === student.id) {
-          // Remote summary updated for this student
           fetchSummary();
         }
-        if ((event === 'attendance_updated' || event === 'data_changed') && Array.isArray(payload?.data?.affectedIds)) {
-          const ids: number[] = payload.data.affectedIds;
-          if (ids.includes(student.id)) {
-            // Re-fetch both trend and summary for the displayed month
+        if (event === 'attendance_updated') {
+          const ids: number[] = payload?.affectedIds || payload?.data?.affectedIds || [];
+          if (ids.length === 0) {
+            // Generic attendance update — refresh this student's data
             const year = displayedMonth.getFullYear();
             const monthZero = displayedMonth.getMonth();
             fetchAttendanceTrendForMonth(student.id, year, monthZero);
             fetchSummary();
+          } else if (ids.includes(student.id)) {
+            const year = displayedMonth.getFullYear();
+            const monthZero = displayedMonth.getMonth();
+            fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            fetchSummary();
+          }
+        }
+        if (event === 'data_changed') {
+          const type = payload?.type || payload?.data?.type || null;
+          // If the data_changed indicates attendance DB recalculation or other
+          // attendance-related events, refresh the summary and trend.
+          if (type === 'attendance_db_changed' || type === 'attendance_updated' || type === 'student_updated' || type === 'student_added' || type === 'student_removed') {
+            const year = displayedMonth.getFullYear();
+            const monthZero = displayedMonth.getMonth();
+            fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            fetchSummary();
+          } else {
+            // If payload contains affectedIds, check membership
+            const ids: number[] = payload?.data?.affectedIds || [];
+            if (ids.includes(student.id)) {
+              const year = displayedMonth.getFullYear();
+              const monthZero = displayedMonth.getMonth();
+              fetchAttendanceTrendForMonth(student.id, year, monthZero);
+              fetchSummary();
+            }
           }
         }
       } catch (e) {}

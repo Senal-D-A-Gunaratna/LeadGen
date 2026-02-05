@@ -98,7 +98,35 @@ async def api_get_student(student_id: int):
         student = flask_app.get_student_by_id(student_id)
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
-        return JSONResponse({"success": True, "student": student})
+        # Also include authoritative attendance summary computed on the server
+        try:
+            all_students = flask_app.get_all_students_with_history()
+            summary = flask_app.get_attendance_summary(student, all_students)
+        except Exception:
+            summary = None
+        return JSONResponse({"success": True, "student": student, "summary": summary})
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@fastapi_app.get('/api/students/{student_id}/summary')
+async def api_get_student_summary(student_id: int):
+    """Return computed attendance summary for a student (uses server-side school_days).
+
+    This endpoint provides an HTTP-first way for clients to obtain the
+    authoritative attendance statistics for a student without relying on
+    WebSocket RPCs.
+    """
+    try:
+        student = flask_app.get_student_by_id(student_id)
+        if not student:
+            raise HTTPException(status_code=404, detail='Student not found')
+        all_students = flask_app.get_all_students_with_history()
+        summary = flask_app.get_attendance_summary(student, all_students)
+        return JSONResponse({'success': True, 'studentId': student_id, 'summary': summary})
     except HTTPException:
         raise
     except Exception as e:

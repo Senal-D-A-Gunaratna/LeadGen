@@ -371,26 +371,25 @@ export async function downloadStudentAttendanceSummaryAsCsv(student: any): Promi
 }
 
 export async function getStudentSummary(studentId: number) {
-  // Prefer WebSocket RPC but gracefully fall back to HTTP when WS is unavailable.
+  // Use authoritative HTTP endpoint on FastAPI to get computed student summary.
   try {
-    const result = await wsClient.getStudentSummary(studentId);
-    return result;
-  } catch (wsErr) {
-    console.debug('wsClient.getStudentSummary failed, falling back to HTTP:', wsErr);
-    // Fallback: fetch single student and full student list via HTTP and compute summary locally
+    const res = await fetchAPI(`/api/students/${studentId}/summary`);
+    // API returns { success: True, studentId, summary }
+    return res;
+  } catch (err) {
+    // As a last resort, fall back to previous behavior: compute locally from /api/students
     try {
+      console.debug('HTTP summary fetch failed, falling back to compute locally', err);
       const studentResp = await fetchAPI(`/api/students/${studentId}`);
       const allResp = await fetchAPI(`/api/students`);
       const student = studentResp?.student;
       const allStudents = allResp?.students || [];
       if (!student) return { success: false, message: 'Student not found (HTTP fallback)' };
-
-      // Lazy-import the client-side summary calculator to avoid circular imports at module load
       const utils = await import('./utils');
       const summary = utils.getAttendanceSummary(student as any, allStudents as any[]);
       return { success: true, studentId, summary };
     } catch (httpErr) {
-      console.error('getStudentSummary HTTP fallback failed:', httpErr);
+      console.error('getStudentSummary fallback compute failed:', httpErr);
       throw httpErr;
     }
   }
