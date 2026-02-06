@@ -553,11 +553,13 @@ def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
         cur.execute('SELECT check_in_time FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
         row = cur.fetchone()
         if not row:
-            # Insert new record; status will be computed by caller after we return the earliest time
+            # Insert new record; do NOT write 'absent' into the DB. Use a neutral
+            # present status (late) here — absence is derived from missing
+            # records against `school_days` rather than stored explicitly.
             cur.execute('''
                 INSERT INTO attendance_records (student_id, date, status, created_at, updated_at, check_in_time)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (student_id, date_str, 'absent', datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), incoming_utc_iso))
+            ''', (student_id, date_str, 'late', datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat(), incoming_utc_iso))
             conn.commit()
             return incoming_utc_iso
 
@@ -742,4 +744,91 @@ def start_attendance_watcher(poll_interval: float = 1.0):
 
     ti = threading.Thread(target=_initial_recalc, daemon=True, name='attendance-db-initial-recalc')
     ti.start()
+
+
+def get_school_days():
+    """Return list of school_day dates (strings) ordered."""
+    conn = get_db_connection('attendance')
+    cur = conn.cursor()
+    cur.execute("SELECT date FROM school_days ORDER BY date")
+    rows = [r['date'] for r in cur.fetchall()]
+    try:
+        conn.close()
+    except Exception:
+        pass
+    return rows
+
+
+def get_school_days_count() -> int:
+    """Return the number of school days (rows in school_days)."""
+    conn = get_db_connection('attendance')
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) AS cnt FROM school_days")
+    row = cur.fetchone()
+    try:
+        conn.close()
+    except Exception:
+        pass
+    try:
+        return int(row['cnt']) if row and row['cnt'] is not None else 0
+    except Exception:
+        return 0
+
+
+def get_student_attendance_summary(student_id: int) -> Dict:
+    """
+    Compute per-student attendance summary based on authoritative `school_days`:
+      - total_school_days
+      - present_days (distinct dates with status 'on time' or 'late' that are in school_days)
+      - on_time count, late count
+      - absent_days = total_school_days - present_days
+      - presence_percentage = (present_days / total_school_days) * 100 (rounded to 1 decimal)
+    Note: 'absent' is never written to the DB; absences are derived from missing records on school_days.
+    """
+    total_days = get_school_days_count()
+    conn = get_db_connection('attendance')
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT COUNT(DISTINCT date) AS present
+        FROM attendance_records
+        WHERE student_id = ?
+          AND TRIM(LOWER(status)) IN ('on time','late')
+          AND date IN (SELECT date FROM school_days)
+    """, (student_id,))
+    row = cur.fetchone()
+    present = int(row['present']) if row and row['present'] is not None else 0
+
+    cur.execute("""
+        SELECT TRIM(LOWER(status)) AS status, COUNT(*) AS cnt
+        FROM attendance_records
+        WHERE student_id = ?
+          AND TRIM(LOWER(status)) IN ('on time','late')
+          AND date IN (SELECT date FROM school_days)
+        GROUP BY TRIM(LOWER(status))
+    """, (student_id,))
+    ontime = 0
+    late = 0
+    for r in cur.fetchall():
+        s = r['status']
+        if s == 'on time':
+            ontime = int(r['cnt'])
+        elif s == 'late':
+            late = int(r['cnt'])
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+    absent = max(0, total_days - present)
+    presence_percentage = round((present / total_days) * 100, 1) if total_days > 0 else 0.0
+
+    return {
+        'student_id': student_id,
+        'total_school_days': total_days,
+        'present_days': present,
+        'on_time': ontime,
+        'late': late,
+        'absent_days': absent,
+        'presence_percentage': presence_percentage
+    }
 
