@@ -795,6 +795,38 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     late: 'day-late',
   };
 
+  // Unified month data detection: consider trend points, per-student monthly history,
+  // calendar modifiers (attendance days), aggregate check, and summary counts.
+  // Returns: true = has data, false = definitely no data, null = unknown/loading.
+  const monthHasAnyData: boolean | null = useMemo(() => {
+    // If displayed month is outside the backend range, treat as no data.
+    if (!isMonthWithinRange(displayedMonth)) return false;
+
+    const hasTrend = !!(attendanceTrend && trendHasData(attendanceTrend));
+
+    const modOnTime = Array.isArray(modifiers.onTime) ? modifiers.onTime.length : 0;
+    const modLate = Array.isArray(modifiers.late) ? modifiers.late.length : 0;
+    const modAbsent = Array.isArray(modifiers.absent) ? modifiers.absent.length : 0;
+    const hasModifiers = (modOnTime + modLate + modAbsent) > 0;
+
+    const hasMonthlyHistory = Array.isArray(studentMonthlyHistory) && studentMonthlyHistory.length > 0;
+
+    const summaryCount = (attendanceStats && ((attendanceStats.onTimeCount || 0) + (attendanceStats.lateCount || 0) + (attendanceStats.absentCount || 0))) || 0;
+    const hasSummary = summaryCount > 0;
+
+    // If any authoritative source reports data, we have data.
+    if (hasTrend || hasModifiers || hasMonthlyHistory || hasSummary || monthHasData === true) return true;
+
+    // If fetch reported an error, avoid treating that as "no data" — return unknown so UI can avoid a false no-data view.
+    if (fetchError) return null;
+
+    // If month aggregate is still loading (null) or trend is loading, return unknown.
+    if (monthHasData === null || trendLoading) return null;
+
+    // No sources report data and nothing is loading — definite no data.
+    return false;
+  }, [attendanceTrend, trendLoading, studentMonthlyHistory, modifiers, monthHasData, fetchError, attendanceStats, displayedMonth]);
+
   useEffect(() => {
     let cancelled = false;
     async function fetchSummary() {
@@ -1110,7 +1142,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
                           {showTrend ? (
                             <div className="w-full h-[250px]">
-                              {trendLoading ? (
+                              {monthHasAnyData === false ? (
+                                <div className="w-full h-[250px] flex items-center justify-center">
+                                  <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
+                                    <div className="text-lg font-semibold mb-1">No Data Available</div>
+                                    <div className="text-sm">There is no attendance data for this month</div>
+                                  </div>
+                                </div>
+                              ) : trendLoading ? (
                                 <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
                               ) : trendError ? (
                                 <div className="w-full h-full flex items-center justify-center">
@@ -1131,9 +1170,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                                   <MiniTrendChart points={attendanceTrend} statusColors={statusColors} />
                                 </div>
                               )}
+                              
                             </div>
                             ) : (
-                                (monthHasData === false) ? (
+                                (monthHasAnyData === false) ? (
                               <div className="w-full h-[250px] flex items-center justify-center">
                                 <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
                                   <div className="text-lg font-semibold mb-1">No Data Available</div>
