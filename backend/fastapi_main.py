@@ -104,7 +104,32 @@ async def api_get_student(student_id: int):
             summary = flask_app.get_attendance_summary(student, all_students)
         except Exception:
             summary = None
-        return JSONResponse({"success": True, "student": student, "summary": summary})
+
+        # Build an ordered student dict where `attendanceHistory` is last
+        ordered_student = {
+            'id': student.get('id'),
+            'name': student.get('name'),
+            'grade': student.get('grade'),
+            'className': student.get('className'),
+            'role': student.get('role'),
+            'contact': student.get('contact'),
+            'specialRoles': student.get('specialRoles'),
+            'notes': student.get('notes'),
+            'fingerprints': student.get('fingerprints', []),
+            # Attendance Statistics placed before history
+            'summary': summary,
+            # Other metadata
+            'status': student.get('status'),
+            'hasScannedToday': student.get('hasScannedToday'),
+            
+            'created_at': student.get('created_at'),
+            'updated_at': student.get('updated_at'),
+        }
+
+        # Append attendanceHistory at the very end
+        ordered_student['attendanceHistory'] = student.get('attendanceHistory', [])
+
+        return JSONResponse({"success": True, "student": ordered_student})
     except HTTPException:
         raise
     except Exception as e:
