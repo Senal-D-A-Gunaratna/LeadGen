@@ -537,6 +537,8 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const [attendanceTrend, setAttendanceTrend] = useState<any[] | null>(null);
   const attendanceTrendCache = useRef<Map<string, any[]>>(new Map());
   const [wsConnected, setWsConnected] = useState<boolean>(wsClient.isConnected());
+  const [studentMonthlyHistory, setStudentMonthlyHistory] = useState<any[] | null>(null);
+  const monthlyHistoryFetchRef = useRef<number | null>(null);
 
   useEffect(() => {
     const connHandler = (connected: boolean) => setWsConnected(Boolean(connected));
@@ -671,63 +673,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       return;
     } catch (err) {
       console.error('Failed to fetch attendance trend via HTTP', err);
-      // Fallback: compute daily points from monthly attendance records
-      try {
-        const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
-        const monthResp = await getStudentMonthlyAttendance(studentId, monthStr) as any;
-        const monthHist = (monthResp && monthResp.attendanceHistory) ? monthResp.attendanceHistory : [];
-        // Build points only for dates that have records in monthHist. Do not fabricate absent
-        // points for schoolDays or weekdays — leave those dates blank in the chart/calendar.
-        if (!monthHist || monthHist.length === 0) {
-          attendanceTrendCache.current.set(key, []);
-          setAttendanceTrend([]);
-          setTrendLoading(false);
-          setTrendError(false);
-          return;
-        }
-
-        const recordsByDate: Record<string, any[]> = {};
-        for (const r of monthHist) {
-          if (!r || !r.date) continue;
-          if (!recordsByDate[r.date]) recordsByDate[r.date] = [];
-          recordsByDate[r.date].push(r);
-        }
-
-        const sortedDates = Object.keys(recordsByDate).sort();
-        const points = sortedDates.map((label) => {
-          const records = recordsByDate[label];
-          let on_time = 0;
-          let late = 0;
-          let arrival_minutes: number | null = null;
-          let arrival_local: string | null = null;
-          for (const r of records) {
-            if (r.status === 'on time') on_time += 1;
-            else if (r.status === 'late') late += 1;
-            if (!arrival_minutes && r.checkInTime) {
-              try {
-                const dObj = new Date(r.checkInTime);
-                if (!isNaN(dObj.getTime())) {
-                  arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
-                  arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                }
-              } catch (e) {}
-            }
-          }
-          const absent = 0; // since there are records for this date
-          return { label, date: label, on_time, late, absent, arrival_ts: null, arrival_minutes, arrival_local };
-        });
-
-        attendanceTrendCache.current.set(key, points);
-        setAttendanceTrend(points);
-        setTrendLoading(false);
-        setTrendError(false);
-        return;
-      } catch (fbErr) {
-        console.error('attendance trend fallback failed', fbErr);
-        setTrendError(true);
-        setTrendLoading(false);
-        return;
-      }
+      // Do not fallback to monthly attendance records. Rely only on authoritative
+      // API-provided trend (`getStudentAttendanceTrend`). Clear cached value
+      // and mark trend as errored so UI shows no-data state instead of fabricated points.
+      attendanceTrendCache.current.set(key, []);
+      setAttendanceTrend([]);
+      setTrendLoading(false);
+      setTrendError(true);
+      return;
     }
   };
 
@@ -769,25 +722,68 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     fetchAttendanceTrendForMonth(student.id, year, month);
   }, [displayedMonth, student]);
 
+  // Fetch per-student monthly attendanceHistory (date,status) and cache briefly.
+  useEffect(() => {
+    if (!student) {
+      setStudentMonthlyHistory(null);
+      return;
+    }
+    if (monthlyHistoryFetchRef.current) window.clearTimeout(monthlyHistoryFetchRef.current);
+    monthlyHistoryFetchRef.current = window.setTimeout(async () => {
+      try {
+        const mon = displayedMonth.getMonth() + 1;
+        const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
+        const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
+        const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
+        setStudentMonthlyHistory(hist);
+      } catch (e) {
+        console.warn('Failed to fetch student monthly attendance', e);
+        setStudentMonthlyHistory(null);
+      }
+    }, 120);
+
+    return () => {
+      if (monthlyHistoryFetchRef.current) window.clearTimeout(monthlyHistoryFetchRef.current);
+    };
+  }, [student, displayedMonth]);
+
   const modifiers = useMemo(() => {
     if (!student) return { onTime: [], late: [], absent: [] };
 
-    // Use only server-provided `attendanceTrend` (authoritative, keyed by student.id).
-    // If no trend points are available for the month, return empty modifier lists
-    // so the calendar does not fall back to local/in-memory history.
-    if (attendanceTrend && attendanceTrend.length > 0) {
-      const pointsForMonth = attendanceTrend.filter((p: any) => {
-        const label = p.label || p.date || p[0];
-        return typeof label === 'string' && label.startsWith(format(displayedMonth, 'yyyy-MM'));
-      });
-
-      return {
-        onTime: pointsForMonth.filter((p: any) => p.on_time).map((p: any) => parseDate(p.label || p.date)),
-        late: pointsForMonth.filter((p: any) => p.late).map((p: any) => parseDate(p.label || p.date)),
-        absent: pointsForMonth.filter((p: any) => p.absent).map((p: any) => parseDate(p.label || p.date)),
-      };
+    // Prefer per-student `attendanceHistory` (date,status) when available from the API.
+    if (studentMonthlyHistory && studentMonthlyHistory.length > 0) {
+      const prefix = format(displayedMonth, 'yyyy-MM');
+      const onTime: Date[] = [];
+      const late: Date[] = [];
+      const absent: Date[] = [];
+      for (const r of studentMonthlyHistory) {
+        const label = r?.date || r?.label;
+        if (!label || typeof label !== 'string') continue;
+        if (!label.startsWith(prefix)) continue;
+        try {
+          const d = parseDate(label);
+          const st = (r?.status || '').toString().trim().toLowerCase();
+          // Accept common variants for on-time
+          if (st === 'on time' || st === 'ontime' || st === 'on_time') {
+            onTime.push(d);
+          } else if (st === 'late') {
+            late.push(d);
+          } else if (st === 'absent') {
+            absent.push(d);
+          } else {
+            // Unknown/empty status: do not mark anything
+            continue;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      return { onTime, late, absent };
     }
 
+    // Do NOT fallback to aggregated `attendanceTrend` for per-student calendar markers.
+    // If per-student `attendanceHistory` is not available, return empty modifiers
+    // rather than marking days based on class-level aggregates.
     return { onTime: [], late: [], absent: [] };
   }, [student, attendanceTrend, displayedMonth]);
 
@@ -907,70 +903,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     return () => { cancelled = true; try { syncClient.off(syncListener); } catch (e) {} };
   }, [student, studentSummaries, updateStudentSummaries]);
 
-  // Ensure we fetch attendance for the currently selected `displayedMonth` whenever
-  // the dialog opens or the month selection changes. This provides an HTTP fallback
-  // (and warms the cache) so the calendar/trend can render even when WS fails.
-  useEffect(() => {
-    if (!open || !student) return;
-    const year = displayedMonth.getFullYear();
-    const monthZeroBased = displayedMonth.getMonth();
-    const monthOne = monthZeroBased + 1;
-    const key = formatTrendKey(student.id, year, monthOne);
-
-    let cancelled = false;
-    (async () => {
-      try {
-        const monthStr = `${year}-${String(monthOne).padStart(2, '0')}`;
-        const monthResp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
-        const monthHist = (monthResp && monthResp.attendanceHistory) ? monthResp.attendanceHistory : [];
-        const monthSchoolDays = (monthResp && monthResp.schoolDays) ? new Set<string>(monthResp.schoolDays) : new Set<string>();
-        if (cancelled) return;
-        // Build points only for dates that have records in monthHist. Do not fabricate
-        // absent points for other dates — leave them blank.
-        if (!monthHist || monthHist.length === 0) {
-          attendanceTrendCache.current.set(key, []);
-          setAttendanceTrend([]);
-          return;
-        }
-
-        const recordsByDate: Record<string, any[]> = {};
-        for (const r of monthHist) {
-          if (!r || !r.date) continue;
-          if (!recordsByDate[r.date]) recordsByDate[r.date] = [];
-          recordsByDate[r.date].push(r);
-        }
-
-        const sortedDates = Object.keys(recordsByDate).sort();
-        const points = sortedDates.map((label) => {
-          const records = recordsByDate[label];
-          let on_time = 0;
-          let late = 0;
-          let arrival_minutes: number | null = null;
-          let arrival_local: string | null = null;
-          for (const r of records) {
-            if (r.status === 'on time') on_time += 1;
-            else if (r.status === 'late') late += 1;
-            if (!arrival_minutes && r.checkInTime) {
-              try {
-                const dObj = new Date(r.checkInTime);
-                if (!isNaN(dObj.getTime())) {
-                  arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
-                  arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                }
-              } catch (e) {}
-            }
-          }
-          return { label, date: label, on_time, late, absent: 0, arrival_ts: null, arrival_minutes, arrival_local };
-        });
-        attendanceTrendCache.current.set(key, points);
-        setAttendanceTrend(points);
-      } catch (e) {
-        console.warn('HTTP monthly attendance fetch failed for displayedMonth', e);
-      }
-    })();
-
-    return () => { cancelled = true; };
-  }, [open, student, displayedMonth]);
+  
 
   // Listen for server summary updates and refresh the displayed student summary
   useEffect(() => {
