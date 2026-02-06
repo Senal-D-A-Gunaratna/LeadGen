@@ -471,7 +471,8 @@ def init_database():
     try:
         conn_att = get_db_connection('attendance')
         cur = conn_att.cursor()
-        cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE status IN ('on time','late') GROUP BY date")
+        # Normalize status comparison to avoid missing rows due to casing/whitespace
+        cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE TRIM(LOWER(status)) IN ('on time','late') GROUP BY date")
         conn_att.commit()
         conn_att.close()
     except Exception:
@@ -619,16 +620,6 @@ def recalculate_school_days():
         if '_recalc_done_event' not in globals():
             _recalc_done_event = threading.Event()
             _recalc_done_event.set()
-            # Invoke any registered post-recalc callbacks (notify external modules)
-            try:
-                for cb in list(_post_recalc_callbacks):
-                    try:
-                        cb()
-                    except Exception:
-                        # Do not let callback failures affect recalculation
-                        pass
-            except Exception:
-                pass
         if '_last_recalc_mtime' not in globals():
             _last_recalc_mtime = 0
 
@@ -662,6 +653,18 @@ def recalculate_school_days():
             except Exception:
                 _last_recalc_mtime = time.time()
             _recalc_done_event.set()
+
+            # Notify registered callbacks AFTER recalculation completes so
+            # external modules (e.g. app.py) can react (broadcast WS events, refresh caches).
+            try:
+                for cb in list(_post_recalc_callbacks):
+                    try:
+                        cb()
+                    except Exception:
+                        # Swallow callback errors to avoid breaking recalculation flow
+                        pass
+            except Exception:
+                pass
     except Exception:
         # Ensure event is set on unexpected failure to avoid hangs
         try:
