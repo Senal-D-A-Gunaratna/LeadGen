@@ -310,9 +310,27 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
             ORDER BY date DESC
         ''', (student_id,))
 
-    history = [{'date': r['date'], 'status': r['status'], 'checkInTime': r['check_in_time']} for r in cursor_attendance.fetchall()]
+    rows = cursor_attendance.fetchall()
+    # Build a map of existing attendance records by date for this student
+    att_map = {r['date']: {'date': r['date'], 'status': r['status'], 'checkInTime': r['check_in_time']} for r in rows}
     conn_attendance.close()
-    
+
+    # Build attendanceHistory aligned to authoritative school_days
+    try:
+        from database import get_school_days
+        school_days = get_school_days()
+    except Exception:
+        # Fallback: use dates from existing rows
+        school_days = sorted(list(att_map.keys()))
+
+    history = []
+    for sd in school_days:
+        rec = att_map.get(sd)
+        if rec:
+            history.append({'date': sd, 'status': rec.get('status'), 'checkInTime': rec.get('checkInTime')})
+        else:
+            history.append({'date': sd, 'status': 'absent', 'checkInTime': None})
+
     # Get today's status
     today = date.today().isoformat()
     today_record = next((h for h in history if h['date'] == today), None)
@@ -374,17 +392,17 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
     attendance_records = cursor_attendance.fetchall()
     conn_attendance.close()
     
-    # Group attendance by student_id
+    # Group attendance by student_id -> date for quick lookup
     attendance_by_student = {}
     for record in attendance_records:
         student_id = record['student_id']
         if student_id not in attendance_by_student:
-            attendance_by_student[student_id] = []
-        attendance_by_student[student_id].append({
+            attendance_by_student[student_id] = {}
+        attendance_by_student[student_id][record['date']] = {
             'date': record['date'],
             'status': record['status'],
             'checkInTime': record['check_in_time']
-        })
+        }
     
     # Preload all fingerprints from normalized table
     cursor_students.execute('SELECT student_id, fingerprint, position FROM student_fingerprints_id')
@@ -403,9 +421,26 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
         student = dict(row)
         student_id = student['id']
         
-        # Get attendance history for this student
-        history = attendance_by_student.get(student_id, [])
-        
+        # Build attendance history aligned to authoritative `school_days`
+        from database import get_school_days
+        school_days = get_school_days()
+        student_att_map = attendance_by_student.get(student_id, {})
+        history = []
+        for sd in school_days:
+            rec = student_att_map.get(sd)
+            if rec:
+                history.append({
+                    'date': sd,
+                    'status': rec.get('status'),
+                    'checkInTime': rec.get('checkInTime')
+                })
+            else:
+                history.append({
+                    'date': sd,
+                    'status': 'absent',
+                    'checkInTime': None
+                })
+
         # Get status for target date
         date_record = next((h for h in history if h['date'] == target_date), None)
         
