@@ -11,7 +11,7 @@ from datetime import datetime, date, timezone
 from pathlib import Path
 import os
 from typing import Dict, List, Optional
-from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH
+from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count
 from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
 from utils import compute_attendance_status
 import csv
@@ -442,71 +442,96 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
     return students
 
 def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
-    """Calculate attendance summary for a student."""
-    from datetime import datetime as dt
-    from calendar import day_name
-    
-    # Prefer authoritative `school_days` table in attendance DB for school-day determination.
-    try:
-        conn_att = get_db_connection('attendance')
-        cur = conn_att.cursor()
-        cur.execute("SELECT date FROM school_days")
-        school_days = set([r['date'] for r in cur.fetchall()])
-        conn_att.close()
-    except Exception:
-        # Fallback: compute from provided all_students history (legacy behavior)
-        school_days = set()
-        for s in all_students:
-            for record in s.get('attendanceHistory', []):
-                try:
-                    record_date = dt.fromisoformat(record['date'] + 'T00:00:00')
-                    day_of_week = record_date.weekday()
-                    if 0 <= day_of_week < 5 and record['status'] in ('on time', 'late'):
-                        school_days.add(record['date'])
-                except:
-                    pass
+    """Calculate attendance summary for a student.
 
-    total_school_days = len(school_days)
-    
-    if total_school_days == 0:
+    This delegates to the centralized DB helper `get_student_attendance_summary`
+    which computes counts based on the authoritative `school_days` table.
+    If the DB helper fails for any reason, falls back to the previous
+    in-memory calculation using `all_students` history.
+    """
+    try:
+        sid = int(student.get('id'))
+        db_summary = get_student_attendance_summary(sid)
+        total = int(db_summary.get('total_school_days', 0))
+        present = int(db_summary.get('present_days', 0))
+        ontime = int(db_summary.get('on_time', 0))
+        late = int(db_summary.get('late', 0))
+
+        absent = max(0, total - present)
+        presence_percentage = round((present / total) * 100, 1) if total > 0 else 0.0
+        absence_percentage = round((absent / total) * 100, 1) if total > 0 else 0.0
+        on_time_percentage = round((ontime / total) * 100, 1) if total > 0 else 0.0
+        late_percentage = round((late / total) * 100, 1) if total > 0 else 0.0
+
         return {
-            'totalSchoolDays': 0,
-            'presentDays': 0,
-            'absentDays': 0,
-            'onTimeDays': 0,
-            'lateDays': 0,
-            'presencePercentage': 0,
-            'absencePercentage': 0,
-            'onTimePercentage': 0,
-            'latePercentage': 0
+            'totalSchoolDays': total,
+            'presentDays': present,
+            'absentDays': absent,
+            'onTimeDays': ontime,
+            'lateDays': late,
+            'presencePercentage': presence_percentage,
+            'absencePercentage': absence_percentage,
+            'onTimePercentage': on_time_percentage,
+            'latePercentage': late_percentage
         }
-    
-    # Filter student records to school days only
-    student_records = [r for r in student.get('attendanceHistory', []) if r['date'] in school_days]
-    
-    on_time_days = len([r for r in student_records if r['status'] == 'on time'])
-    late_days = len([r for r in student_records if r['status'] == 'late'])
-    present_days = on_time_days + late_days
-    absent_days = total_school_days - present_days
-    
-    presence_percentage = round((present_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
-    absence_percentage = round((absent_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
-    # Compute on-time/late as percentage of total school days to keep
-    # metrics comparable with presence/absence percentages.
-    on_time_percentage = round((on_time_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
-    late_percentage = round((late_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
-    
-    return {
-        'totalSchoolDays': total_school_days,
-        'presentDays': present_days,
-        'absentDays': absent_days,
-        'onTimeDays': on_time_days,
-        'lateDays': late_days,
-        'presencePercentage': presence_percentage,
-        'absencePercentage': absence_percentage,
-        'onTimePercentage': on_time_percentage,
-        'latePercentage': late_percentage
-    }
+    except Exception:
+        # Fallback to legacy in-memory calculation if DB helper unavailable
+        from datetime import datetime as dt
+        # Recreate previous logic
+        try:
+            conn_att = get_db_connection('attendance')
+            cur = conn_att.cursor()
+            cur.execute("SELECT date FROM school_days")
+            school_days = set([r['date'] for r in cur.fetchall()])
+            conn_att.close()
+        except Exception:
+            school_days = set()
+            for s in all_students:
+                for record in s.get('attendanceHistory', []):
+                    try:
+                        record_date = dt.fromisoformat(record['date'] + 'T00:00:00')
+                        day_of_week = record_date.weekday()
+                        if 0 <= day_of_week < 5 and record['status'] in ('on time', 'late'):
+                            school_days.add(record['date'])
+                    except:
+                        pass
+
+        total_school_days = len(school_days)
+        if total_school_days == 0:
+            return {
+                'totalSchoolDays': 0,
+                'presentDays': 0,
+                'absentDays': 0,
+                'onTimeDays': 0,
+                'lateDays': 0,
+                'presencePercentage': 0,
+                'absencePercentage': 0,
+                'onTimePercentage': 0,
+                'latePercentage': 0
+            }
+
+        student_records = [r for r in student.get('attendanceHistory', []) if r['date'] in school_days]
+        on_time_days = len([r for r in student_records if r['status'] == 'on time'])
+        late_days = len([r for r in student_records if r['status'] == 'late'])
+        present_days = on_time_days + late_days
+        absent_days = total_school_days - present_days
+
+        presence_percentage = round((present_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
+        absence_percentage = round((absent_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
+        on_time_percentage = round((on_time_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
+        late_percentage = round((late_days / total_school_days) * 100, 1) if total_school_days > 0 else 0
+
+        return {
+            'totalSchoolDays': total_school_days,
+            'presentDays': present_days,
+            'absentDays': absent_days,
+            'onTimeDays': on_time_days,
+            'lateDays': late_days,
+            'presencePercentage': presence_percentage,
+            'absencePercentage': absence_percentage,
+            'onTimePercentage': on_time_percentage,
+            'latePercentage': late_percentage
+        }
 
 
 @app.route('/api/attendance/history', methods=['GET'])
