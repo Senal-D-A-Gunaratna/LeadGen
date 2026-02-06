@@ -749,42 +749,39 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
   const modifiers = useMemo(() => {
     if (!student) return { onTime: [], late: [], absent: [] };
+    // Use `student.attendanceHistory` provided by the server directly when present.
+    // This avoids client-side fabrication or reliance on class-level aggregates.
+    const sourceHist = Array.isArray((student as any).attendanceHistory) && (student as any).attendanceHistory.length > 0
+      ? (student as any).attendanceHistory
+      : (studentMonthlyHistory || []);
 
-    // Prefer per-student `attendanceHistory` (date,status) when available from the API.
-    if (studentMonthlyHistory && studentMonthlyHistory.length > 0) {
-      const prefix = format(displayedMonth, 'yyyy-MM');
-      const onTime: Date[] = [];
-      const late: Date[] = [];
-      const absent: Date[] = [];
-      for (const r of studentMonthlyHistory) {
-        const label = r?.date || r?.label;
-        if (!label || typeof label !== 'string') continue;
-        if (!label.startsWith(prefix)) continue;
-        try {
-          const d = parseDate(label);
-          const st = (r?.status || '').toString().trim().toLowerCase();
-          // Accept common variants for on-time
-          if (st === 'on time' || st === 'ontime' || st === 'on_time') {
-            onTime.push(d);
-          } else if (st === 'late') {
-            late.push(d);
-          } else if (st === 'absent') {
-            absent.push(d);
-          } else {
-            // Unknown/empty status: do not mark anything
-            continue;
-          }
-        } catch (e) {
+    if (!sourceHist || sourceHist.length === 0) return { onTime: [], late: [], absent: [] };
+
+    const prefix = format(displayedMonth, 'yyyy-MM');
+    const onTime: Date[] = [];
+    const late: Date[] = [];
+    const absent: Date[] = [];
+    for (const r of sourceHist) {
+      const label = r?.date || r?.label;
+      if (!label || typeof label !== 'string') continue;
+      if (!label.startsWith(prefix)) continue;
+      try {
+        const d = parseDate(label);
+        const st = (r?.status || '').toString().trim().toLowerCase();
+        if (st === 'on time' || st === 'ontime' || st === 'on_time') {
+          onTime.push(d);
+        } else if (st === 'late') {
+          late.push(d);
+        } else if (st === 'absent') {
+          absent.push(d);
+        } else {
           continue;
         }
+      } catch (e) {
+        continue;
       }
-      return { onTime, late, absent };
     }
-
-    // Do NOT fallback to aggregated `attendanceTrend` for per-student calendar markers.
-    // If per-student `attendanceHistory` is not available, return empty modifiers
-    // rather than marking days based on class-level aggregates.
-    return { onTime: [], late: [], absent: [] };
+    return { onTime, late, absent };
   }, [student, attendanceTrend, displayedMonth]);
 
   // Do not create 'null' date set — keep all calendar days active (do not dim/disable days)
