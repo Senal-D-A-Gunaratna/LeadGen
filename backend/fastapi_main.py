@@ -120,8 +120,7 @@ async def api_get_student(student_id: int):
             'summary': summary,
             # Other metadata
             'status': student.get('status'),
-            'hasScannedToday': student.get('hasScannedToday'),
-            
+            'hasScannedToday': student.get('hasScannedToday'),           
             'created_at': student.get('created_at'),
             'updated_at': student.get('updated_at'),
         }
