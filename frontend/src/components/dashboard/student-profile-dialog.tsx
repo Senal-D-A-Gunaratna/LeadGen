@@ -785,9 +785,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   }, [studentMonthlyHistory, displayedMonth]);
 
   // Do not create 'null' date set — keep all calendar days active (do not dim/disable days)
-  const nullDatesSet = useMemo(() => {
-    return new Set<string>();
-  }, [student, attendanceTrend, displayedMonth]);
+  // Removed nullDatesSet — calendar will not dim additional dates here
 
   const modifiersClassNames = {
     onTime: 'day-on-time',
@@ -1230,9 +1228,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                                        const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
                                        const day = date.getDay();
                                        const isWeekend = day === 0 || day === 6;
-                                       const dateStr = format(date, 'yyyy-MM-dd');
-                                       const isNull = nullDatesSet.has(dateStr);
-                                       return isOutOfRange || isWeekend || isNull;
+                                       return isOutOfRange || isWeekend;
                                      }}
                                      modifiers={modifiers}
                                      modifiersClassNames={modifiersClassNames}
