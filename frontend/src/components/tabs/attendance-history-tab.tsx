@@ -414,26 +414,27 @@ export function AttendanceHistoryTab() {
       fetchTimerRef.current = window.setTimeout(async () => {
         setMonthHasData(null); // loading
         setFetchError(false);
-        try {
-            // Prefer HTTP aggregate for deterministic computed percentages
-            const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
-            const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all' });
-            const points = (resp && resp.points) || resp.points || resp.data || resp.points || resp.points || resp.points || resp.points || resp.points || [];
-            // normalize: new backend returns { points }
-            const normalizedPoints = resp && resp.points ? resp.points : resp && resp.data ? resp.data : [];
-            setMonthPoints(normalizedPoints);
-            setMonthAggregate(resp || null);
-            const has = computeMonthHasDataFromPoints(normalizedPoints, month);
-            setMonthHasData(has);
-            setFetchError(false);
-        } catch (err) {
-          console.warn('attendance aggregate fetch failed', err);
-          // Do NOT treat socket failure as "no data". Keep calendar usable but mark fetchError.
-          setFetchError(true);
-            setMonthHasData(true); // let calendar show when socket fails
-            setMonthPoints(null);
-            setMonthAggregate(null);
-        }
+            try {
+              // Prefer HTTP aggregate for deterministic computed percentages
+              const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+              const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all' });
+              // normalize common shapes: { points: [...] } or { data: [...] }
+              const normalizedPoints = resp?.points ?? resp?.data ?? [];
+              setMonthPoints(normalizedPoints);
+              setMonthAggregate(resp ?? null);
+              const has = computeMonthHasDataFromPoints(normalizedPoints, month);
+              setMonthHasData(has);
+              setFetchError(false);
+            } catch (err) {
+              console.warn('attendance aggregate fetch failed', err);
+              // Mark fetchError so UI can show a retryable message, but treat
+              // the month as having no data instead of leaving the UI in a
+              // permanent loading state.
+              setFetchError(true);
+              setMonthHasData(false);
+              setMonthPoints(null);
+              setMonthAggregate(null);
+            }
         resolve();
       }, 250);
     });
@@ -688,30 +689,9 @@ export function AttendanceHistoryTab() {
 
                       {/* Loading or socket error: show skeleton only on fetchError; show placeholder while loading */}
                       {fetchError ? (
+                        // On fetch error, fall back to the same placeholder used while loading
                         <div className="relative">
-                          <Calendar
-                            mode="single"
-                            month={displayedMonth}
-                            onMonthChange={(m) => setDisplayedMonth(m)}
-                            selected={selectedDate}
-                            onSelect={(date) => setSelectedDate(date)}
-                            className="opacity-0"
-                            classNames={{ nav: 'hidden', caption: 'hidden', head_cell: 'invisible', day: 'invisible' }}
-                            disabled={(date) => {
-                              const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
-                              const day = date.getDay();
-                              const isWeekend = day === 0 || day === 6;
-                              return isOutOfRange || isWeekend;
-                            }}
-                            initialFocus
-                            weekStartsOn={1}
-                          />
-                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <div className="w-[260px]">
-                              <Skeleton className="h-[240px] w-full" />
-                            </div>
-                          
-                          </div>
+                          <div className="min-w-[280px] min-h-[280px] p-3 rounded-md border border-border/40 bg-background"></div>
                         </div>
                       ) : monthHasData === null ? (
                         // Still loading: show the placeholder (no flashing calendar)
