@@ -1215,6 +1215,15 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                                   <div className="text-sm">There is no attendance data for this month</div>
                                 </div>
                               </div>
+                            ) : (studentMonthlyHistory === null) ? (
+                              <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
+                            ) : (!hasMonthlyHistory) ? (
+                              <div className="w-full h-[250px] flex items-center justify-center">
+                                <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
+                                  <div className="text-lg font-semibold mb-1">No Data Available</div>
+                                  <div className="text-sm">There is no attendance data for this month</div>
+                                </div>
+                              </div>
                             ) : (
                               <div className="w-full h-[250px] flex items-center justify-center px-2">
                                  <div className="flex justify-center w-full max-w-[500px]">
