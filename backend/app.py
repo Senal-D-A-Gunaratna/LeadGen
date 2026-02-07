@@ -881,7 +881,35 @@ def api_attendance_aggregate():
             percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
             points.append({ 'date': iso, 'present': present_count, 'percent': percent })
 
-        return jsonify({'success': True, 'pie': pie, 'gradeBars': gradeBars, 'students': students_out, 'points': points})
+        # Determine whether this date range (month) has any attendance data.
+        # Check per-student attendanceHistory for any record inside school_dates
+        has_data = False
+        if school_dates and filtered_students:
+            sd_set = set(school_dates)
+            for s in filtered_students:
+                for r in s.get('attendanceHistory', []):
+                    if r.get('date') in sd_set:
+                        has_data = True
+                        break
+                if has_data:
+                    break
+
+        # Also check attendance_records table as authoritative fallback
+        try:
+            cur_chk = get_db_connection('attendance').cursor()
+            cur_chk.execute('SELECT COUNT(1) as cnt FROM attendance_records WHERE date BETWEEN ? AND ?', (start_date.isoformat(), end_date.isoformat()))
+            row_chk = cur_chk.fetchone()
+            if row_chk and row_chk.get('cnt', 0) > 0:
+                has_data = True
+            try:
+                cur_chk.connection.close()
+            except Exception:
+                pass
+        except Exception:
+            # If the check fails, conservatively leave has_data as computed above
+            pass
+
+        return jsonify({'success': True, 'pie': pie, 'gradeBars': gradeBars, 'students': students_out, 'points': points, 'hasData': bool(has_data)})
     except Exception as e:
         return jsonify({'success': False, 'message': 'Error computing attendance aggregate', 'error': str(e)}), 500
 

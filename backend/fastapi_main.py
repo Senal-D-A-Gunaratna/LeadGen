@@ -40,6 +40,108 @@ async def health():
     return {"status": "ok"}
 
 
+@fastapi_app.get('/api/attendance/has_data')
+async def api_attendance_has_data(month: Optional[str] = Query(None), start: Optional[str] = Query(None), end: Optional[str] = Query(None), grade: Optional[str] = Query('all'), classFilter: Optional[str] = Query(None), roleFilter: Optional[str] = Query(None)):
+    """Return whether any attendance records exist for a given month or date range.
+
+    Query params:
+      - month: YYYY-MM (optional)
+      - start, end: YYYY-MM-DD (optional)
+      - grade: grade number or 'all'
+      - classFilter: className or 'all'
+      - roleFilter: role or 'all' or 'none'
+    """
+    try:
+        from datetime import date, timedelta
+        # derive date range
+        if month:
+            try:
+                sd = date.fromisoformat(f"{month}-01")
+            except Exception:
+                raise HTTPException(status_code=400, detail='Invalid month format (expected YYYY-MM)')
+            start_date = sd
+            if sd.month == 12:
+                next_mon = date(sd.year + 1, 1, 1)
+            else:
+                next_mon = date(sd.year, sd.month + 1, 1)
+            end_date = next_mon - timedelta(days=1)
+        else:
+            try:
+                start_date = date.fromisoformat(start) if start else None
+                end_date = date.fromisoformat(end) if end else None
+            except Exception:
+                raise HTTPException(status_code=400, detail='Invalid date format for start/end')
+
+        if start_date is None or end_date is None:
+            # fallback: derive range from attendance_records
+            conn_att = get_db_connection('attendance')
+            cur_att = conn_att.cursor()
+            cur_att.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
+            row = cur_att.fetchone()
+            try:
+                cur_att.connection.close()
+            except Exception:
+                pass
+            if row and row['min_date'] and row['max_date']:
+                if start_date is None:
+                    start_date = date.fromisoformat(row['min_date'])
+                if end_date is None:
+                    end_date = date.fromisoformat(row['max_date'])
+            else:
+                # no records at all
+                return JSONResponse({'success': True, 'hasData': False})
+
+        if start_date > end_date:
+            start_date, end_date = end_date, start_date
+
+        # Build count query; optionally join students for filters
+        params = [start_date.isoformat(), end_date.isoformat()]
+        join_students = False
+        where_clauses = ['ar.date BETWEEN ? AND ?']
+        if grade and grade != 'all':
+            join_students = True
+            where_clauses.append('s.grade = ?')
+            params.append(int(grade))
+        if classFilter and classFilter != 'all':
+            join_students = True
+            where_clauses.append('s.className = ?')
+            params.append(classFilter)
+        if roleFilter and roleFilter != 'all':
+            join_students = True
+            if roleFilter == 'none':
+                where_clauses.append('(s.role IS NULL OR s.role = "")')
+            else:
+                where_clauses.append('s.role = ?')
+                params.append(roleFilter)
+
+        if join_students:
+            sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE {' AND '.join(where_clauses)}"
+        else:
+            sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar WHERE {' AND '.join(where_clauses)}"
+
+        conn = get_db_connection('attendance')
+        cur = conn.cursor()
+        cur.execute(sql, tuple(params))
+        row = cur.fetchone()
+        try:
+            cur.connection.close()
+        except Exception:
+            pass
+
+        has = False
+        if row and ('cnt' in row.keys()):
+            try:
+                has = bool(row['cnt'] > 0)
+            except Exception:
+                has = False
+        return JSONResponse({'success': True, 'hasData': has})
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @fastapi_app.on_event('startup')
 async def _startup_watchers():
     # Start background watcher for attendance DB changes

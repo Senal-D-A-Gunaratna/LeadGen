@@ -374,6 +374,32 @@ export function AttendanceHistoryTab() {
   const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
   const monthPickerNodeRef = useRef<HTMLElement | null>(null);
 
+  // When the popover opens, quickly ask backend whether the displayed month
+  // has any school days. This gives immediate feedback before the debounced
+  // aggregate fetch completes.
+  useEffect(() => {
+    if (!calendarOpen) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
+        const backendUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
+        const resp = await fetch(`${backendUrl}/api/month-has-attendance?month=${encodeURIComponent(monthStr)}`);
+        if (!mounted) return;
+        if (resp.ok) {
+          const j = await resp.json();
+          if (j && typeof j.hasData !== 'undefined') {
+            setMonthHasData(Boolean(j.hasData));
+            setFetchError(false);
+          }
+        }
+      } catch (e) {
+        // network error - leave loading state (null) so UI shows placeholder
+      }
+    })();
+    return () => { mounted = false; };
+  }, [calendarOpen, displayedMonth]);
+
   // Local UI filter for attendance status (overrides pie selection when set)
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
@@ -421,7 +447,8 @@ export function AttendanceHistoryTab() {
               // If backend reports no data, skip the heavier aggregate request.
               let hasMonthData: boolean | null = null;
               try {
-                const mhResp = await fetch(`/api/month-has-attendance?month=${encodeURIComponent(monthStr)}`);
+                const backendUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
+                const mhResp = await fetch(`${backendUrl}/api/month-has-attendance?month=${encodeURIComponent(monthStr)}`);
                 if (mhResp.ok) {
                   const mhJson = await mhResp.json();
                   if (mhJson && typeof mhJson.hasData !== 'undefined') {
