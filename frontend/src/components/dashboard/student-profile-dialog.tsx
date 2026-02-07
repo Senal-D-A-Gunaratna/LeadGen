@@ -1175,80 +1175,54 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                     </div>
                       {isClient ? (
                         <div className="p-4 rounded-md relative glassmorphic">
-                            <MonthYearSelector
-                              displayedMonth={displayedMonth}
-                              onMonthChange={setDisplayedMonth}
-                              showYearSelector={true}
-                              disableFutureMonths={true}
-                            />
+                          <MonthYearSelector
+                            displayedMonth={displayedMonth}
+                            onMonthChange={setDisplayedMonth}
+                            showYearSelector={true}
+                            disableFutureMonths={true}
+                          />
 
-                          {showTrend ? (
-                            <div className="w-full h-[250px]">
-                              {(monthHasAnyData === false && !hasMonthlyHistory) ? (
-                                <div className="w-full h-[250px] flex items-center justify-center">
-                                  <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
-                                    <div className="text-lg font-semibold mb-1">No Data Available</div>
-                                    <div className="text-sm">There is no attendance data for this month</div>
-                                  </div>
-                                </div>
-                              ) : (studentMonthlyHistory === null) ? (
-                                <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
-                              ) : (!hasMonthlyHistory) ? (
-                                <div className="w-full h-[250px] flex items-center justify-center">
-                                  <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
-                                    <div className="text-lg font-semibold mb-1">No Data Available</div>
-                                    <div className="text-sm">There is no attendance data for this month</div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="w-full h-full">
-                                  <MiniTrendChart points={monthlyTrendPoints} statusColors={statusColors} />
-                                </div>
-                              )}
-                              
-                            </div>
-                            ) : (
-                                (monthHasAnyData === false && !hasMonthlyHistory) ? (
-                              <div className="w-full h-[250px] flex items-center justify-center">
+                          <div className="w-full h-[250px] mt-2">
+                            {studentMonthlyHistory === null ? (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Skeleton className="h-full w-full" />
+                              </div>
+                            ) : (!hasMonthlyHistory || monthHasAnyData === false) ? (
+                              <div className="w-full h-full flex items-center justify-center">
                                 <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
                                   <div className="text-lg font-semibold mb-1">No Data Available</div>
                                   <div className="text-sm">There is no attendance data for this month</div>
                                 </div>
                               </div>
-                            ) : (studentMonthlyHistory === null) ? (
-                              <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
-                            ) : (!hasMonthlyHistory) ? (
-                              <div className="w-full h-[250px] flex items-center justify-center">
-                                <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
-                                  <div className="text-lg font-semibold mb-1">No Data Available</div>
-                                  <div className="text-sm">There is no attendance data for this month</div>
-                                </div>
+                            ) : showTrend ? (
+                              <div className="w-full h-full">
+                                <MiniTrendChart points={monthlyTrendPoints} statusColors={statusColors} />
                               </div>
                             ) : (
                               <div className="w-full h-[250px] flex items-center justify-center px-2">
-                                 <div className="flex justify-center w-full max-w-[500px]">
-                                   <Calendar
-                                     mode="single"
-                                     month={displayedMonth}
-                                     onMonthChange={(m) => setDisplayedMonth(m)}
-                                     selected={new Date()}
-                                     classNames={{ caption: 'hidden', caption_label: 'hidden', nav: 'hidden', table: 'w-full', head_cell: 'w-full h-8 text-muted-foreground font-normal text-sm', cell: 'w-full h-8' }}
-                                     disabled={(date) => {
-                                       const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
-                                       const day = date.getDay();
-                                       const isWeekend = day === 0 || day === 6;
-                                       return isOutOfRange || isWeekend;
-                                     }}
-                                     modifiers={modifiers}
-                                     modifiersClassNames={modifiersClassNames}
-                                     className="w-full p-0"
-                                     weekStartsOn={1}
-                                   />
-                                 </div>
-                               </div>
-                             )
-                           )}
-                         </div>
+                                <div className="flex justify-center w-full max-w-[500px]">
+                                  <Calendar
+                                    mode="single"
+                                    month={displayedMonth}
+                                    onMonthChange={(m) => setDisplayedMonth(m)}
+                                    selected={new Date()}
+                                    classNames={{ caption: 'hidden', caption_label: 'hidden', nav: 'hidden', table: 'w-full', head_cell: 'w-full h-8 text-muted-foreground font-normal text-sm', cell: 'w-full h-8' }}
+                                    disabled={(date) => {
+                                      const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
+                                      const day = date.getDay();
+                                      const isWeekend = day === 0 || day === 6;
+                                      return isOutOfRange || isWeekend;
+                                    }}
+                                    modifiers={modifiers}
+                                    modifiersClassNames={modifiersClassNames}
+                                    className="w-full p-0"
+                                    weekStartsOn={1}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                        ) : (
                          <Skeleton className="h-[250px] w-full" />
                        )}
