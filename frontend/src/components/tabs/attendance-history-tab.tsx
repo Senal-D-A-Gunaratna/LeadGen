@@ -415,10 +415,36 @@ export function AttendanceHistoryTab() {
         setMonthHasData(null); // loading
         setFetchError(false);
             try {
-              // Prefer HTTP aggregate for deterministic computed percentages
               const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+
+              // Fast-path: ask backend whether this month has any school days recorded.
+              // If backend reports no data, skip the heavier aggregate request.
+              let hasMonthData: boolean | null = null;
+              try {
+                const mhResp = await fetch(`/api/month-has-attendance?month=${encodeURIComponent(monthStr)}`);
+                if (mhResp.ok) {
+                  const mhJson = await mhResp.json();
+                  if (mhJson && typeof mhJson.hasData !== 'undefined') {
+                    hasMonthData = Boolean(mhJson.hasData);
+                  }
+                }
+              } catch (e) {
+                // network error or endpoint missing – fall back to full aggregate
+                hasMonthData = null;
+              }
+
+              if (hasMonthData === false) {
+                // Backend explicitly reports no school days for this month.
+                setMonthPoints([]);
+                setMonthAggregate(null);
+                setMonthHasData(false);
+                setFetchError(false);
+                resolve();
+                return;
+              }
+
+              // Otherwise fetch full aggregate (either hasData true or unknown)
               const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all' });
-              // normalize common shapes: { points: [...] } or { data: [...] }
               const normalizedPoints = resp?.points ?? resp?.data ?? [];
               setMonthPoints(normalizedPoints);
               setMonthAggregate(resp ?? null);

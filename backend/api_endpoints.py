@@ -12,6 +12,8 @@ import csv
 import io
 import sqlite3
 import time
+import calendar
+import re
 from pathlib import Path
 from typing import Dict, Optional
 from reportlab.lib.pagesizes import A4, landscape
@@ -363,6 +365,48 @@ def register_endpoints(app, socketio, helpers):
 
         if data_type not in ('students', 'attendance'):
             return jsonify({'error': 'Invalid dataType'}), 400
+
+        @app.route('/api/month-has-attendance', methods=['GET'])
+        def month_has_attendance():
+            """Return whether the given month has any school days recorded.
+
+            Query params:
+              - month: required, format YYYY-MM
+
+            Response: { success: True, month: 'YYYY-MM', hasData: bool, count: int }
+            """
+            month = request.args.get('month')
+            if not month or not re.match(r'^\d{4}-\d{2}$', month):
+                return jsonify({'success': False, 'error': 'Invalid or missing month parameter (expected YYYY-MM)'}), 400
+
+            try:
+                year, mon = month.split('-')
+                y = int(year)
+                m = int(mon)
+                if m < 1 or m > 12:
+                    raise ValueError('month out of range')
+            except Exception:
+                return jsonify({'success': False, 'error': 'Invalid month value'}), 400
+
+            # compute YYYY-MM-DD start/end for the month
+            last_day = calendar.monthrange(y, m)[1]
+            start_iso = f"{month}-01"
+            end_iso = f"{month}-{str(last_day).zfill(2)}"
+
+            try:
+                conn = get_db_connection('attendance')
+                cur = conn.cursor()
+                cur.execute('SELECT COUNT(1) as c FROM school_days WHERE date BETWEEN ? AND ?', (start_iso, end_iso))
+                row = cur.fetchone()
+                count = row['c'] if row is not None else 0
+                conn.close()
+                return jsonify({'success': True, 'month': month, 'hasData': bool(count), 'count': int(count)})
+            except Exception as e:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                return jsonify({'success': False, 'error': str(e)}), 500
 
         try:
             if data_type == 'students':
