@@ -1,5 +1,3 @@
-
-
 "use client";
 
 import {
@@ -540,6 +538,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const [studentMonthlyHistory, setStudentMonthlyHistory] = useState<any[] | null>(null);
   const monthlyHistoryFetchRef = useRef<number | null>(null);
 
+  // Single top-level flag indicating whether student monthly history exists
+  const hasMonthlyHistory = Array.isArray(studentMonthlyHistory) && studentMonthlyHistory.length > 0;
+
   useEffect(() => {
     const connHandler = (connected: boolean) => setWsConnected(Boolean(connected));
     wsClient.on('connection', connHandler);
@@ -749,11 +750,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
   const modifiers = useMemo(() => {
     if (!student) return { onTime: [], late: [], absent: [] };
-    // Use `student.attendanceHistory` provided by the server directly when present.
-    // This avoids client-side fabrication or reliance on class-level aggregates.
-    const sourceHist = Array.isArray((student as any).attendanceHistory) && (student as any).attendanceHistory.length > 0
-      ? (student as any).attendanceHistory
-      : (studentMonthlyHistory || []);
+    // Use ONLY the per-student monthly attendance records for calendar modifiers
+    const sourceHist = Array.isArray(studentMonthlyHistory) && studentMonthlyHistory.length > 0
+      ? studentMonthlyHistory
+      : [];
 
     if (!sourceHist || sourceHist.length === 0) return { onTime: [], late: [], absent: [] };
 
@@ -782,7 +782,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       }
     }
     return { onTime, late, absent };
-  }, [student, attendanceTrend, displayedMonth]);
+  }, [studentMonthlyHistory, displayedMonth]);
 
   // Do not create 'null' date set — keep all calendar days active (do not dim/disable days)
   const nullDatesSet = useMemo(() => {
@@ -802,19 +802,25 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     // If displayed month is outside the backend range, treat as no data.
     if (!isMonthWithinRange(displayedMonth)) return false;
 
-    const hasTrend = !!(attendanceTrend && trendHasData(attendanceTrend));
+    // Use per-student monthly history (authoritative) to determine presence
+    const prefix = format(displayedMonth, 'yyyy-MM');
+    const monthlyPoints = Array.isArray(studentMonthlyHistory)
+      ? studentMonthlyHistory.filter((p: any) => typeof (p?.date || p?.label) === 'string' && ( (p.date || p.label) as string).startsWith(prefix) )
+      : [];
+
+    const hasTrend = monthlyPoints.length > 0;
 
     const modOnTime = Array.isArray(modifiers.onTime) ? modifiers.onTime.length : 0;
     const modLate = Array.isArray(modifiers.late) ? modifiers.late.length : 0;
     const modAbsent = Array.isArray(modifiers.absent) ? modifiers.absent.length : 0;
     const hasModifiers = (modOnTime + modLate + modAbsent) > 0;
 
-    const hasMonthlyHistory = Array.isArray(studentMonthlyHistory) && studentMonthlyHistory.length > 0;
+    // use top-level `hasMonthlyHistory` (defined below) instead of re-declaring here
 
     const summaryCount = (attendanceStats && ((attendanceStats.onTimeCount || 0) + (attendanceStats.lateCount || 0) + (attendanceStats.absentCount || 0))) || 0;
     const hasSummary = summaryCount > 0;
 
-    // If any authoritative source reports data, we have data.
+    // If the per-student monthly record or other modifiers report data, we have data.
     if (hasTrend || hasModifiers || hasMonthlyHistory || hasSummary || monthHasData === true) return true;
 
     // If fetch reported an error, avoid treating that as "no data" — return unknown so UI can avoid a false no-data view.
@@ -825,8 +831,46 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
     // No sources report data and nothing is loading — definite no data.
     return false;
-  }, [attendanceTrend, trendLoading, studentMonthlyHistory, modifiers, monthHasData, fetchError, attendanceStats, displayedMonth]);
+  }, [hasMonthlyHistory, modifiers, monthHasData, fetchError, attendanceStats, displayedMonth]);
 
+  // Build trend points from per-student monthly attendance records only
+  const monthlyTrendPoints = useMemo(() => {
+    if (!Array.isArray(studentMonthlyHistory) || studentMonthlyHistory.length === 0) return [];
+    const prefix = format(displayedMonth, 'yyyy-MM');
+    const pts: any[] = [];
+    for (const r of studentMonthlyHistory) {
+      const label = r?.date || r?.label;
+      if (!label || typeof label !== 'string') continue;
+      if (!label.startsWith(prefix)) continue;
+      const status = (r?.status || '').toString().trim().toLowerCase();
+      const point: any = { date: label };
+      if (status === 'on time' || status === 'ontime' || status === 'on_time') point.on_time = 1;
+      else if (status === 'late') point.late = 1;
+      else if (status === 'absent') point.absent = 1;
+
+      // arrival minutes: prefer explicit field, then arrival_ts (seconds)
+      if (typeof r.arrival_minutes === 'number') {
+        point.arrival_minutes = r.arrival_minutes;
+      } else if (r.arrival_ts) {
+        try {
+          const d = new Date(r.arrival_ts * 1000);
+          point.arrival_minutes = d.getHours() * 60 + d.getMinutes();
+          point.arrival_local = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+          point.arrival_minutes = null;
+          point.arrival_local = null;
+        }
+      } else {
+        point.arrival_minutes = null;
+        point.arrival_local = null;
+      }
+
+      pts.push(point);
+    }
+    return pts;
+  }, [studentMonthlyHistory, displayedMonth]);
+
+  
   useEffect(() => {
     let cancelled = false;
     async function fetchSummary() {
@@ -1142,23 +1186,16 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
                           {showTrend ? (
                             <div className="w-full h-[250px]">
-                              {monthHasAnyData === false ? (
+                              {(monthHasAnyData === false && !hasMonthlyHistory) ? (
                                 <div className="w-full h-[250px] flex items-center justify-center">
                                   <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
                                     <div className="text-lg font-semibold mb-1">No Data Available</div>
                                     <div className="text-sm">There is no attendance data for this month</div>
                                   </div>
                                 </div>
-                              ) : trendLoading ? (
+                              ) : (studentMonthlyHistory === null) ? (
                                 <div className="w-full h-full flex items-center justify-center"><Skeleton className="h-full w-full" /></div>
-                              ) : trendError ? (
-                                <div className="w-full h-full flex items-center justify-center">
-                                  <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
-                                    <div className="text-lg font-semibold mb-1">No Data Available</div>
-                                    <div className="text-sm">There is no attendance data for this month</div>
-                                  </div>
-                                </div>
-                              ) : (!attendanceTrend || !trendHasData(attendanceTrend)) ? (
+                              ) : (!hasMonthlyHistory) ? (
                                 <div className="w-full h-[250px] flex items-center justify-center">
                                   <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
                                     <div className="text-lg font-semibold mb-1">No Data Available</div>
@@ -1167,13 +1204,13 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                                 </div>
                               ) : (
                                 <div className="w-full h-full">
-                                  <MiniTrendChart points={attendanceTrend} statusColors={statusColors} />
+                                  <MiniTrendChart points={monthlyTrendPoints} statusColors={statusColors} />
                                 </div>
                               )}
                               
                             </div>
                             ) : (
-                                (monthHasAnyData === false) ? (
+                                (monthHasAnyData === false && !hasMonthlyHistory) ? (
                               <div className="w-full h-[250px] flex items-center justify-center">
                                 <div className="w-full h-full p-3 rounded-md text-center text-muted-foreground flex flex-col items-center justify-center">
                                   <div className="text-lg font-semibold mb-1">No Data Available</div>
@@ -1182,38 +1219,38 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                               </div>
                             ) : (
                               <div className="w-full h-[250px] flex items-center justify-center px-2">
-                                <div className="flex justify-center w-full max-w-[500px]">
-                                  <Calendar
-                                    mode="single"
-                                    month={displayedMonth}
-                                    onMonthChange={(m) => setDisplayedMonth(m)}
-                                    selected={new Date()}
-                                    classNames={{ caption: 'hidden', caption_label: 'hidden', nav: 'hidden', table: 'w-full', head_cell: 'w-full h-8 text-muted-foreground font-normal text-sm', cell: 'w-full h-8' }}
-                                    disabled={(date) => {
-                                      const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
-                                      const day = date.getDay();
-                                      const isWeekend = day === 0 || day === 6;
-                                      const dateStr = format(date, 'yyyy-MM-dd');
-                                      const isNull = nullDatesSet.has(dateStr);
-                                      return isOutOfRange || isWeekend || isNull;
-                                    }}
-                                    modifiers={modifiers}
-                                    modifiersClassNames={modifiersClassNames}
-                                    className="w-full p-0"
-                                    weekStartsOn={1}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      ) : (
-                        <Skeleton className="h-[250px] w-full" />
-                      )}
-                  </div>
-                </div>
-              </TabsContent>
-              <TabsContent value="additional" className="h-full overflow-y-auto pr-4">
+                                 <div className="flex justify-center w-full max-w-[500px]">
+                                   <Calendar
+                                     mode="single"
+                                     month={displayedMonth}
+                                     onMonthChange={(m) => setDisplayedMonth(m)}
+                                     selected={new Date()}
+                                     classNames={{ caption: 'hidden', caption_label: 'hidden', nav: 'hidden', table: 'w-full', head_cell: 'w-full h-8 text-muted-foreground font-normal text-sm', cell: 'w-full h-8' }}
+                                     disabled={(date) => {
+                                       const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
+                                       const day = date.getDay();
+                                       const isWeekend = day === 0 || day === 6;
+                                       const dateStr = format(date, 'yyyy-MM-dd');
+                                       const isNull = nullDatesSet.has(dateStr);
+                                       return isOutOfRange || isWeekend || isNull;
+                                     }}
+                                     modifiers={modifiers}
+                                     modifiersClassNames={modifiersClassNames}
+                                     className="w-full p-0"
+                                     weekStartsOn={1}
+                                   />
+                                 </div>
+                               </div>
+                             )
+                           )}
+                         </div>
+                       ) : (
+                         <Skeleton className="h-[250px] w-full" />
+                       )}
+                   </div>
+                 </div>
+               </TabsContent>
+               <TabsContent value="additional" className="h-full overflow-y-auto pr-4">
                  <div className="mt-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="space-y-2">
