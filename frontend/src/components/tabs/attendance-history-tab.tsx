@@ -384,7 +384,7 @@ export function AttendanceHistoryTab() {
       try {
         const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
         const backendUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
-        const resp = await fetch(`${backendUrl}/api/month-has-attendance?month=${encodeURIComponent(monthStr)}`);
+        const resp = await fetch(`${backendUrl}/api/attendance/has_data?month=${encodeURIComponent(monthStr)}`);
         if (!mounted) return;
         if (resp.ok) {
           const j = await resp.json();
@@ -448,7 +448,7 @@ export function AttendanceHistoryTab() {
               let hasMonthData: boolean | null = null;
               try {
                 const backendUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
-                const mhResp = await fetch(`${backendUrl}/api/month-has-attendance?month=${encodeURIComponent(monthStr)}`);
+                const mhResp = await fetch(`${backendUrl}/api/attendance/has_data?month=${encodeURIComponent(monthStr)}`);
                 if (mhResp.ok) {
                   const mhJson = await mhResp.json();
                   if (mhJson && typeof mhJson.hasData !== 'undefined') {
@@ -475,8 +475,13 @@ export function AttendanceHistoryTab() {
               const normalizedPoints = resp?.points ?? resp?.data ?? [];
               setMonthPoints(normalizedPoints);
               setMonthAggregate(resp ?? null);
-              const has = computeMonthHasDataFromPoints(normalizedPoints, month);
-              setMonthHasData(has);
+              // If backend explicitly reported the month has data, prefer that.
+              if (hasMonthData === true) {
+                setMonthHasData(true);
+              } else {
+                const has = computeMonthHasDataFromPoints(normalizedPoints, month);
+                setMonthHasData(has);
+              }
               setFetchError(false);
             } catch (err) {
               console.warn('attendance aggregate fetch failed', err);
