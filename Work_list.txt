@@ -1,0 +1,9 @@
+work list
+
+fix up manual attendance marking
+add bach to stu profile + db (may be)
+
+bulk marking fechers
+        1.attendance
+        2.grade/bach update
+
