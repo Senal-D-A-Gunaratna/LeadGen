@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import LeadGenLogoSvg from '@/icons/LeadGenLogo..svg';
+import LeadGenLogoSvg from '@/icons/LeadGenLogo.svg';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
