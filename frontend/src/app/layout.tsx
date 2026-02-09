@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import faviconSvg from '@/icons/favicon.svg';
+import LeadGenLogoSvg from '@/icons/LeadGenLogo..svg';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   description: 'A cutting-edge school management application with a futuristic GUI and real-time fingerprint attendance tracking',
   icons: {
     icon: [
-      { url: (faviconSvg as any).src ?? (faviconSvg as any), sizes: 'any', type: 'image/svg+xml' },
+      { url: (LeadGenLogoSvg as any).src ?? (LeadGenLogoSvg as any), sizes: 'any', type: 'image/svg+xml' },
     ],
   },
 };
