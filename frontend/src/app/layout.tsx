@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import favicon64 from '@/icons/favicon(64x64).png';
-import favicon128 from '@/icons/favicon(128x128).png';
+import faviconSvg from '@/icons/favicon.svg';
 import { Inter, Space_Grotesk } from 'next/font/google';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
@@ -27,8 +26,7 @@ export const metadata: Metadata = {
   description: 'A cutting-edge school management application with a futuristic GUI and real-time fingerprint attendance tracking',
   icons: {
     icon: [
-      { url: (favicon128 as any).src ?? (favicon128 as any), sizes: '128x128', type: 'image/png' },
-      { url: (favicon64 as any).src ?? (favicon64 as any), sizes: '64x64', type: 'image/png' },
+      { url: (faviconSvg as any).src ?? (faviconSvg as any), sizes: 'any', type: 'image/svg+xml' },
     ],
   },
 };
