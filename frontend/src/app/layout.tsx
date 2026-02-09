@@ -50,7 +50,7 @@ export default function RootLayout({
             </div>
             {children}
             <Toaster />
-            <footer className="fixed bottom-2 right-4 text-base text-muted-foreground/50">
+            <footer className="fixed bottom-1 right-0 text-base text-muted-foreground/50">
               Powered By R.V.C Robotics Club
             </footer>
           </AuthProvider>
