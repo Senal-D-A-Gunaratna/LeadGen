@@ -369,7 +369,6 @@ export function AttendanceHistoryTab() {
     return { onTime, late, absent } as any;
   }, [monthPoints, displayedMonth]);
   const fetchTimerRef = useRef<number | null>(null);
-  const noDataMonthsRef = useRef<Set<string>>(new Set());
 
   // Control popover open state so we can intercept Radix outside events
   const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
@@ -396,7 +395,8 @@ export function AttendanceHistoryTab() {
       try {
         const detail = (ev as CustomEvent)?.detail || {};
         if (detail && typeof detail.month === 'string') {
-          noDataMonthsRef.current.add(detail.month);
+          // If the selector reports no data for the month currently
+          // displayed, clear points/aggregate and show the no-data placeholder.
           if (detail.month === monthStr) {
             setMonthPoints([]);
             setMonthAggregate(null);
@@ -412,7 +412,6 @@ export function AttendanceHistoryTab() {
       try {
         const detail = (ev as CustomEvent)?.detail || {};
         if (detail && typeof detail.month === 'string') {
-          noDataMonthsRef.current.delete(detail.month);
           if (detail.month === monthStr) {
             // Immediately show the calendar while we fetch the full aggregate
             setMonthHasData(true);
@@ -476,16 +475,10 @@ export function AttendanceHistoryTab() {
             try {
               const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
 
-              // If the month selector already reported this month has no
-              // data, skip the aggregate fetch and show the placeholder.
-              if (noDataMonthsRef.current.has(monthStr)) {
-                setMonthPoints([]);
-                setMonthAggregate(null);
-                setMonthHasData(false);
-                setFetchError(false);
-                resolve();
-                return;
-              }
+              // Always fetch the full aggregate here — do not rely on a
+              // cached boolean. The selector emits quick events that we
+              // use to toggle the UI immediately, but we still perform
+              // the authoritative aggregate fetch for accuracy.
 
               // Otherwise fetch full aggregate
               const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all' });
@@ -494,8 +487,8 @@ export function AttendanceHistoryTab() {
               setMonthAggregate(resp ?? null);
               const has = computeMonthHasDataFromPoints(normalizedPoints, month);
               setMonthHasData(has);
-              // If there is data for this month, clear any recorded no-data mark
-              if (has && noDataMonthsRef.current.has(monthStr)) noDataMonthsRef.current.delete(monthStr);
+              // No caching: nothing to clear here — aggregate result will
+              // directly update `monthHasData` and `monthPoints`.
               setFetchError(false);
             } catch (err) {
               console.warn('attendance aggregate fetch failed', err);
