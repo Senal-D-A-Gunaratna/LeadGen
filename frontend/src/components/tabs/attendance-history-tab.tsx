@@ -410,10 +410,10 @@ export function AttendanceHistoryTab() {
         const detail = (ev as CustomEvent)?.detail || {};
         const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
         if (detail && detail.month === monthStr) {
-          setMonthPoints([]);
-          setMonthAggregate(null);
+          // Only mark the month as having no data so the UI renders the
+          // "No Data Available" placeholder. Do not mutate aggregates or
+          // points here; the normal fetch flow will populate or clear them.
           setMonthHasData(false);
-          setFetchError(false);
         }
       } catch (e) {
         // ignore
