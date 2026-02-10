@@ -128,7 +128,9 @@ export const MonthYearSelector = React.forwardRef<
         const j = await resp.json();
         if (j && typeof j.hasData !== 'undefined' && j.hasData === false) {
           const ev = new CustomEvent('month-no-data', { detail: { month: monthStr } });
-          window.dispatchEvent(ev);
+          // Dispatch asynchronously so parent components' state updates
+          // (eg. `setDisplayedMonth`) have a chance to apply before handlers run.
+          setTimeout(() => window.dispatchEvent(ev), 0);
         }
       } catch (e) {
         // ignore network errors here; other consumers may do their own checks

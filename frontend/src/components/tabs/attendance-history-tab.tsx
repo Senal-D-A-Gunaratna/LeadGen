@@ -369,36 +369,21 @@ export function AttendanceHistoryTab() {
     return { onTime, late, absent } as any;
   }, [monthPoints, displayedMonth]);
   const fetchTimerRef = useRef<number | null>(null);
+  const noDataMonthRef = useRef<string | null>(null);
 
   // Control popover open state so we can intercept Radix outside events
   const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
   const monthPickerNodeRef = useRef<HTMLElement | null>(null);
 
-  // When the popover opens, quickly ask backend whether the displayed month
-  // has any school days. This gives immediate feedback before the debounced
-  // aggregate fetch completes.
+  // When the popover opens, reset the loading state. We do NOT perform a
+  // quick backend check here — the `MonthYearSelector` component emits the
+  // authoritative `month-no-data` event which we listen for instead.
   useEffect(() => {
-    if (!calendarOpen) return;
-    let mounted = true;
-    (async () => {
-      try {
-        const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
-        const backendUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
-        const resp = await fetch(`${backendUrl}/api/attendance/has_data?month=${encodeURIComponent(monthStr)}`);
-        if (!mounted) return;
-        if (resp.ok) {
-          const j = await resp.json();
-          if (j && typeof j.hasData !== 'undefined') {
-            setMonthHasData(Boolean(j.hasData));
-            setFetchError(false);
-          }
-        }
-      } catch (e) {
-        // network error - leave loading state (null) so UI shows placeholder
-      }
-    })();
-    return () => { mounted = false; };
-  }, [calendarOpen, displayedMonth]);
+    if (calendarOpen) {
+      setMonthHasData(null);
+      setFetchError(false);
+    }
+  }, [calendarOpen]);
 
   // Listen for client-only quick-notifications from the month selector.
   // The selector dispatches a `month-no-data` CustomEvent when it detects
@@ -409,11 +394,16 @@ export function AttendanceHistoryTab() {
       try {
         const detail = (ev as CustomEvent)?.detail || {};
         const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
-        if (detail && detail.month === monthStr) {
-          // Only mark the month as having no data so the UI renders the
-          // "No Data Available" placeholder. Do not mutate aggregates or
-          // points here; the normal fetch flow will populate or clear them.
-          setMonthHasData(false);
+        if (detail && typeof detail.month === 'string') {
+          // Record the no-data month and if it matches the currently
+          // displayed month, clear cached points/aggregate and show
+          // the placeholder.
+          noDataMonthRef.current = detail.month;
+          if (detail.month === monthStr) {
+            setMonthPoints([]);
+            setMonthAggregate(null);
+            setMonthHasData(false);
+          }
         }
       } catch (e) {
         // ignore
@@ -466,25 +456,9 @@ export function AttendanceHistoryTab() {
             try {
               const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
 
-              // Fast-path: ask backend whether this month has any school days recorded.
-              // If backend reports no data, skip the heavier aggregate request.
-              let hasMonthData: boolean | null = null;
-              try {
-                const backendUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
-                const mhResp = await fetch(`${backendUrl}/api/attendance/has_data?month=${encodeURIComponent(monthStr)}`);
-                if (mhResp.ok) {
-                  const mhJson = await mhResp.json();
-                  if (mhJson && typeof mhJson.hasData !== 'undefined') {
-                    hasMonthData = Boolean(mhJson.hasData);
-                  }
-                }
-              } catch (e) {
-                // network error or endpoint missing – fall back to full aggregate
-                hasMonthData = null;
-              }
-
-              if (hasMonthData === false) {
-                // Backend explicitly reports no school days for this month.
+              // If the month selector already reported this month has no
+              // data, skip the aggregate fetch and show the placeholder.
+              if (noDataMonthRef.current === monthStr) {
                 setMonthPoints([]);
                 setMonthAggregate(null);
                 setMonthHasData(false);
@@ -493,28 +467,20 @@ export function AttendanceHistoryTab() {
                 return;
               }
 
-              // Otherwise fetch full aggregate (either hasData true or unknown)
+              // Otherwise fetch full aggregate
               const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all' });
               const normalizedPoints = resp?.points ?? resp?.data ?? [];
               setMonthPoints(normalizedPoints);
               setMonthAggregate(resp ?? null);
-              // If backend explicitly reported the month has data, prefer that.
-              if (hasMonthData === true) {
-                setMonthHasData(true);
-              } else {
-                const has = computeMonthHasDataFromPoints(normalizedPoints, month);
-                setMonthHasData(has);
-              }
+              const has = computeMonthHasDataFromPoints(normalizedPoints, month);
+              setMonthHasData(has);
+              // If there is data for this month, clear any recorded no-data mark
+              if (has && noDataMonthRef.current === monthStr) noDataMonthRef.current = null;
               setFetchError(false);
             } catch (err) {
               console.warn('attendance aggregate fetch failed', err);
-              // Mark fetchError so UI can show a retryable message, but treat
-              // the month as having no data instead of leaving the UI in a
-              // permanent loading state.
               setFetchError(true);
               setMonthHasData(false);
-              setMonthPoints(null);
-              setMonthAggregate(null);
             }
         resolve();
       }, 250);
@@ -525,7 +491,11 @@ export function AttendanceHistoryTab() {
   useEffect(() => {
     // Only attempt server fetch if the month overlaps the backend's month window; otherwise we can compute that it's likely empty
     if (!isMonthWithinRange(displayedMonth)) {
-      setMonthHasData(false);
+      // Month is out of the backend's typical aggregate window — leave
+      // the state as "unknown/loading" so we don't forcibly render the
+      // "No Data" placeholder. The month selector's quick-check or the
+      // full aggregate fetch will update this state when appropriate.
+      setMonthHasData(null);
       setFetchError(false);
       return;
     }
