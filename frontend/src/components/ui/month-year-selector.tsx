@@ -77,6 +77,7 @@ export const MonthYearSelector = React.forwardRef<
         1
       );
       onMonthChange(newMonth);
+      checkMonthHasData(newMonth);
     };
 
     const handleNextMonth = () => {
@@ -92,6 +93,7 @@ export const MonthYearSelector = React.forwardRef<
         return;
       }
       onMonthChange(newMonth);
+      checkMonthHasData(newMonth);
     };
 
     const handleMonthSelect = (monthIndex: number) => {
@@ -104,6 +106,7 @@ export const MonthYearSelector = React.forwardRef<
       }
       onMonthChange(newMonth);
       setShowMonthPicker(false);
+      checkMonthHasData(newMonth);
     };
 
     const handleYearChange = (delta: number) => {
@@ -113,7 +116,24 @@ export const MonthYearSelector = React.forwardRef<
     const handleThisMonth = () => {
       onMonthChange(new Date());
       setShowMonthPicker(false);
+      checkMonthHasData(new Date());
     };
+
+    async function checkMonthHasData(month: Date) {
+      try {
+        const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+        const backendUrl = `${window.location.protocol}//${window.location.hostname}:5000`;
+        const resp = await fetch(`${backendUrl}/api/attendance/has_data?month=${encodeURIComponent(monthStr)}`);
+        if (!resp.ok) return;
+        const j = await resp.json();
+        if (j && typeof j.hasData !== 'undefined' && j.hasData === false) {
+          const ev = new CustomEvent('month-no-data', { detail: { month: monthStr } });
+          window.dispatchEvent(ev);
+        }
+      } catch (e) {
+        // ignore network errors here; other consumers may do their own checks
+      }
+    }
 
     const canGoNext = !disableFutureMonths ||
       new Date(

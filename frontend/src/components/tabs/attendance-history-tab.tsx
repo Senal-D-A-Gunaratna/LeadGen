@@ -400,6 +400,29 @@ export function AttendanceHistoryTab() {
     return () => { mounted = false; };
   }, [calendarOpen, displayedMonth]);
 
+  // Listen for client-only quick-notifications from the month selector.
+  // The selector dispatches a `month-no-data` CustomEvent when it detects
+  // the backend explicitly reports no data for a selected month. Only
+  // react if the event's month matches our currently displayed month.
+  useEffect(() => {
+    const handler = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail || {};
+        const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
+        if (detail && detail.month === monthStr) {
+          setMonthPoints([]);
+          setMonthAggregate(null);
+          setMonthHasData(false);
+          setFetchError(false);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    window.addEventListener('month-no-data', handler as EventListener);
+    return () => window.removeEventListener('month-no-data', handler as EventListener);
+  }, [displayedMonth]);
+
   // Local UI filter for attendance status (overrides pie selection when set)
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
