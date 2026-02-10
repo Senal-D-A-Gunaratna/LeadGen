@@ -54,7 +54,6 @@ curl -sS "http://localhost:5000/api/attendance/aggregate?month=2026-02&grade=all
 
 
 
-
 Run this to fetch the student profile for ID 14 (backend on localhost:5000):
 
 curl -sS http://localhost:5000/api/students/14 | jq
