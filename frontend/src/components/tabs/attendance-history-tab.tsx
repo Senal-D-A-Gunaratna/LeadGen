@@ -414,6 +414,8 @@ export function AttendanceHistoryTab() {
         if (detail && typeof detail.month === 'string') {
           noDataMonthsRef.current.delete(detail.month);
           if (detail.month === monthStr) {
+            // Immediately show the calendar while we fetch the full aggregate
+            setMonthHasData(true);
             // Re-fetch aggregate for the current month now that we know data exists
             fetchMonthAggregate(displayedMonth, gradeFilter);
           }
