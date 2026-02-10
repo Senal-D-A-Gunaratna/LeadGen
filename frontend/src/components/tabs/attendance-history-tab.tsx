@@ -738,11 +738,11 @@ export function AttendanceHistoryTab() {
                         onMonthPickerMount={(n) => (monthPickerNodeRef.current = n)}
                       />
 
-                      {/* Loading or socket error: show skeleton only on fetchError; show placeholder while loading */}
+                      {/* Loading, error, or no-data: choose appropriate UI */}
                       {fetchError ? (
-                        // On fetch error, fall back to the same placeholder used while loading
+                        // On fetch error show the animated skeleton (same as loading)
                         <div className="relative">
-                          <div className="min-w-[280px] min-h-[280px] p-3 rounded-md border border-border/40 bg-background"></div>
+                          <Skeleton className="min-w-[280px] min-h-[280px]" />
                         </div>
                       ) : monthHasData === null ? (
                         // Still loading: show the placeholder (no flashing calendar)
