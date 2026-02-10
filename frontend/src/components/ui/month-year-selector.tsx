@@ -126,11 +126,16 @@ export const MonthYearSelector = React.forwardRef<
         const resp = await fetch(`${backendUrl}/api/attendance/has_data?month=${encodeURIComponent(monthStr)}`);
         if (!resp.ok) return;
         const j = await resp.json();
-        if (j && typeof j.hasData !== 'undefined' && j.hasData === false) {
-          const ev = new CustomEvent('month-no-data', { detail: { month: monthStr } });
-          // Dispatch asynchronously so parent components' state updates
-          // (eg. `setDisplayedMonth`) have a chance to apply before handlers run.
-          setTimeout(() => window.dispatchEvent(ev), 0);
+        if (j && typeof j.hasData !== 'undefined') {
+          if (j.hasData === false) {
+            const ev = new CustomEvent('month-no-data', { detail: { month: monthStr } });
+            // Dispatch asynchronously so parent components' state updates
+            // (eg. `setDisplayedMonth`) have a chance to apply before handlers run.
+            setTimeout(() => window.dispatchEvent(ev), 0);
+          } else if (j.hasData === true) {
+            const ev = new CustomEvent('month-has-data', { detail: { month: monthStr } });
+            setTimeout(() => window.dispatchEvent(ev), 0);
+          }
         }
       } catch (e) {
         // ignore network errors here; other consumers may do their own checks

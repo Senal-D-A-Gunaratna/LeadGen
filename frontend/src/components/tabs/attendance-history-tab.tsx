@@ -369,7 +369,7 @@ export function AttendanceHistoryTab() {
     return { onTime, late, absent } as any;
   }, [monthPoints, displayedMonth]);
   const fetchTimerRef = useRef<number | null>(null);
-  const noDataMonthRef = useRef<string | null>(null);
+  const noDataMonthsRef = useRef<Set<string>>(new Set());
 
   // Control popover open state so we can intercept Radix outside events
   const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
@@ -390,15 +390,13 @@ export function AttendanceHistoryTab() {
   // the backend explicitly reports no data for a selected month. Only
   // react if the event's month matches our currently displayed month.
   useEffect(() => {
-    const handler = (ev: Event) => {
+    const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
+
+    const noHandler = (ev: Event) => {
       try {
         const detail = (ev as CustomEvent)?.detail || {};
-        const monthStr = `${displayedMonth.getFullYear()}-${String(displayedMonth.getMonth() + 1).padStart(2, '0')}`;
         if (detail && typeof detail.month === 'string') {
-          // Record the no-data month and if it matches the currently
-          // displayed month, clear cached points/aggregate and show
-          // the placeholder.
-          noDataMonthRef.current = detail.month;
+          noDataMonthsRef.current.add(detail.month);
           if (detail.month === monthStr) {
             setMonthPoints([]);
             setMonthAggregate(null);
@@ -409,9 +407,29 @@ export function AttendanceHistoryTab() {
         // ignore
       }
     };
-    window.addEventListener('month-no-data', handler as EventListener);
-    return () => window.removeEventListener('month-no-data', handler as EventListener);
-  }, [displayedMonth]);
+
+    const yesHandler = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent)?.detail || {};
+        if (detail && typeof detail.month === 'string') {
+          noDataMonthsRef.current.delete(detail.month);
+          if (detail.month === monthStr) {
+            // Re-fetch aggregate for the current month now that we know data exists
+            fetchMonthAggregate(displayedMonth, gradeFilter);
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+
+    window.addEventListener('month-no-data', noHandler as EventListener);
+    window.addEventListener('month-has-data', yesHandler as EventListener);
+    return () => {
+      window.removeEventListener('month-no-data', noHandler as EventListener);
+      window.removeEventListener('month-has-data', yesHandler as EventListener);
+    };
+  }, [displayedMonth, gradeFilter]);
 
   // Local UI filter for attendance status (overrides pie selection when set)
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -458,7 +476,7 @@ export function AttendanceHistoryTab() {
 
               // If the month selector already reported this month has no
               // data, skip the aggregate fetch and show the placeholder.
-              if (noDataMonthRef.current === monthStr) {
+              if (noDataMonthsRef.current.has(monthStr)) {
                 setMonthPoints([]);
                 setMonthAggregate(null);
                 setMonthHasData(false);
@@ -475,7 +493,7 @@ export function AttendanceHistoryTab() {
               const has = computeMonthHasDataFromPoints(normalizedPoints, month);
               setMonthHasData(has);
               // If there is data for this month, clear any recorded no-data mark
-              if (has && noDataMonthRef.current === monthStr) noDataMonthRef.current = null;
+              if (has && noDataMonthsRef.current.has(monthStr)) noDataMonthsRef.current.delete(monthStr);
               setFetchError(false);
             } catch (err) {
               console.warn('attendance aggregate fetch failed', err);
