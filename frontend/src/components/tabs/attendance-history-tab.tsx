@@ -779,9 +779,9 @@ export function AttendanceHistoryTab() {
                           <Skeleton className="min-w-[280px] min-h-[280px]" />
                         </div>
                       ) : monthHasData === null ? (
-                        // Still loading: show the placeholder (no flashing calendar)
+                        // Still loading: use Skeleton (do not show a custom placeholder)
                         <div className="relative">
-                          <div className="min-w-[280px] min-h-[280px] p-3 rounded-md border border-border/40 bg-background"></div>
+                          <Skeleton className="min-w-[280px] min-h-[280px]" />
                         </div>
                       ) : monthHasData === false ? (
                         // No data for this month: render a calendar-sized placeholder and overlay a message
@@ -793,9 +793,9 @@ export function AttendanceHistoryTab() {
                           </div>
                         </div>
                       ) : (
-                        // Fallback: show placeholder
+                        // Fallback: show Skeleton (avoid any other placeholder)
                         <div className="relative">
-                          <div className="min-w-[280px] min-h-[280px] p-3 rounded-md border border-border/40 bg-background"></div>
+                          <Skeleton className="min-w-[280px] min-h-[280px]" />
                         </div>
                       )}
                     </div>
