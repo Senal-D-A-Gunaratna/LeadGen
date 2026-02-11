@@ -192,11 +192,14 @@ export const MonthYearSelector = React.forwardRef<
           <button
             type="button"
             aria-label="Next month"
-            className={cn("p-1 rounded-md", canGoNext && "hover:bg-accent/50")}
+            className={cn(
+              "p-1 rounded-md",
+              canGoNext ? "hover:bg-accent/50" : "opacity-50 cursor-not-allowed"
+            )}
             onClick={handleNextMonth}
             disabled={!canGoNext}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className={cn("h-4 w-4", !canGoNext && "text-muted-foreground")} />
           </button>
         </div>
 
