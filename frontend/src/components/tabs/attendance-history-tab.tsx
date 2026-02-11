@@ -470,7 +470,9 @@ export function AttendanceHistoryTab() {
     if (fetchTimerRef.current) window.clearTimeout(fetchTimerRef.current);
     return new Promise<void>((resolve) => {
       fetchTimerRef.current = window.setTimeout(async () => {
-        setMonthHasData(null); // loading
+        // If a quick-check already marked the month as having data,
+        // keep the calendar visible while we fetch the full aggregate.
+        setMonthHasData((cur) => (cur === true ? true : null)); // loading unless already true
         setFetchError(false);
             try {
               const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
@@ -774,16 +776,6 @@ export function AttendanceHistoryTab() {
                           initialFocus
                           weekStartsOn={1}
                         />
-                      ) : fetchError ? (
-                        // On fetch error show the animated skeleton (same as loading)
-                        <div className="relative">
-                          <Skeleton className="min-w-[280px] min-h-[280px]" />
-                        </div>
-                      ) : monthHasData === null ? (
-                        // Still loading: use Skeleton (do not show a custom placeholder)
-                        <div className="relative">
-                          <Skeleton className="min-w-[280px] min-h-[280px]" />
-                        </div>
                       ) : monthHasData === false ? (
                         // No data for this month: render a calendar-sized placeholder and overlay a message
                         <div className="relative">
@@ -793,8 +785,7 @@ export function AttendanceHistoryTab() {
                             <div className="text-sm">There is no attendance data for this month</div>
                           </div>
                         </div>
-                      ) : (
-                        // Fallback: show Skeleton (avoid any other placeholder)
+                      ) : ( // loading or fetch error -> show Skeleton
                         <div className="relative">
                           <Skeleton className="min-w-[280px] min-h-[280px]" />
                         </div>
