@@ -7,3 +7,8 @@ bulk marking fechers
         1.attendance
         2.grade/bach update
 
+
+
+        nots
+
+LeadGen blue colour value   #3B82F6
