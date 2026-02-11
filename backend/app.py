@@ -913,6 +913,17 @@ def api_attendance_aggregate():
     except Exception as e:
         return jsonify({'success': False, 'message': 'Error computing attendance aggregate', 'error': str(e)}), 500
 
+
+# Debug: log unmatched routes to help trace 404s during development
+@app.errorhandler(404)
+def log_not_found(e):
+    try:
+        from flask import request
+        print(f"DEBUG 404: path={request.path} method={request.method} args={dict(request.args)}")
+    except Exception:
+        pass
+    return jsonify({'success': False, 'message': 'Not Found'}), 404
+
 # ==================== WEBSOCKET HANDLERS ====================
 
 @socketio.on('connect')

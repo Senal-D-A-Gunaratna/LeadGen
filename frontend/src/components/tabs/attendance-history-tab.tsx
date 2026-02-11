@@ -493,7 +493,9 @@ export function AttendanceHistoryTab() {
             } catch (err) {
               console.warn('attendance aggregate fetch failed', err);
               setFetchError(true);
-              setMonthHasData(false);
+              // Do NOT override `monthHasData` here. The month selector
+              // issues quick client events (`month-has-data`) which are
+              // authoritative for whether a calendar should be shown.
             }
         resolve();
       }, 250);
@@ -751,8 +753,27 @@ export function AttendanceHistoryTab() {
                         onMonthPickerMount={(n) => (monthPickerNodeRef.current = n)}
                       />
 
-                      {/* Loading, error, or no-data: choose appropriate UI */}
-                      {fetchError ? (
+                      {/* Choose UI: if we know the month has data, always show the calendar first.
+                          Otherwise show error skeleton, loading placeholder, or no-data message. */}
+                      {monthHasData === true ? (
+                        <Calendar
+                          mode="single"
+                          month={displayedMonth}
+                          onMonthChange={(m) => setDisplayedMonth(m)}
+                          selected={selectedDate}
+                          onSelect={(date) => setSelectedDate(date)}
+                          classNames={{ nav: 'hidden', caption: 'hidden' }}
+                          modifiers={calendarModifiers}
+                          disabled={(date) => {
+                            const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
+                            const day = date.getDay();
+                            const isWeekend = day === 0 || day === 6;
+                            return isOutOfRange || isWeekend;
+                          }}
+                          initialFocus
+                          weekStartsOn={1}
+                        />
+                      ) : fetchError ? (
                         // On fetch error show the animated skeleton (same as loading)
                         <div className="relative">
                           <Skeleton className="min-w-[280px] min-h-[280px]" />
@@ -772,24 +793,10 @@ export function AttendanceHistoryTab() {
                           </div>
                         </div>
                       ) : (
-                        // monthHasData === true
-                        <Calendar
-                          mode="single"
-                          month={displayedMonth}
-                          onMonthChange={(m) => setDisplayedMonth(m)}
-                          selected={selectedDate}
-                          onSelect={(date) => setSelectedDate(date)}
-                            classNames={{ nav: 'hidden', caption: 'hidden' }}
-                            modifiers={calendarModifiers}
-                          disabled={(date) => {
-                            const isOutOfRange = date > new Date() || date < new Date("2000-01-01");
-                            const day = date.getDay();
-                            const isWeekend = day === 0 || day === 6;
-                            return isOutOfRange || isWeekend;
-                          }}
-                          initialFocus
-                          weekStartsOn={1}
-                        />
+                        // Fallback: show placeholder
+                        <div className="relative">
+                          <div className="min-w-[280px] min-h-[280px] p-3 rounded-md border border-border/40 bg-background"></div>
+                        </div>
                       )}
                     </div>
                     </PopoverContent>
