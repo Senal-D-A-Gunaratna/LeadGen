@@ -750,6 +750,7 @@ export function AttendanceHistoryTab() {
                         displayedMonth={displayedMonth}
                         onMonthChange={setDisplayedMonth}
                         showYearSelector={true}
+                        disableFutureMonths={true}
                         onMonthPickerMount={(n) => (monthPickerNodeRef.current = n)}
                       />
 
