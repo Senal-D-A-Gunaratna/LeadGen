@@ -379,6 +379,8 @@ export function AttendanceHistoryTab() {
   // authoritative `month-no-data` event which we listen for instead.
   useEffect(() => {
     if (calendarOpen) {
+      // Show the current month each time the popover is opened
+      setDisplayedMonth(new Date());
       setMonthHasData(null);
       setFetchError(false);
     }
