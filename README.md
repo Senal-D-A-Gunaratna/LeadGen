@@ -39,8 +39,18 @@ npm install
 npm run dev
 ```
 3. Defaults
-- Frontend: http://localhost:9002
-- Backend API: http://localhost:5000
+<!--
+Development servers
+- Frontend: served on localhost:9002
+- Backend: API and WebSockets: served on localhost:5000
+
+Notes:
+- Typo corrected: "Websokets" → "WebSockets"
+- Start/backend should be running before the frontend; adjust PORT env vars if needed.
+-->
+- Frontend: http://localhost:9002 or http://host_ip:9002
+- Backend API and WebSockets: http://localhost:5000 or http://host_ip:5000
+- Replace <host> with your machine's IP/hostname when accessing from other devices on the network.
 - To point the frontend to another backend, set `NEXT_PUBLIC_BACKEND_URL`.
 
 Repository layout
