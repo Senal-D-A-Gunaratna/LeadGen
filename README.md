@@ -1,4 +1,4 @@
-# **LeadGen - The Next Generation School Prefect Attendance Monitor**
+# **LeadGen**
 
 Overview
 LeadGen is an attendance monitoring system intended for school environments. It combines a Next.js-based user interface with a Flask backend to provide real-time attendance capture, administrative controls for prefects and staff, and local data persistence via SQLite. The project is suitable for single-host or LAN deployments where simplicity and reliability are priorities.
