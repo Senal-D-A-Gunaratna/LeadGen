@@ -1,4 +1,4 @@
-# 🎓 Professional Attendance Management System
+****# 🎓 Professional Attendance Management System
 
 A production-ready, full-stack attendance management system built with modern web technologies and professional architecture.
 
@@ -19,80 +19,86 @@ This system demonstrates **enterprise-grade architecture** with clean separation
 - **Security**: HTTPS everywhere, SSL certificates, CORS properly configured
 - **UI/UX**: Professional component library (Radix UI), responsive design
 
-#### **3. Code Quality**
-```typescript
-// Strong TypeScript usage with comprehensive type definitions
-export type Student = {
-  id: number;
-  name: string;
-  grade: number;
-  attendanceHistory: AttendanceRecord[];
-  contact: {
-    email: string;
-    phone: string;
-  };
-};
+LeadGen - The Next Generation School Prefect Attendance Monitor
+
+LeadGen is a compact full-stack attendance monitor built for schools. It pairs a Next.js frontend with a Flask backend, supports real-time updates, and keeps data in local SQLite files so it works well on a single host or across a LAN.
+
+Core technologies
+- Frontend: Next.js (React) + TypeScript
+- Styling: Tailwind CSS
+- State: Zustand
+- Real-time: Socket.IO (WebSockets)
+- Backend: Flask (Python)
+- Storage: SQLite (local DB files)
+
+What it does
+- Real-time attendance marking and live dashboard updates
+- Student profiles, search and role assignments (prefect, class, grade)
+- RFID scanner integration hooks for fast check-ins
+- Local backup/restore and lightweight migration support
+
+Quick start (development)
+1. Backend setup
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+2. Frontend setup
+```bash
+cd frontend
+npm install
+```
+3. Start backend (terminal A)
+```bash
+cd backend
+./start_backend.sh
+# or: python app.py
+```
+4. Start frontend (terminal B)
+```bash
+cd frontend
+npm run dev
 ```
 
-#### **4. Smart Auto-Detection**
-- **LAN-ready**: Automatically detects host IP for network access
-- **Environment-aware**: Handles both development and production scenarios
-- **Flexible deployment**: Works on any network without hardcoding IPs
+Default URLs
+- Frontend: http://localhost:9002
+- Backend API: http://localhost:5000
 
-#### **5. Error Handling & Resilience**
-```typescript
-// Robust error handling in API client
-if (error.message.includes('Failed to fetch')) {
-  throw new Error(`Cannot connect to backend at ${BACKEND_URL}. Make sure the Flask backend is running on port 5000.`);
-}
-```
+Repository layout (key paths)
+- `backend/` — Flask app, API endpoints, utilities
+- `backend/data/` — SQLite files: `students.db`, `attendance.db`, `logs.db`
+- `frontend/` — Next.js app and UI components
 
-#### **6. Database Design**
-- **Normalized structure**: Separate tables for different data types
-- **Migration system**: Handles data transitions gracefully
-- **Backup/restore**: Professional data management features
+Useful commands
+- `./start_backend.sh` — create venv and run backend
+- `npm run dev` — start frontend (use `npm run dev-next` to run only frontend)
+- `bash fix-setup.sh` — attempt to repair common dev-environment issues
 
-## 🚀 **Quick Start**
+Environment
+- Node.js 18+ for frontend
+- Python 3.8+ for backend
+- Optional env var: `NEXT_PUBLIC_BACKEND_URL` to point the frontend at a different backend
 
-### Prerequisites
-- Node.js 18+
-- Python 3.8+
-- Git
+Data and backups
+- Database files live in `backend/data/`. Keep backups of those files before making destructive changes. A `students.db.bak` may already exist.
 
-### Installation
+Troubleshooting
+- Frontend issues: run `bash fix-setup.sh` and check terminal output for missing packages.
+- Backend issues: activate the venv and ensure `requirements.txt` is installed; check `backend/log.txt` for runtime errors.
+- Empty API responses: inspect the DB files in `backend/data/` and confirm the backend process is running.
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd studio-main
-   ```
+Security notes
+- Intended for LAN or trusted environments. For production deployments, place a TLS-terminating reverse proxy (e.g., nginx) in front of the services and harden CORS and authentication.
 
-2. **Backend Setup**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+Contributing
+- Fork the repo, create a branch, add changes and tests, then open a pull request.
 
-3. **Frontend Setup**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
+License
+- MIT
 
-### Running the Application
-
-1. **Start Backend** (Terminal 1)
-   ```bash
-   cd backend
-   ./start_backend.sh
-   # or manually: python app.py
-   ```
-
-2. **Start Frontend** (Terminal 2)
-   ```bash
-   cd frontend
+For more details, see the `docs/` folder or inspect `backend/` and `frontend/` sources.
    npm run dev
    ```
 
