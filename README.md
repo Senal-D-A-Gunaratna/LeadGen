@@ -1,55 +1,64 @@
-## LeadGen — School Prefect Attendance Monitor
+**LeadGen - The Next Generation School Prefect Attendance Monitor**
 
-Summary:
-A compact, production-ready full-stack attendance management system pairing a Next.js (TypeScript) frontend with a Flask backend. Supports real-time updates via Socket.IO and stores data in local SQLite files for simple LAN or single-host deployments.
+Overview
+LeadGen is an attendance monitoring system intended for school environments. It combines a Next.js-based user interface with a Flask backend to provide real-time attendance capture, administrative controls for prefects and staff, and local data persistence via SQLite. The project is suitable for single-host or LAN deployments where simplicity and reliability are priorities.
 
-Key Capabilities:
-- Real-time attendance marking and live dashboard synchronization
-- Student profiles, search, role assignments (e.g., prefects)
-- Fingerprint scanner integration hooks for fast check-ins
-- Historical records, CSV import/export, and automated backups
+Core technologies
+- Frontend: Next.js (React) with TypeScript
+- Styling: Tailwind CSS; optional Radix UI components
+- State management: Zustand
+- Real-time: Socket.IO (WebSockets)
+- Backend: Flask with Flask-SocketIO
+- Storage: SQLite databases stored in `backend/data/`
+
+Primary capabilities
+- Real-time attendance marking with live dashboard synchronization
+- Student records management, search, and role assignments (e.g., prefect)
+- Integration points for RFID/fingerprint scanners for rapid check-ins
+- Historical records, CSV import/export, and automated local backups
 - Role-based access control (Admin, Moderator, Developer)
-- Lightweight migrations and data integrity checks
+- Lightweight migration tools and data integrity checks
 
-Architecture Overview:
-- Frontend: Next.js + TypeScript, Tailwind CSS, Radix UI, Zustand state, Socket.IO client (port 9002)
-- Backend: Flask + Flask-SocketIO, SQLite data stores, CORS & input validation (port 5000)
-- Storage: Separate SQLite files (students, attendance, logs) under backend/data/
+Architecture (high level)
+- Frontend runs on port 9002 and communicates with the backend API and Socket.IO server.
+- Backend serves REST endpoints and Socket.IO events on port 5000 and stores data in local SQLite files: `students.db`, `attendance.db`, `logs.db`.
 
-Quick Start (dev):
-1. Backend:
-   - create & activate venv, install requirements
-   - run start_backend.sh or python app.py
-2. Frontend:
-   - npm install
-   - npm run dev
-3. Default endpoints:
-   - Frontend: http://localhost:9002
-   - Backend API: http://localhost:5000
-   - Override backend: NEXT_PUBLIC_BACKEND_URL env var
+Quick start (development)
+1. Backend
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+./start_backend.sh  # or: python app.py
+```
+2. Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+3. Defaults
+- Frontend: http://localhost:9002
+- Backend API: http://localhost:5000
+- To point the frontend to another backend, set `NEXT_PUBLIC_BACKEND_URL`.
 
-Repository Layout (high level):
-- backend/      — Flask app, API endpoints, utilities
-- backend/data/ — students.db, attendance.db, logs.db (keep backups)
-- frontend/     — Next.js app and UI components
-- scripts: helper scripts for setup, fixes, and running services
+Repository layout
+- `backend/` — Flask application, API endpoints, utilities and helper scripts
+- `backend/data/` — SQLite files (keep backups before changes)
+- `frontend/` — Next.js application, components, and client code
+- `docs/` — design notes and operational guidance
 
-Available Scripts:
-- Frontend: npm run dev, build, start, lint, typecheck
-- Backend: ./start_backend.sh, python app.py
-- Helpers: bash fix-setup.sh, install-backend helper
+Operational notes
+- Back up `backend/data/*.db` regularly before migrations or destructive operations.
+- Use `bash fix-setup.sh` for common dependency fixes.
+- Check `backend/log.txt` for runtime errors and diagnostic information.
 
-Security & Deployment Notes:
-- Intended primarily for LAN/trusted environments; secure for production behind TLS-terminating reverse proxy (e.g., nginx)
-- Harden CORS, enable HTTPS, rotate default credentials, and restrict ports via firewall
-- Do not expose SQLite files without proper backups and access controls
+Security and production guidance
+- LeadGen is intended for trusted networks. For production, deploy behind a TLS-terminating reverse proxy (for example, nginx), enforce strict CORS rules, rotate default credentials, and restrict access to the database files.
 
-Operational Tips:
-- Keep periodic backups of backend/data/*.db before destructive operations
-- Use provided scripts to repair common environment issues
-- Inspect backend logs for runtime errors; enable debug tools only for trusted developer role
+Contributing and license
+- Contributions: fork the repository, create a feature branch, add tests where appropriate, and open a pull request.
+- License: MIT. See the `LICENSE` file for details.
 
-Contributing & License:
-- Fork, create branch, add changes and tests, open a pull request
-- Licensed under MIT (see LICENSE file)
-
+For additional implementation details, consult the source under `backend/` and `frontend/` or review the documents in `docs/`.
