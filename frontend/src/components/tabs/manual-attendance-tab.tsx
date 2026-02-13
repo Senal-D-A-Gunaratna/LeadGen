@@ -33,7 +33,16 @@ import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
 import { cn } from "@/lib/utils";
 import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown, FilterX } from "lucide-react";
-import { RolePasswordDialog } from "../dashboard/role-password-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
  
 
 type PendingChanges = Record<number, { status: AttendanceStatus | 'null'; checkInTime?: string | null }>;
@@ -70,7 +79,7 @@ export function ManualAttendanceTab() {
   // pendingAttendanceChanges now lives in the central store so multiple components
   // can modify attendance and it will be flushed in one go.
   const [isSaving, setIsSaving] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [displayedMonth, setDisplayedMonth] = useState<Date>(selectedDate ? new Date(selectedDate) : new Date());
 
   // Small combo control: editable input + popover two-column picker (hours/minutes)
@@ -245,11 +254,11 @@ export function ManualAttendanceTab() {
       toast({ title: "No Changes", description: "You haven't made any valid attendance changes to save." });
       return;
     }
-    setIsAuthOpen(true);
+    setIsConfirmOpen(true);
   }
   
   const handleAuthorizedSave = async (password?: string) => {
-    setIsAuthOpen(false);
+    setIsConfirmOpen(false);
     setIsSaving(true);
     try {
         if (!selectedDate) {
@@ -510,16 +519,24 @@ export function ManualAttendanceTab() {
             </Button>
         </CardFooter>
       </Card>
-      {user?.role && (
-        <RolePasswordDialog
-          role={user.role}
-          open={isAuthOpen}
-          onOpenChange={setIsAuthOpen}
-          onSuccess={handleAuthorizedSave}
-          title="Authorize Attendance Update"
-          description={`Enter your ${user.role} password to save these attendance changes.`}
-        />
-      )}
+      <AlertDialog open={isConfirmOpen} onOpenChange={setIsConfirmOpen}>
+        <AlertDialogContent className="glassmorphic glowing-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Attendance Update</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedDate
+                ? `Save manual attendance changes for ${format(selectedDate, 'PPP')}.`
+                : `Save manual attendance changes?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleAuthorizedSave()}>
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
