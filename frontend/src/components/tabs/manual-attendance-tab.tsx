@@ -43,7 +43,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { wsClient } from '@/lib/websocket-client';
+import { syncClient } from '@/lib/sync-client';
  
 
 type PendingChanges = Record<number, { status: AttendanceStatus | 'null'; checkInTime?: string | null }>;
@@ -323,35 +323,20 @@ export function ManualAttendanceTab() {
     return () => window.removeEventListener('keydown', handler as any);
   }, [hasPendingChanges, isConfirmOpen]);
 
-  // Listen for backend broadcasts and refresh students when data changes
+  // Listen for backend `data_changed` broadcasts and refresh students
   useEffect(() => {
     const handleDataChanged = (payload: any) => {
       try {
-        // If backend notifies of any change, refetch the current filtered students
         fetchAndSetStudents();
       } catch (e) {
         console.error('Failed to handle data_changed payload', e);
       }
     };
 
-    const handleSummaryUpdate = (payload: any) => {
-      try {
-        // Summary update may imply attendance changes; refresh list to keep UI in sync
-        fetchAndSetStudents();
-      } catch (e) {
-        console.error('Failed to handle summary_update payload', e);
-      }
-    };
-
-    wsClient.on('data_changed', handleDataChanged);
-    wsClient.on('summary_update', handleSummaryUpdate);
-
-    // Ensure websocket attempts connection so we receive events
-    wsClient.connect();
+    syncClient.on('data_changed', handleDataChanged);
 
     return () => {
-      wsClient.off('data_changed', handleDataChanged);
-      wsClient.off('summary_update', handleSummaryUpdate);
+      syncClient.off('data_changed', handleDataChanged);
     };
   }, [fetchAndSetStudents]);
 
