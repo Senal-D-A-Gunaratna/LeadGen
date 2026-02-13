@@ -2367,19 +2367,32 @@ if __name__ == '__main__':
     # path (for production async workloads), set the environment variable
     # `FORCE_ASGI=1` and ensure your environment's packages are compatible.
     try:
-        if os.environ.get('FORCE_ASGI') == '1' and WsgiToAsgi is not None:
+        # Prefer ASGI/uvicorn by default so the Async Socket.IO server is active
+        try:
             import uvicorn
-            print('FORCE_ASGI=1 and WsgiToAsgi available — starting uvicorn ASGI server')
-            uvicorn.run(asgi_app, host='0.0.0.0', port=5000)
-        else:
-            print('Starting Flask WSGI server (HTTP-only, no WebSocket)')
-            # Run the plain Flask development server to ensure HTTP endpoints
-            # are available for the frontend fallback. This intentionally does
-            # not start the async Socket.IO server; use FORCE_ASGI=1 to run
-            # uvicorn/ASGI if you need WebSocket support and have compatible deps.
-            app.run(host='0.0.0.0', port=5000)
+            if asgi_app is not None:
+                print('Starting uvicorn ASGI server (default)')
+                uvicorn.run(asgi_app, host='0.0.0.0', port=5000)
+            else:
+                # asgi_app may be None if WsgiToAsgi wrapping failed earlier
+                print('ASGI app unavailable; falling back to socketio.run')
+                socketio.run(app, host='0.0.0.0', port=5000)
+        except Exception as uv_err:
+            # If uvicorn import or run fails, fallback to socketio.run which
+            # will start the embedded Socket.IO server and enable broadcasts.
+            try:
+                print(f'uvicorn start failed ({uv_err}); falling back to socketio.run')
+            except Exception:
+                pass
+            try:
+                socketio.run(app, host='0.0.0.0', port=5000)
+            except Exception as sock_err:
+                try:
+                    print(f'Socket.IO fallback failed: {sock_err}; exiting')
+                except Exception:
+                    pass
     except Exception as e:
         try:
-            print(f'Server start failed: {e}; exiting')
+            print(f'Server start failed unexpectedly: {e}; exiting')
         except Exception:
             pass
