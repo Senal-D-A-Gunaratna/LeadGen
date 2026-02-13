@@ -333,10 +333,16 @@ export function ManualAttendanceTab() {
       }
     };
 
-    syncClient.on('data_changed', handleDataChanged);
+    const syncListener = (event: string, payload?: any) => {
+      if (event === 'data_changed') {
+        handleDataChanged(payload);
+      }
+    };
+
+    syncClient.on(syncListener);
 
     return () => {
-      syncClient.off('data_changed', handleDataChanged);
+      syncClient.off(syncListener);
     };
   }, [fetchAndSetStudents]);
 
