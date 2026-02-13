@@ -304,6 +304,24 @@ export function ManualAttendanceTab() {
 
   const hasPendingChanges = Object.values(pendingAttendanceChanges || {}).some((ch: any) => ch && ch.status !== 'null');
 
+  // Keyboard shortcut: Ctrl/Cmd+S
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const isSave = (e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S');
+      if (!isSave) return;
+      e.preventDefault();
+      if (!hasPendingChanges) return;
+      if (!isConfirmOpen) {
+        setIsConfirmOpen(true);
+      } else {
+        // If dialog is already open, treat Ctrl+S as confirm
+        handleAuthorizedSave();
+      }
+    };
+    window.addEventListener('keydown', handler as any);
+    return () => window.removeEventListener('keydown', handler as any);
+  }, [hasPendingChanges, isConfirmOpen]);
+
   return (
     <>
       <Card className="glassmorphic glowing-border min-h-[750px]">
