@@ -24,7 +24,7 @@ export function Header() {
     const handler = (connected: boolean) => setIsOnline(connected);
     wsClient.on('connection', handler);
 
-    // Connection established centrally in `frontend/src/app/page.tsx`
+    // Connection established centrally in `servers/frontend/src/app/page.tsx`
 
     // Force dark theme by default. Remove device detection and client-side caching.
     setTheme("dark");

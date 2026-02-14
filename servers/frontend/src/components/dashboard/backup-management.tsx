@@ -72,7 +72,7 @@ export function BackupManagement() {
     fetchBackups();
 
     // Keep backup list in sync with server via WebSocket events
-    // Connection handled centrally in `frontend/src/app/page.tsx`
+    // Connection handled centrally in `servers/frontend/src/app/page.tsx`
     const handler = (payload?: any) => {
       try {
         const type = payload?.type;
