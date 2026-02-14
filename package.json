@@ -15,6 +15,6 @@
     "install-all": "npm run install-frontend && npm run install-backend"
   },
   "devDependencies": {
-    "concurrently": "^7.6.0"
+    "concurrently": "^8.2.2"
   }
 }

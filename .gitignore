@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Root level dependencies (if any)
-node_modules/
+# Root level items (if any)
+tools/__pycache__
 
 # Frontend dependencies & build
 servers/frontend/node_modules/

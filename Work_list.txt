@@ -50,7 +50,3 @@ shell scriting the ip port
 
 IP=$(hostname -I | awk '{print $1}')
 echo "LeadGen Fontend at : http://${IP}:9002"
-
-        nots
-
-LeadGen blue colour value   #3B82F6
