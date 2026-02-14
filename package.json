@@ -10,9 +10,9 @@
     "start": "cd servers/frontend && npm start",
     "lint": "cd servers/frontend && npm run lint",
     "typecheck": "cd servers/frontend && npm run typecheck",
-    "install": "cd servers/frontend && npm install",
+    "install-frontend": "cd servers/frontend && npm install",
     "install-backend": "cd servers/backend && pip3 install -r requirements.txt",
-    "install-all": "npm run install && npm run install-backend"
+    "install-all": "npm run install-frontend && npm run install-backend"
   },
   "devDependencies": {
     "concurrently": "^7.6.0"
