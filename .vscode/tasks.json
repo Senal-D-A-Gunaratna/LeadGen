@@ -36,5 +36,29 @@
 				"clear": true
 			}
 		}
+		,
+		{
+			"type": "npm",
+			"script": "dev",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Run both servers (dev)",
+			"detail": "npm: Run both frontend and backend (npm run dev)",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "typecheck",
+			"path": "servers/frontend",
+			"problemMatcher": [],
+			"label": "Typecheck frontend",
+			"detail": "npm: Run TypeScript type check for frontend",
+			"presentation": {
+				"clear": true
+			}
+		}
 	]
 }
