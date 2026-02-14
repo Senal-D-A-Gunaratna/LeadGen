@@ -7,7 +7,10 @@
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Run frontend server",
-			"detail": "npm: Frontend_Server"
+			"detail": "npm: Frontend_Server",
+			"presentation": {
+				"clear": true
+			}
 		}
 	]
 }
