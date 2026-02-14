@@ -14,8 +14,7 @@ servers/backend/venv/
 servers/backend/__pycache__/
 servers/backend/*.pyc
 servers/backend/*.pyo
-servers/backend/backend.log
-servers/backend/*.log
+servers/backend/debug.log
 
 # Backend data & secrets (should not be committed)
 servers/backend/data/

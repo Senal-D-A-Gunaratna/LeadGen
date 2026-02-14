@@ -62,7 +62,7 @@ Repository layout
 Operational notes
 - Back up `servers/backend/data/*.db` regularly before migrations or destructive operations.
 - Use `bash fix-setup.sh` for common dependency fixes.
-- Check `servers/backend/log.txt` for runtime errors and diagnostic information.
+- Check `servers/backend/debug.log` for runtime errors and diagnostic information.
 
 Security and production guidance
 - LeadGen is intended for trusted networks. For production, deploy behind a TLS-terminating reverse proxy (for example, nginx), enforce strict CORS rules, rotate default credentials, and restrict access to the database files.
