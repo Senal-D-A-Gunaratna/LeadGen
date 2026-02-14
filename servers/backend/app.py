@@ -25,21 +25,15 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Configure logging: write INFO+ to `log.txt` and DEBUG to `debug.log`.
-# Use rotating handlers to avoid unbounded growth.
+# Configure logging: write DEBUG to `debug.log` and send INFO+ to console.
+# Do NOT create or update `log.txt`.
 _log_dir = Path(__file__).parent
-_info_log = _log_dir / 'log.txt'
 _debug_log = _log_dir / 'debug.log'
 _log_dir.mkdir(parents=True, exist_ok=True)
 
 root_logger = logging.getLogger()
 if not root_logger.handlers:
     root_logger.setLevel(logging.DEBUG)
-
-    info_handler = RotatingFileHandler(str(_info_log), maxBytes=5 * 1024 * 1024, backupCount=3)
-    info_handler.setLevel(logging.INFO)
-    info_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s')
-    info_handler.setFormatter(info_fmt)
 
     debug_handler = RotatingFileHandler(str(_debug_log), maxBytes=10 * 1024 * 1024, backupCount=5)
     debug_handler.setLevel(logging.DEBUG)
@@ -48,9 +42,9 @@ if not root_logger.handlers:
 
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
+    info_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s')
     console.setFormatter(info_fmt)
 
-    root_logger.addHandler(info_handler)
     root_logger.addHandler(debug_handler)
     root_logger.addHandler(console)
 
