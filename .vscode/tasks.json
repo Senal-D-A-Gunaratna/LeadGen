@@ -3,23 +3,11 @@
 	"tasks": [
 		{
 			"type": "npm",
-			"script": "dev-frontend",
-			"path": ".",
-			"problemMatcher": [],
-			"label": "Run frontend server",
-			"detail": "npm: Run Frontend_Server",
-			"presentation": {
-				"clear": true
-			}
-		}
-		,
-		{
-			"type": "npm",
 			"script": "install-all",
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Install all dependencies",
-			"detail": "npm: Install frontend and backend dependencies",
+			"detail": "npm: Install dependencies for frontend and backend servers",
 			"presentation": {
 				"clear": true
 			}
@@ -32,6 +20,18 @@
 			"problemMatcher": [],
 			"label": "Run backend server",
 			"detail": "npm: Backend_Server",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "dev-frontend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Run frontend server",
+			"detail": "npm: Run Frontend_Server",
 			"presentation": {
 				"clear": true
 			}
