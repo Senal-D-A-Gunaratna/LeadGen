@@ -39,12 +39,12 @@ npm install next@14.2.4 --save
 
 echo ""
 echo "Installing backend dependencies..."
-if [ ! -f "backend/requirements.txt" ]; then
-    echo "❌ Error: backend/requirements.txt not found!"
+if [ ! -f "servers/backend/requirements.txt" ]; then
+    echo "❌ Error: servers/backend/requirements.txt not found!"
     exit 1
 fi
 
-cd backend
+cd servers/backend
 pip3 install -r requirements.txt
 cd ..
 

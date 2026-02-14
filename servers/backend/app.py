@@ -24,7 +24,7 @@ app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # SSL Configuration for HTTPS
-# Prefer project-local certs stored in backend/certificates (localhost.pem/localhost-key.pem).
+# Prefer project-local certs stored in servers/backend/certificates (localhost.pem/localhost-key.pem).
 from pathlib import Path as _Path
 # Adapter to convert Flask (WSGI) app to ASGI for uvicorn
 try:
@@ -40,7 +40,7 @@ if _cert_file.exists() and _key_file.exists():
 else:
     # Fall back to no SSL if certs are not available (dev only).
     ssl_context = None
-    print('SSL certificates not found in backend/certificates. Starting without TLS (HTTP).')
+    print('SSL certificates not found in servers/backend/certificates. Starting without TLS (HTTP).')
 
 # Create an Async Socket.IO server and wrap the Flask WSGI app in an ASGI app.
 # We create the AsyncServer via the python-socketio package and then build

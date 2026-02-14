@@ -72,7 +72,8 @@ sudo ufw allow 5000/tcp
 
 ## Manual Configuration (Optional)
 
-If you want to manually set the backend URL, create/update `.env.local` in the `frontend/` directory:
+
+If you want to manually set the backend URL, create/update `.env.local` in the `servers/frontend/` directory:
 
 ```bash
 NEXT_PUBLIC_BACKEND_URL=http://192.168.1.100:5000

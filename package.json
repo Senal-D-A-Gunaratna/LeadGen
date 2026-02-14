@@ -4,14 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "concurrently \"npm:dev-next\" \"npm:dev-backend\"",
-    "dev-next": "cd frontend && npm run dev",
-    "dev-backend": "cd backend && python3 app.py",
-    "build": "cd frontend && npm run build",
-    "start": "cd frontend && npm start",
-    "lint": "cd frontend && npm run lint",
-    "typecheck": "cd frontend && npm run typecheck",
-    "install": "cd frontend && npm install",
-    "install-backend": "cd backend && pip3 install -r requirements.txt",
+    "dev-next": "cd servers/frontend && npm run dev",
+    "dev-backend": "cd servers/backend && python3 app.py",
+    "build": "cd servers/frontend && npm run build",
+    "start": "cd servers/frontend && npm start",
+    "lint": "cd servers/frontend && npm run lint",
+    "typecheck": "cd servers/frontend && npm run typecheck",
+    "install": "cd servers/frontend && npm install",
+    "install-backend": "cd servers/backend && pip3 install -r requirements.txt",
     "install-all": "npm run install && npm run install-backend"
   },
   "devDependencies": {

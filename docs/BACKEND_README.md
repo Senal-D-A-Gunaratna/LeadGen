@@ -6,7 +6,7 @@ This is the Flask backend that replaces the Next.js server actions with a Python
 
 1. Install Python dependencies:
 ```bash
-cd backend
+cd servers/backend
 pip install -r requirements.txt
 ```
 
@@ -19,7 +19,7 @@ The backend will start on `http://localhost:5000` with WebSocket support enabled
 
 ## Database
 
-The backend uses SQLite for data storage. The database file is created at `backend/data/attendance.db` on first run.
+The backend uses SQLite for data storage. The database file is created at `servers/backend/data/attendance.db` on first run.
 
 The database will automatically migrate existing JSON data from `src/lib/` on first startup.
 
@@ -46,5 +46,5 @@ All endpoints are prefixed with `/api/`:
 
 ## Environment Variables
 
-Set `NEXT_PUBLIC_BACKEND_URL` in your frontend `.env.local` to point to the Flask backend (default: `http://localhost:5000`).
+Set `NEXT_PUBLIC_BACKEND_URL` in your frontend `.env.local` to point to the Flask backend (default: `http://localhost:5000`). The frontend `.env.local` is located in `servers/frontend/.env.local` after the repository restructure.
 

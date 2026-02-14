@@ -6,7 +6,7 @@ Scanner token for automatic scans
   Example (Linux/macOS):
   ```bash
   export SCANNER_TOKEN="your-secret-token-here"
-  python backend/app.py
+  python servers/backend/app.py
   ```
 
 - Scanner payload: include the token in the `scan_student` payload JSON:

@@ -49,10 +49,10 @@ npm install next@14.2.4 --save
 **Error:** `[Errno 2] No such file or directory: 'requirements.txt'`
 
 **Fix:**
-The backend dependencies must be installed from the `backend/` directory.
+The backend dependencies must be installed from the `servers/backend/` directory.
 
 ```bash
-cd backend
+cd servers/backend
 pip3 install -r requirements.txt
 cd ..
 ```
@@ -92,7 +92,7 @@ rm -rf node_modules/.bin/next node_modules/next
 npm install next@14.2.4 --save
 
 # 3. Install backend dependencies
-cd backend
+cd servers/backend
 pip3 install -r requirements.txt
 cd ..
 
@@ -114,7 +114,7 @@ rm -rf node_modules package-lock.json
 npm install
 
 # Install backend dependencies
-cd backend
+cd servers/backend
 pip3 install -r requirements.txt
 cd ..
 

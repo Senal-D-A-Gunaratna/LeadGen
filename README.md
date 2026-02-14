@@ -9,7 +9,7 @@ Core technologies
 - State management: Zustand
 - Real-time: Socket.IO (WebSockets)
 - Backend: Flask with Flask-SocketIO
-- Storage: SQLite databases stored in `backend/data/`
+- Storage: SQLite databases stored in `servers/backend/data/`
 
 Primary capabilities
 - Real-time attendance marking with live dashboard synchronization
@@ -26,7 +26,7 @@ Architecture (high level)
 Quick start (development)
 1. Backend
 ```bash
-cd backend
+cd servers/backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -34,7 +34,7 @@ pip install -r requirements.txt
 ```
 2. Frontend
 ```bash
-cd frontend
+cd servers/frontend
 npm install
 npm run dev
 ```
@@ -54,15 +54,15 @@ Notes:
 - To point the frontend to another backend, set `NEXT_PUBLIC_BACKEND_URL`.
 
 Repository layout
-- `backend/` — Flask application, API endpoints, utilities and helper scripts
-- `backend/data/` — SQLite files (keep backups before changes)
-- `frontend/` — Next.js application, components, and client code
+- `servers/backend/` — Flask application, API endpoints, utilities and helper scripts
+- `servers/backend/data/` — SQLite files (keep backups before changes)
+- `servers/frontend/` — Next.js application, components, and client code
 - `docs/` — design notes and operational guidance
 
 Operational notes
-- Back up `backend/data/*.db` regularly before migrations or destructive operations.
+- Back up `servers/backend/data/*.db` regularly before migrations or destructive operations.
 - Use `bash fix-setup.sh` for common dependency fixes.
-- Check `backend/log.txt` for runtime errors and diagnostic information.
+- Check `servers/backend/log.txt` for runtime errors and diagnostic information.
 
 Security and production guidance
 - LeadGen is intended for trusted networks. For production, deploy behind a TLS-terminating reverse proxy (for example, nginx), enforce strict CORS rules, rotate default credentials, and restrict access to the database files.
@@ -71,4 +71,4 @@ Contributing and license
 - Contributions: fork the repository, create a feature branch, add tests where appropriate, and open a pull request.
 - License: MIT. See the `LICENSE` file for details.
 
-For additional implementation details, consult the source under `backend/` and `frontend/` or review the documents in `docs/`.
+For additional implementation details, consult the source under `servers/backend/` and `servers/frontend/` or review the documents in `docs/`.

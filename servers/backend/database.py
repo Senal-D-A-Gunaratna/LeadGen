@@ -85,7 +85,7 @@ def unregister_post_recalc_callback(cb):
 def create_db_file_backup(db_type: str, timestamp: Optional[str] = None) -> Path:
     """Create a filesystem-level backup copy of a .db file.
     
-    Backups are stored under backend/backups/<db_type>/ with timestamped filenames.
+    Backups are stored under servers/backend/backups/<db_type>/ with timestamped filenames.
     """
     if db_type not in ('students', 'attendance'):
         raise ValueError(f"Invalid db_type for backup: {db_type}")

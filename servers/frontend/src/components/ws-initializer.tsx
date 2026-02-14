@@ -6,7 +6,7 @@ import { useStudentStore } from '@/hooks/use-student-store';
 
 export default function WsInitializer(): null {
   useEffect(() => {
-    // Connection handled centrally in `frontend/src/app/page.tsx`
+    // Connection handled centrally in `servers/frontend/src/app/page.tsx`
 
     let mounted = true;
 

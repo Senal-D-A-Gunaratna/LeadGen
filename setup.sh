@@ -39,17 +39,17 @@ echo "✅ npm $(npm --version) found"
 
 echo ""
 echo "Installing frontend dependencies..."
-if [ ! -d "node_modules" ]; then
-    npm install
+if [ ! -d "servers/frontend/node_modules" ]; then
+    (cd servers/frontend && npm install)
 else
     echo "✅ Frontend dependencies already installed"
 fi
 
 echo ""
 echo "Installing backend dependencies..."
-cd backend
+cd servers/backend
 if [ ! -f "requirements.txt" ]; then
-    echo "❌ requirements.txt not found in backend directory"
+    echo "❌ requirements.txt not found in servers/backend directory"
     exit 1
 fi
 
@@ -72,17 +72,17 @@ echo ""
 echo "Checking environment configuration..."
 
 # Check if .env.local exists
-if [ ! -f ".env.local" ]; then
-    echo "Creating .env.local file..."
-    echo "NEXT_PUBLIC_BACKEND_URL=http://localhost:5000" > .env.local
-    echo "✅ Created .env.local"
+if [ ! -f "servers/frontend/.env.local" ]; then
+    echo "Creating servers/frontend/.env.local file..."
+    echo "NEXT_PUBLIC_BACKEND_URL=http://localhost:5000" > servers/frontend/.env.local
+    echo "✅ Created servers/frontend/.env.local"
 else
-    echo "✅ .env.local already exists"
+    echo "✅ servers/frontend/.env.local already exists"
 fi
 
 echo ""
 echo "Initializing databases..."
-cd backend
+cd servers/backend
 source venv/bin/activate
 python -c "from database import init_database, migrate_json_to_sqlite; init_database(); migrate_json_to_sqlite()" 2>/dev/null || echo "⚠️  Database initialization completed (warnings are normal)"
 

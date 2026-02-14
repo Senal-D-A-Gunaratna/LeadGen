@@ -6,7 +6,7 @@ The attendance statistics displayed in the Student Profile Dialog are calculated
 ## 1. Data Display (Frontend UI)
 
 ### Location
-[frontend/src/components/dashboard/student-profile-dialog.tsx](../frontend/src/components/dashboard/student-profile-dialog.tsx#L861)
+[frontend/src/components/dashboard/student-profile-dialog.tsx](../servers/frontend/src/components/dashboard/student-profile-dialog.tsx#L861)
 
 ### What's Displayed
 The "Attendance Statistics" section shows:
@@ -24,7 +24,7 @@ Overall Presence: 66.7%
 ```
 
 ### State Management
-[Lines 693-744](../frontend/src/components/dashboard/student-profile-dialog.tsx#L693-L744)
+[Lines 693-744](../servers/frontend/src/components/dashboard/student-profile-dialog.tsx#L693-L744)
 
 ```tsx
 const [attendanceStats, setAttendanceStats] = useState<any | null>(null);
@@ -77,7 +77,7 @@ useEffect(() => {
 ## 2. API Client Layer (Frontend)
 
 ### Location
-[frontend/src/lib/api-client.ts](../frontend/src/lib/api-client.ts#L242-L249)
+[frontend/src/lib/api-client.ts](../servers/frontend/src/lib/api-client.ts#L242-L249)
 
 ```typescript
 export async function getStudentSummary(studentId: number) {
@@ -97,7 +97,7 @@ export async function getAllStudentsSummaries() {
 ## 3. WebSocket Client (Frontend)
 
 ### Location
-[frontend/src/lib/websocket-client.ts](../frontend/src/lib/websocket-client.ts#L700-L729)
+[frontend/src/lib/websocket-client.ts](../servers/frontend/src/lib/websocket-client.ts#L700-L729)
 
 ```typescript
 getStudentSummary(studentId: number): Promise<any> {
@@ -143,7 +143,7 @@ getStudentSummary(studentId: number): Promise<any> {
 ## 4. Backend API Endpoint (WebSocket Handler)
 
 ### Location
-[backend/api_endpoints.py](../backend/api_endpoints.py#L193-L206)
+[backend/api_endpoints.py](../servers/backend/api_endpoints.py#L193-L206)
 
 ```python
 @socketio.on('get_student_summary')
@@ -181,7 +181,7 @@ def handle_get_student_summary(data):
 ## 5. Core Calculation Function
 
 ### Location
-[backend/app.py](../backend/app.py#L285-L350)
+[backend/app.py](../servers/backend/app.py#L285-L350)
 
 ```python
 def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:

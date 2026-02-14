@@ -5,11 +5,11 @@
 set -e
 
 echo "Starting backend..."
-(cd backend && ./start_backend.sh) &
+(cd servers/backend && ./start_backend.sh) &
 BACKEND_PID=$!
 
 trap "echo 'Stopping backend (PID $BACKEND_PID)...'; kill $BACKEND_PID 2>/dev/null || true" EXIT INT
 
 echo "Starting frontend (npm run dev)..."
-cd frontend
+cd servers/frontend
 npm run dev

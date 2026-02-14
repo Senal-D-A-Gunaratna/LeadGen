@@ -28,7 +28,7 @@ export function ServerTab() {
   };
 
   useEffect(() => {
-    // WebSocket connection is handled centrally in `frontend/src/app/page.tsx`
+    // WebSocket connection is handled centrally in `servers/frontend/src/app/page.tsx`
     const handler = (data: { total: number; authenticated: number }) => {
       setTotalConnections(data.total ?? 0);
       setAuthenticatedConnections(data.authenticated ?? 0);

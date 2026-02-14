@@ -14,13 +14,13 @@ clear && npm run dev
 
 
 # show table schema
-sqlite3 backend/data/attendance.db ".schema school_days" ".schema attendance_records"
+sqlite3 servers/backend/data/attendance.db ".schema school_days" ".schema attendance_records"
 
 # list school days for a month
-sqlite3 backend/data/attendance.db "SELECT date FROM school_days WHERE date LIKE '2026-02-%' ORDER BY date;"
+sqlite3 servers/backend/data/attendance.db "SELECT date FROM school_days WHERE date LIKE '2026-02-%' ORDER BY date;"
 
 # show attendance records for a student/month
-sqlite3 backend/data/attendance.db "SELECT date, status, checkin_utc, arrival_ts FROM attendance_records WHERE student_id=14 AND date LIKE '2026-02-%' ORDER BY date;"
+sqlite3 servers/backend/data/attendance.db "SELECT date, status, checkin_utc, arrival_ts FROM attendance_records WHERE student_id=14 AND date LIKE '2026-02-%' ORDER BY date;"
 
 
 
@@ -31,7 +31,7 @@ ss -ltnp | grep ':5000' || true
 lsof -ti:5000 | xargs -r kill
 
 # Start backend (legacy Flask by default)
-cd /home/Senal/leadgen/studio-main/backend
+cd servers/backend
 ./start_backend.sh &> /tmp/backend.log &
 
 # Or force FastAPI (if you want uvicorn)

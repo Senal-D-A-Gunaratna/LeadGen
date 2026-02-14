@@ -24,10 +24,12 @@ Make sure you have:
    Or manually:
    ```bash
    # Install frontend dependencies
+   cd servers/frontend
    npm install
+   cd -
    
-   # Install backend dependencies (must be in backend directory)
-   cd backend
+   # Install backend dependencies (must be in servers/backend directory)
+   cd servers/backend
    pip3 install -r requirements.txt
    cd ..
    ```
@@ -53,7 +55,7 @@ All scripts in `package.json` are designed to work from the project root directo
 ## Important Notes
 
 - All paths in the codebase are **relative**, so the project will work from any location as long as you run commands from the project root
-- The backend creates databases in `backend/data/` automatically
+- The backend creates databases in `servers/backend/data/` automatically
 - Environment variables are in `.env.local` (created automatically if missing)
 - The backend will migrate existing JSON data to SQLite on first run
 
@@ -69,12 +71,12 @@ npm install concurrently@^8.2.2 --save-dev
 ```
 
 **"requirements.txt not found" error:**
-- Make sure you're in the `backend/` directory when running pip:
-  ```bash
-  cd backend
-  pip3 install -r requirements.txt
-  cd ..
-  ```
+- Make sure you're in the `servers/backend/` directory when running pip:
+   ```bash
+   cd servers/backend
+   pip3 install -r requirements.txt
+   cd ..
+   ```
 
 **Backend won't start:**
 - Make sure Python 3.8+ is installed
@@ -87,5 +89,5 @@ npm install concurrently@^8.2.2 --save-dev
 - Check browser console for connection errors
 
 **Database issues:**
-- Run integrity check: `cd backend && python3 check_integrity.py`
-- Run cleanup if needed: `cd backend && python3 cleanup_databases.py`
+- Run integrity check: `cd servers/backend && python3 check_integrity.py`
+- Run cleanup if needed: `cd servers/backend && python3 cleanup_databases.py`
