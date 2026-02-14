@@ -26,7 +26,8 @@ app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configure logging: write DEBUG to `debug.log` and send INFO+ to console.
-# Do NOT create or update `log.txt`.
+# Capture warnings and route most library logs into the root logger so
+# `debug.log` contains nearly everything useful for debugging.
 _log_dir = Path(__file__).parent
 _debug_log = _log_dir / 'debug.log'
 _log_dir.mkdir(parents=True, exist_ok=True)
@@ -34,12 +35,15 @@ _log_dir.mkdir(parents=True, exist_ok=True)
 root_logger = logging.getLogger()
 if not root_logger.handlers:
     root_logger.setLevel(logging.DEBUG)
+    logging.captureWarnings(True)
 
+    # File handler for debug-level logs (most details)
     debug_handler = RotatingFileHandler(str(_debug_log), maxBytes=10 * 1024 * 1024, backupCount=5)
     debug_handler.setLevel(logging.DEBUG)
     debug_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(pathname)s:%(lineno)d %(message)s')
     debug_handler.setFormatter(debug_fmt)
 
+    # Console handler for info+ to keep terminal output readable
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     info_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s')
@@ -48,9 +52,17 @@ if not root_logger.handlers:
     root_logger.addHandler(debug_handler)
     root_logger.addHandler(console)
 
-    # Also route Flask/werkzeug logs through the same handlers
-    logging.getLogger('werkzeug').setLevel(logging.INFO)
-    logging.getLogger('werkzeug').propagate = True
+    # Ensure common libraries produce DEBUG output and propagate to root logger
+    for name in ('werkzeug', 'socketio', 'engineio', 'asyncio', 'uvicorn', 'uvicorn.error', 'uvicorn.access', 'aiohttp.access'):
+        try:
+            lg = logging.getLogger(name)
+            lg.setLevel(logging.DEBUG)
+            lg.propagate = True
+        except Exception:
+            pass
+
+    # Make sure third-party modules that add their own handlers still propagate
+    logging.getLogger().setLevel(logging.DEBUG)
 
 # SSL Configuration for HTTPS
 # Prefer project-local certs stored in servers/backend/certificates (localhost.pem/localhost-key.pem).
