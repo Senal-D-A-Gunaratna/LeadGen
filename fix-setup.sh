@@ -42,29 +42,11 @@ else
 fi
 
 echo ""
-echo "Reinstalling frontend dependencies (if npm available)"
+echo "Running project-wide install: npm run install-all"
 if command -v npm >/dev/null 2>&1; then
-    if [ -f "servers/frontend/package.json" ]; then
-        (cd servers/frontend && npm install)
-    else
-        echo "servers/frontend/package.json not found; skipping frontend install"
-    fi
+  npm run install-all
 else
-    echo "npm not found; skipping frontend install"
-fi
-
-echo ""
-echo "Reinstalling backend Python dependencies (if requirements.txt present)"
-if [ -f "servers/backend/requirements.txt" ]; then
-    if command -v pip3 >/dev/null 2>&1; then
-        pip3 install -r servers/backend/requirements.txt
-    elif command -v pip >/dev/null 2>&1; then
-        pip install -r servers/backend/requirements.txt
-    else
-        echo "pip not found; skipping backend install"
-    fi
-else
-    echo "servers/backend/requirements.txt not found; skipping backend install"
+  echo "npm not found; cannot run 'npm run install-all'"
 fi
 
 echo ""
