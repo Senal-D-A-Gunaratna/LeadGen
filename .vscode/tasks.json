@@ -7,7 +7,7 @@
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Install all dependencies",
-			"detail": "npm: Install dependencies for frontend and backend servers",
+			"detail": "npm: Install dependencies for both frontend and backend servers",
 			"presentation": {
 				"clear": true
 			}
@@ -31,7 +31,7 @@
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Run both servers (dev)",
-			"detail": "npm: Run both frontend and backend (npm run dev)",
+			"detail": "npm: Run both frontend and backend servers",
 			"presentation": {
 				"clear": true
 			}
