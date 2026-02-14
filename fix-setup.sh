@@ -1,12 +1,11 @@
-#!/bin/bash
-# Fix script for common setup issues
+#!/usr/bin/env bash
+# Hard dependency reset + reinstall for LeadGen
 
 set -e
 
 echo "=========================================="
-echo "Fixing Project Setup Issues"
+echo "Hard Reset: Project Dependencies"
 echo "=========================================="
-echo ""
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
@@ -14,45 +13,50 @@ cd "$PROJECT_ROOT"
 echo "Project root: $PROJECT_ROOT"
 echo ""
 
-# Fix concurrently issue
-echo "Fixing concurrently module..."
-if [ -d "node_modules/concurrently" ]; then
-    echo "Removing corrupted concurrently installation..."
-    rm -rf node_modules/.bin/concurrently
-    rm -rf node_modules/concurrently
-fi
-
-echo "Reinstalling concurrently..."
-npm install concurrently@^8.2.2 --save-dev
-
-# Fix Next.js issue
-echo ""
-echo "Fixing Next.js module..."
-if [ -d "node_modules/next" ]; then
-    echo "Removing corrupted Next.js installation..."
-    rm -rf node_modules/.bin/next
-    rm -rf node_modules/next
-fi
-
-echo "Reinstalling Next.js..."
-npm install next@14.2.4 --save
+echo "Removing frontend artifacts: node_modules, .next, package-lock.json"
+rm -rf servers/frontend/node_modules
+rm -rf servers/frontend/.next
+rm -f servers/frontend/package-lock.json
+echo "Done removing frontend artifacts"
 
 echo ""
-echo "Installing backend dependencies..."
-if [ ! -f "servers/backend/requirements.txt" ]; then
-    echo "❌ Error: servers/backend/requirements.txt not found!"
-    exit 1
+echo "Removing backend __pycache__ directories"
+if [ -d "servers/backend" ]; then
+    find servers/backend -type d -name '__pycache__' -prune -exec rm -rf {} + || true
+    echo "Done removing backend __pycache__"
+else
+    echo "servers/backend not found; skipping __pycache__ removal"
 fi
 
-cd servers/backend
-pip3 install -r requirements.txt
-cd ..
+echo ""
+echo "Reinstalling frontend dependencies (if npm available)"
+if command -v npm >/dev/null 2>&1; then
+    if [ -f "servers/frontend/package.json" ]; then
+        (cd servers/frontend && npm install)
+    else
+        echo "servers/frontend/package.json not found; skipping frontend install"
+    fi
+else
+    echo "npm not found; skipping frontend install"
+fi
+
+echo ""
+echo "Reinstalling backend Python dependencies (if requirements.txt present)"
+if [ -f "servers/backend/requirements.txt" ]; then
+    if command -v pip3 >/dev/null 2>&1; then
+        pip3 install -r servers/backend/requirements.txt
+    elif command -v pip >/dev/null 2>&1; then
+        pip install -r servers/backend/requirements.txt
+    else
+        echo "pip not found; skipping backend install"
+    fi
+else
+    echo "servers/backend/requirements.txt not found; skipping backend install"
+fi
 
 echo ""
 echo "=========================================="
-echo "✅ Fix Complete!"
+echo "✅ Hard reset complete"
 echo "=========================================="
-echo ""
-echo "Now try running:"
-echo "  npm run dev"
-echo ""
+echo "You can now run: npm run dev"
+
