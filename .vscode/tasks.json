@@ -7,7 +7,31 @@
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Run frontend server",
-			"detail": "npm: Frontend_Server",
+			"detail": "npm: Run Frontend_Server",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "install-all",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Install all dependencies",
+			"detail": "npm: Install frontend and backend dependencies",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "dev-backend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Run backend server",
+			"detail": "npm: Backend_Server",
 			"presentation": {
 				"clear": true
 			}
