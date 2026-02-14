@@ -1,102 +1,55 @@
-#!/bin/bash
-# Setup script for LeadGen project
-# Ensures all dependencies are installed and project is ready to run
+#!/usr/bin/env bash
+# Simplified setup: validate Node.js and Python versions, then run npm install-all
 
 set -e
 
 echo "=========================================="
-echo "LeadGen Project Setup"
+echo "LeadGen Simple Setup"
 echo "=========================================="
-echo ""
 
-# Get the project root directory (where this script is located)
+# Project root (where this script lives)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
-echo "Project root: $PROJECT_ROOT"
-echo ""
-
-# Check Node.js
-if ! command -v node &> /dev/null; then
+# Validate Node.js (major >= 18)
+if ! command -v node >/dev/null 2>&1; then
     echo "❌ Node.js is not installed. Please install Node.js v18 or higher."
     exit 1
 fi
-echo "✅ Node.js $(node --version) found"
+node_major=$(node -v | sed 's/^v//' | cut -d. -f1)
+if [ "$node_major" -lt 18 ]; then
+    echo "❌ Node.js $(node -v) detected. Please upgrade to v18 or higher."
+    exit 1
+fi
+echo "✅ Node.js $(node -v) found"
 
-# Check Python
-if ! command -v python3 &> /dev/null; then
+# Validate Python3 (>= 3.8)
+if ! command -v python3 >/dev/null 2>&1; then
     echo "❌ Python 3 is not installed. Please install Python 3.8 or higher."
     exit 1
 fi
-echo "✅ Python $(python3 --version) found"
-
-# Check npm
-if ! command -v npm &> /dev/null; then
-    echo "❌ npm is not installed. Please install npm."
+py_version=$(python3 -V 2>&1 | awk '{print $2}')
+py_major=$(echo "$py_version" | cut -d. -f1)
+py_minor=$(echo "$py_version" | cut -d. -f2)
+if [ "$py_major" -lt 3 ] || { [ "$py_major" -eq 3 ] && [ "$py_minor" -lt 8 ]; }; then
+    echo "❌ Python $py_version detected. Please use Python 3.8 or higher."
     exit 1
 fi
-echo "✅ npm $(npm --version) found"
+echo "✅ Python $py_version found"
 
 echo ""
-echo "Installing frontend dependencies..."
-if [ ! -d "servers/frontend/node_modules" ]; then
-    (cd servers/frontend && npm install)
-else
-    echo "✅ Frontend dependencies already installed"
-fi
-
-echo ""
-echo "Installing backend dependencies..."
-cd servers/backend
-if [ ! -f "requirements.txt" ]; then
-    echo "❌ requirements.txt not found in servers/backend directory"
+echo "Running npm install-all from project root..."
+if ! command -v npm >/dev/null 2>&1; then
+    echo "❌ npm is not installed. Please install npm to continue."
     exit 1
 fi
 
-# Check if virtual environment exists, create if not
-if [ ! -d "venv" ]; then
-    echo "Creating Python virtual environment..."
-    python3 -m venv venv
-fi
-
-# Activate virtual environment
-source venv/bin/activate
-
-# Install Python dependencies
-echo "Installing Python packages..."
-pip install -q -r requirements.txt
-
-cd "$PROJECT_ROOT"
-
 echo ""
-echo "Checking environment configuration..."
-
-# Check if .env.local exists
-if [ ! -f "servers/frontend/.env.local" ]; then
-    echo "Creating servers/frontend/.env.local file..."
-    echo "NEXT_PUBLIC_BACKEND_URL=http://localhost:5000" > servers/frontend/.env.local
-    echo "✅ Created servers/frontend/.env.local"
-else
-    echo "✅ servers/frontend/.env.local already exists"
-fi
-
-echo ""
-echo "Initializing databases..."
-cd servers/backend
-source venv/bin/activate
-python -c "from database import init_database, migrate_json_to_sqlite; init_database(); migrate_json_to_sqlite()" 2>/dev/null || echo "⚠️  Database initialization completed (warnings are normal)"
-
-cd "$PROJECT_ROOT"
+echo attemting to run install-all depandanciies (pyton and node modules)...
+npm run install-all
 
 echo ""
 echo "=========================================="
 echo "✅ Setup Complete!"
 echo "=========================================="
-echo ""
-echo "To start the development servers, run:"
-echo "  npm run dev"
-echo ""
-echo "This will start:"
-echo "  - Frontend: http://localhost:9002"
-echo "  - Backend:  http://localhost:5000"
-echo ""
+
