@@ -12,7 +12,20 @@ cd "$PROJECT_ROOT"
 
 echo "Project root: $PROJECT_ROOT"
 echo ""
+echo "Removing frontend artifacts: node_modules, .next, package-lock.json"
+echo ""
+# Confirmation prompt
+echo "WARNING: This will permanently remove frontend node_modules, servers/frontend/.next,
+# and servers/frontend/package-lock.json, and will delete all __pycache__ under servers/backend."
+read -p "Type 'y' to proceed with hard reset (anything else aborts): " confirm
+if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+    echo "Aborting hard reset. No changes made."
+    exit 0
+fi
 
+echo "Proceeding with hard reset..."
+
+echo ""
 echo "Removing frontend artifacts: node_modules, .next, package-lock.json"
 rm -rf servers/frontend/node_modules
 rm -rf servers/frontend/.next
