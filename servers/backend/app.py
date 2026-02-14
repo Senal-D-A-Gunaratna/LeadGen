@@ -10,6 +10,8 @@ import json
 from datetime import datetime, date, timezone
 from pathlib import Path
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Optional
 from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count
 from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
@@ -22,6 +24,39 @@ import traceback
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Configure logging: write INFO+ to `log.txt` and DEBUG to `debug.log`.
+# Use rotating handlers to avoid unbounded growth.
+_log_dir = Path(__file__).parent
+_info_log = _log_dir / 'log.txt'
+_debug_log = _log_dir / 'debug.log'
+_log_dir.mkdir(parents=True, exist_ok=True)
+
+root_logger = logging.getLogger()
+if not root_logger.handlers:
+    root_logger.setLevel(logging.DEBUG)
+
+    info_handler = RotatingFileHandler(str(_info_log), maxBytes=5 * 1024 * 1024, backupCount=3)
+    info_handler.setLevel(logging.INFO)
+    info_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s')
+    info_handler.setFormatter(info_fmt)
+
+    debug_handler = RotatingFileHandler(str(_debug_log), maxBytes=10 * 1024 * 1024, backupCount=5)
+    debug_handler.setLevel(logging.DEBUG)
+    debug_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(pathname)s:%(lineno)d %(message)s')
+    debug_handler.setFormatter(debug_fmt)
+
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(info_fmt)
+
+    root_logger.addHandler(info_handler)
+    root_logger.addHandler(debug_handler)
+    root_logger.addHandler(console)
+
+    # Also route Flask/werkzeug logs through the same handlers
+    logging.getLogger('werkzeug').setLevel(logging.INFO)
+    logging.getLogger('werkzeug').propagate = True
 
 # SSL Configuration for HTTPS
 # Prefer project-local certs stored in servers/backend/certificates (localhost.pem/localhost-key.pem).
