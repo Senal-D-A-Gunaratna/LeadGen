@@ -30,8 +30,8 @@
 			"script": "dev",
 			"path": ".",
 			"problemMatcher": [],
-			"label": "Run both servers (dev)",
-			"detail": "npm: Run both frontend and backend servers",
+			"label": "Run both servers",
+			"detail": "npm: Run both frontend and backend servers (dev)",
 			"presentation": {
 				"clear": true
 			}
@@ -43,7 +43,7 @@
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Run backend server",
-			"detail": "npm: Backend_Server",
+			"detail": "npm: Backend_Server (dev)",
 			"presentation": {
 				"clear": true
 			}
@@ -55,7 +55,7 @@
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Run frontend server",
-			"detail": "npm: Run Frontend_Server",
+			"detail": "npm: Run Frontend_Server (dev)",
 			"presentation": {
 				"clear": true
 			}
