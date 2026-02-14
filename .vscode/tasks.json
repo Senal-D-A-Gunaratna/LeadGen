@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "npm",
+			"script": "dev-frontend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Run frontend server",
+			"detail": "npm: Frontend_Server"
+		}
+	]
+}
