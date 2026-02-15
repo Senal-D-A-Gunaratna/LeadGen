@@ -47,7 +47,9 @@ Make sure you have:
 
    This will start:
    - Frontend at http://localhost:9002
+               or http://server_IP:9002
    - Backend at http://localhost:5000
+               or http://server_IP:5000
 
 ## Running from Project Root
 
