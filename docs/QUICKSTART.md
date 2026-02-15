@@ -1,4 +1,4 @@
-# Quick Start Guide
+# Quick Start Guide For LeadGen Servers
 
 This guide will help you get the project running from the project folder
 
@@ -33,7 +33,7 @@ Make sure you have:
    npm install
    cd ..
    ```
-   
+
    ```bash
    # Install backend dependencies (must be in servers/backend directory)
    cd servers/backend
