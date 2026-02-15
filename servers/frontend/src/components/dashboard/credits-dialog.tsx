@@ -60,8 +60,8 @@ export function CreditsDialog() {
           </div>
           <Separator />
            <div className="text-center pt-2">
-              <p className="text-xs text-muted-foreground">Built with Next.js, Python, ShadCN, Tailwind CSS, and a local server backend.</p>
-              <p className="text-xs text-muted-foreground">This application was brought to you by the power of AI.</p>
+              <p className="text-xs text-muted-foreground">Built with Next.js, ShadCN, Tailwind CSS, Python ,Flask ,FastAPI and Soket.Io</p>
+              <p className="text-xs text-muted-foreground">This application was brought to you by the power of AI</p>
            </div>
         </div>
       </DialogContent>
