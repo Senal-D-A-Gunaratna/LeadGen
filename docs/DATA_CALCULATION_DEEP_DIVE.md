@@ -1,21 +1,25 @@
-# Student Profile Dialog - Data Calculation Deep Dive
+# Student Profile Dialog - Data Calculation Deep Dive (Rewritten, old-style)
 
 ## Overview
-The attendance statistics displayed in the Student Profile Dialog are calculated through a multi-step pipeline that spans both frontend and backend. This document traces the complete flow from data source to UI display.
+This file preserves the original structure and level of detail from the previous deep-dive but is updated to match the new frontend/backend design. Where implementation changed, clear "(placeholder)" markers are left for maintainers to insert concrete file paths, function names, and code excerpts.
+
+Use this document to:
+- Capture the authoritative calculation rules and data flows.
+- Provide exact file/line references and small code excerpts (fill the placeholders).
+- Give a reproducible verification example that matches production behavior.
 
 ## 1. Data Display (Frontend UI)
 
 ### Location
-[frontend/src/components/dashboard/student-profile-dialog.tsx](../servers/frontend/src/components/dashboard/student-profile-dialog.tsx#L861)
+`(placeholder)`: insert the component path(s) that render the Student Profile Dialog and the Attendance Statistics (example: `servers/frontend/src/components/dashboard/student-profile-dialog.tsx`).
 
 ### What's Displayed
-The "Attendance Statistics" section shows:
-- **Overall Presence**: Percentage of days the student was present (on time + late)
-- **On Time**: Count of days and percentage
-- **Late**: Count of days and percentage  
-- **Absent**: Count of days and percentage
+- **Overall Presence**: Percentage of canonical school days the student was present (on time + late).
+- **On Time**: Count and percentage.
+- **Late**: Count and percentage.
+- **Absent**: Count and percentage.
 
-Example from the UI:
+Example UI snippet (replace):
 ```
 Overall Presence: 66.7%
 ├─ On Time: 2 days (33.3%)
@@ -24,344 +28,105 @@ Overall Presence: 66.7%
 ```
 
 ### State Management
-[Lines 693-744](../servers/frontend/src/components/dashboard/student-profile-dialog.tsx#L693-L744)
+`(placeholder)`: describe how the component obtains the summary (store lookup, props, API call). Include the store hook file and the cache shape (e.g., `Map<studentId, summary>`).
 
+Code excerpt to include (replace with real snippet):
 ```tsx
-const [attendanceStats, setAttendanceStats] = useState<any | null>(null);
-
+// from student-profile-dialog.tsx
+const [attendanceStats, setAttendanceStats] = useState(null);
 useEffect(() => {
-  let cancelled = false;
-  async function fetchSummary() {
-    if (!student) return setAttendanceStats(null);
-    
-    // Try to get from cache first
-    const summary = studentSummaries.get(student.id);
-    if (summary) {
-      setAttendanceStats({
-        onTimeCount: summary.onTimeDays,
-        lateCount: summary.lateDays,
-        absentCount: summary.absentDays,
-        onTimePercentage: summary.onTimePercentage,
-        latePercentage: summary.latePercentage,
-        absentPercentage: summary.absencePercentage,
-        overallPercentage: summary.presencePercentage,
-      });
-    } else {
-      // Fetch from backend if not cached
-      try {
-        const res = await getStudentSummary(student.id);
-        const s = res?.summary;
-        if (!cancelled && s) {
-          // Update store cache
-          updateStudentSummaries([...]);
-          setAttendanceStats({...});
-        }
-      } catch (e) {
-        console.error('Failed to fetch student summary', e);
-      }
-    }
-  }
-
-  fetchSummary();
-  return () => { cancelled = true };
-}, [student, studentSummaries, updateStudentSummaries]);
+  // store lookup -> fallback fetch -> set state
+}, [studentId]);
 ```
-
-**Key Points:**
-- Checks cache first (from `useStudentStore`)
-- Falls back to API call if not cached
-- Transforms server response into UI-friendly format
 
 ---
 
 ## 2. API Client Layer (Frontend)
 
 ### Location
-[frontend/src/lib/api-client.ts](../servers/frontend/src/lib/api-client.ts#L242-L249)
+`(placeholder)`: API client file used by the UI (example: `servers/frontend/src/lib/api-client.ts`).
 
-```typescript
+### Purpose
+Describe whether the client uses WebSocket or HTTP, timeouts, error shapes, and any retry logic. Provide exact function signatures.
+
+Example (replace with current):
+```ts
 export async function getStudentSummary(studentId: number) {
-  const result = await wsClient.getStudentSummary(studentId);
-  return result;
-}
-
-export async function getAllStudentsSummaries() {
-  return wsClient.getAllStudentsSummaries();
+  return transportClient.getStudentSummary(studentId);
 }
 ```
 
-**Purpose:** Thin wrapper around WebSocket client for consistency with REST-like API pattern.
+---
+
+## 3. Transport Layer (WebSocket / REST)
+
+### Protocol (placeholder)
+Document the actual transport and event/route names. If WebSocket, list emitted event names and response event names; if REST, list routes and HTTP verbs.
+
+Example (fill in):
+- Emit: `get_student_summary` → `{ studentId }`
+- Response: `get_student_summary_response` → `{ success, summary, message }`
+- Timeout: 15s (confirm)
 
 ---
 
-## 3. WebSocket Client (Frontend)
+## 4. Backend Endpoint / Handler
 
 ### Location
-[frontend/src/lib/websocket-client.ts](../servers/frontend/src/lib/websocket-client.ts#L700-L729)
+`(placeholder)`: backend file handling summary requests (e.g., `servers/backend/api_endpoints.py`).
 
-```typescript
-getStudentSummary(studentId: number): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if (!this.socket || !this.socket.connected) {
-      reject(new Error('Not connected'));
-      return;
-    }
+### Flow (template)
+1. Receive request (event or HTTP) with `studentId`.
+2. Validate `studentId`, fetch student record.
+3. Retrieve attendance source (raw rows or aggregates).
+4. Compute or fetch summary.
+5. Return/emit summary to client.
 
-    const handler = (data: {
-      success: boolean;
-      studentId?: number;
-      summary?: any;
-      message?: string;
-    }) => {
-      this.socket?.off('get_student_summary_response', handler);
-      if (data.success) {
-        resolve({ studentId: data.studentId, summary: data.summary });
-      } else {
-        reject(new Error(data.message || 'Failed to get summary'));
-      }
-    };
-
-    this.socket.on('get_student_summary_response', handler);
-    this.socket.emit('get_student_summary', { studentId });
-
-    // 15-second timeout
-    setTimeout(() => {
-      this.socket?.off('get_student_summary_response', handler);
-      reject(new Error('Request timeout'));
-    }, 15000);
-  });
-}
-```
-
-**Protocol:**
-1. Emits WebSocket event: `get_student_summary` with `{ studentId }`
-2. Waits for response: `get_student_summary_response`
-3. 15-second timeout for safety
+Include function/route signature and a short code excerpt here.
 
 ---
 
-## 4. Backend API Endpoint (WebSocket Handler)
+## 5. Core Calculation Logic
 
 ### Location
-[backend/api_endpoints.py](../servers/backend/api_endpoints.py#L193-L206)
+`(placeholder)`: canonical calculation function or aggregation job (example: `servers/backend/app.py`).
 
-```python
-@socketio.on('get_student_summary')
-def handle_get_student_summary(data):
-    """Get attendance summary for a single student via WebSocket."""
-    # Allow unauthenticated access for student details
-    
-    student_id = data.get('studentId')
-    student = get_student_by_id(student_id)
-    if not student:
-        emit('get_student_summary_response', {
-            'success': False,
-            'message': 'Student not found'
-        })
-        return
+### Calculation steps (confirm and document)
+1. Determine canonical school days (source: business calendar table or derived from attendance rows).
+2. Filter student records to canonical school days.
+3. Count `on time` and `late` days; sum as `present`.
+4. Decide policy for missing records (absent vs ignored).
+5. Compute percentages using the agreed denominator and apply rounding.
 
-    students = get_all_students_with_history()
-    summary = get_attendance_summary(student, students)
-    emit('get_student_summary_response', {
-        'success': True,
-        'studentId': student_id,
-        'summary': summary
-    })
-```
-
-**Flow:**
-1. Receives WebSocket request with `studentId`
-2. Retrieves student record
-3. Gets all students with attendance history
-4. Calculates summary using `get_attendance_summary()`
-5. Sends response back via WebSocket
-
----
-
-## 5. Core Calculation Function
-
-### Location
-[backend/app.py](../servers/backend/app.py#L285-L350)
-
-```python
-def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
-    """Calculate attendance summary for a student."""
-    from datetime import datetime as dt
-    from calendar import day_name
-    
-    # ============================================
-    # STEP 1: Identify all school days (Mon-Fri)
-    # ============================================
-    school_days = set()
-    for s in all_students:
-        for record in s.get('attendanceHistory', []):
-            try:
-                record_date = dt.fromisoformat(record['date'] + 'T00:00:00')
-                day_of_week = record_date.weekday()
-                if 0 < day_of_week < 6:  # Monday to Friday (1-5)
-                    school_days.add(record['date'])
-            except:
-                pass
-    
-    total_school_days = len(school_days)
-    
-    # ============================================
-    # STEP 2: Handle edge case (no data)
-    # ============================================
-    if total_school_days == 0:
-        return {
-            'totalSchoolDays': 0,
-            'presentDays': 0,
-            'absentDays': 0,
-            'onTimeDays': 0,
-            'lateDays': 0,
-            'presencePercentage': 0,
-            'absencePercentage': 0,
-            'onTimePercentage': 0,
-            'latePercentage': 0
-        }
-    
-    # ============================================
-    # STEP 3: Filter records to school days only
-    # ============================================
-    student_records = [
-        r for r in student.get('attendanceHistory', [])
-        if r['date'] in school_days
-    ]
-    
-    # ============================================
-    # STEP 4: Count attendance statuses
-    # ============================================
-    on_time_days = len([r for r in student_records if r['status'] == 'on time'])
-    late_days = len([r for r in student_records if r['status'] == 'late'])
-    present_days = on_time_days + late_days
-    absent_days = total_school_days - present_days
-    
-    # ============================================
-    # STEP 5: Calculate percentages
-    # ============================================
-    presence_percentage = round(
-        (present_days / total_school_days) * 100, 1
-    ) if total_school_days > 0 else 0
-    
-    absence_percentage = round(
-        (absent_days / total_school_days) * 100, 1
-    ) if total_school_days > 0 else 0
-    
-    on_time_percentage = round(
-        (on_time_days / total_school_days) * 100, 1
-    ) if total_school_days > 0 else 0
-    
-    late_percentage = round(
-        (late_days / total_school_days) * 100, 1
-    ) if total_school_days > 0 else 0
-    
-    # ============================================
-    # STEP 6: Return summary
-    # ============================================
-    return {
-        'totalSchoolDays': total_school_days,
-        'presentDays': present_days,
-        'absentDays': absent_days,
-        'onTimeDays': on_time_days,
-        'lateDays': late_days,
-        'presencePercentage': presence_percentage,
-        'absencePercentage': absence_percentage,
-        'onTimePercentage': on_time_percentage,
-        'latePercentage': late_percentage
-    }
-```
+### Rules to confirm
+- School-day definition: Mon–Fri vs calendar/holidays.
+- Percentages denominator: total canonical school days vs days with activity.
+- Missing-records policy: count as absent or not.
+- Rounding: number of decimal places.
 
 ---
 
 ## 6. Data Source: Attendance History
 
-### How Records Are Populated
+### Where records live
+`(placeholder)`: DB and table (e.g., SQLite `attendance` table). Include columns: `date`, `status`, `arrival_time`, `student_id`.
 
-#### Location: [backend/app.py](../backend/app.py#L245-L280)
-
-```python
-def get_all_students_with_history() -> List[Dict]:
-    """Return all students with their attendance records."""
-    # ... (connection setup code)
-    
-    for student_id in student_ids:
-        student = get_student_by_id(student_id)
-        
-        # ============================================
-        # Fetch attendance history from SQLite
-        # ============================================
-        cursor_attendance.execute('''
-            SELECT date, status, arrival_time
-            FROM attendance
-            WHERE student_id = ?
-            ORDER BY date ASC
-        ''', (student_id,))
-        
-        # ============================================
-        # Build attendance history list
-        # ============================================
-        history = []
-        for row in cursor_attendance.fetchall():
-            record = {
-                'date': row['date'],
-                'status': row['status'],
-                'arrival_time': row['arrival_time']
-            }
-            history.append(record)
-        
-        student['attendanceHistory'] = history
-        # ... (more processing)
-        students.append(student)
-```
-
-### Record Format
-Each attendance record has:
-- **date**: ISO format (YYYY-MM-DD)
-- **status**: One of `'on time'`, `'late'`, or `'absent'`
-- **arrival_time**: Time student arrived (if applicable)
+### Record format
+- `date`: `YYYY-MM-DD`
+- `status`: canonical values (e.g., `on time`, `late`, `absent`)
+- `arrival_time`: optional
 
 ---
 
-## 7. Calculation Breakdown with Example
+## 7. Calculation Example (replace with verified data)
+Provide a concrete example using the production rules and data. Example template:
 
-Given this attendance data for a student:
+Input rows (example):
+- 2025-12-19: on time
+- 2025-12-22: late
+- 2025-12-23: absent
 
-| Date       | Day of Week | Status   |
-|------------|------------|----------|
-| 2025-12-19 | Friday     | on time  |
-| 2025-12-20 | Saturday   | on time  | ← Weekend, excluded
-| 2025-12-21 | Sunday     | on time  | ← Weekend, excluded
-| 2025-12-22 | Monday     | late     |
-| 2025-12-23 | Tuesday    | absent   |
-
-### Calculation Process:
-
-**1. Identify School Days (Mon-Fri only)**
-- Scans ALL students' attendance records
-- Only counts Monday-Friday (weekday() 0-6, where 0=Monday, 6=Sunday)
-- School days in this data: {2025-12-19, 2025-12-22, 2025-12-23}
-- `total_school_days = 3`
-
-**2. Filter to Student's School Days**
-- Student records on school days:
-  - 2025-12-19: on time ✓
-  - 2025-12-22: late ✓
-  - 2025-12-23: absent ✓
-
-**3. Count Status**
-- `on_time_days = 1`
-- `late_days = 1`
-- `present_days = 1 + 1 = 2`
-- `absent_days = 3 - 2 = 1`
-
-**4. Calculate Percentages**
-- `presence_percentage = (2 / 3) × 100 = 66.7%`
-- `absence_percentage = (1 / 3) × 100 = 33.3%`
-- `on_time_percentage = (1 / 3) × 100 = 33.3%`
-- `late_percentage = (1 / 3) × 100 = 33.3%`
-
-**Result:**
+Expected summary (example):
 ```json
 {
   "totalSchoolDays": 3,
@@ -378,25 +143,90 @@ Given this attendance data for a student:
 
 ---
 
-## 8. Key Calculation Rules
+## 8. Key Calculation Rules (record definitively)
+- Weekday vs calendar-driven school days
+- Percentage basis
+- Missing-records policy
+- Rounding/precision
 
-### Rule 1: Weekday-Only Calculation
-- **Only Monday-Friday are counted** as school days
-- Weekends are automatically excluded
-- This is enforced globally: `if 0 < day_of_week < 6`
+---
 
-### Rule 2: Percentage Basis
-- All percentages are calculated **relative to total school days**, NOT just present days
-- This ensures metrics are directly comparable
-- Example: If 1 out of 3 school days = 33.3%
+## 9. Caching & Frontend Store
 
-### Rule 3: Missing Records as Absent
-- If a student has no record for a school day that exists in the system, they're counted as absent
-- School days are determined by ANY student having attendance data on that day
+Describe cache location, shape, invalidation triggers, and event listeners (placeholders for file links).
 
-### Rule 4: Rounding
-- All percentages are rounded to **1 decimal place**
-- Formula: `round(value, 1)`
+---
+
+## 10. Real-time Updates
+
+List events and expected client behavior (update cache, refetch, or no-op). Provide event names and handler locations.
+
+---
+
+## 11. Data Flow Diagram
+
+Recreate the original flow diagram but confirm event/route names and handler locations.
+
+UI → Store lookup → API client → Transport → Backend handler → Calculation/Aggregate → Response → Store update → UI
+
+---
+
+## 12. Performance Considerations
+
+Discuss on-demand vs precomputed summaries, server-side caching of canonical school days, and large-dataset strategies.
+
+---
+
+## 13. Error Handling
+
+Document frontend and backend error handling patterns (placeholders for exact messages/codes).
+
+---
+
+## 14. Response Shape (authoritative)
+Confirm and record the backend response object and the frontend mapping to UI fields.
+
+Example shape (verify & replace):
+```json
+{
+  "totalSchoolDays": 0,
+  "presentDays": 0,
+  "absentDays": 0,
+  "onTimeDays": 0,
+  "lateDays": 0,
+  "presencePercentage": 0.0,
+  "absencePercentage": 0.0,
+  "onTimePercentage": 0.0,
+  "latePercentage": 0.0
+}
+```
+
+Frontend mapping example:
+- `onTimeCount` ← `onTimeDays`
+- `lateCount` ← `lateDays`
+- `absentCount` ← `absentDays`
+- `overallPercentage` ← `presencePercentage`
+
+---
+
+## 15. Files Reference (fill with exact links)
+
+- Student profile UI: `(placeholder)`
+- API client: `(placeholder)`
+- Transport client: `(placeholder)`
+- Backend handlers: `(placeholder)`
+- Calculation/aggregates: `(placeholder)`
+
+---
+
+## Summary & Next Steps
+1. Replace placeholders with concrete file paths and code excerpts.
+2. Confirm the canonical rules and record them here.
+3. Add a verified example from production/dev data.
+
+If you want, I can scan the repo and auto-populate the placeholders with file links and short excerpts — would you like me to do that now?
+
+Document last updated: draft — update with author/date after verification.
 
 ---
 
