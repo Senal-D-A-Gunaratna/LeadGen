@@ -30,7 +30,7 @@ export function CreditsDialog() {
         </DialogHeader>
         <div className="flex flex-col items-center justify-center h-48 space-y-4">
           <p className="text-center">This application was brought to you by the power of AI</p>
-          <p className="text-sm text-muted-foreground text-center">Built with Next.js, ShadCN, Tailwind CSS, and Firebase.</p>
+          <p className="text-sm text-muted-foreground text-center">Built with Next.js, ShadCN, Tailwind CSS, Python ,Flask ,FastAPI and Soket.Io</p>
         </div>
       </DialogContent>
     </Dialog>
