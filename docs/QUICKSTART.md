@@ -1,12 +1,14 @@
 # Quick Start Guide
 
-This guide will help you get the project running from the project folder `/home/Senal/leadgen/studio-main`.
+This guide will help you get the project running from the project folder
+
+**please note that all comands listed on this file must be runed from project root**
 
 ## Prerequisites Check
 
 Make sure you have:
-- Node.js (v18+)
-- Python 3.8+
+- Node.js v18+
+- Python v3.8+
 - npm
 
 ## Quick Setup
@@ -17,16 +19,19 @@ Make sure you have:
    ```
 
 2. **Run the setup script (optional but recommended):**
+
    ```bash
-   bash setup.sh
+   cd tools/shell_scripts
+   ./setup.sh
    ```
-   Note: Use `bash setup.sh` (not just `setup.sh`) to run the script.
+   
    Or manually:
+
    ```bash
    # Install frontend dependencies
    cd servers/frontend
    npm install
-   cd -
+   cd ..
    
    # Install backend dependencies (must be in servers/backend directory)
    cd servers/backend
@@ -35,6 +40,7 @@ Make sure you have:
    ```
 
 3. **Start both servers:**
+ 
    ```bash
    npm run dev
    ```
@@ -48,10 +54,11 @@ Make sure you have:
 All scripts in `package.json` are designed to work from the project root directory (`/home/Senal/leadgen/studio-main`):
 
 - `npm run dev` - Runs both frontend and backend
-- `npm run dev-next` - Runs only the Next.js frontend
 - `npm run dev-backend` - Runs only the Flask backend
+- `npm run dev-frontend` - Runs only the Next.Js frontendend
 - `npm run install-backend` - Installs Python dependencies
-
+- `npm run install-frontend` - Installs Next.Js depandencies
+- 
 ## Important Notes
 
 - All paths in the codebase are **relative**, so the project will work from any location as long as you run commands from the project root
@@ -62,16 +69,22 @@ All scripts in `package.json` are designed to work from the project root directo
 ## Troubleshooting
 
 **"Cannot find module '../src/defaults'" error (concurrently issue):**
+
 ```bash
 # Fix the corrupted concurrently installation
-bash fix-setup.sh
-# Or manually:
+cd tools/shell_scripts
+./fix-setup.sh
+```
+
+```bash
+# Fix manually:
 rm -rf node_modules/.bin/concurrently node_modules/concurrently
 npm install concurrently@^8.2.2 --save-dev
 ```
 
 **"requirements.txt not found" error:**
 - Make sure you're in the `servers/backend/` directory when running pip:
+- 
    ```bash
    cd servers/backend
    pip3 install -r requirements.txt
