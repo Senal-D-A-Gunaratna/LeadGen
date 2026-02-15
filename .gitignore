@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # Root level items (if any)
-tools/__pycache__
+
 
 # Frontend dependencies & build
 servers/frontend/node_modules/
@@ -71,3 +71,6 @@ servers/frontend/.next/**/**/*.js.map
 servers/frontend/.next/static/
 servers/frontend/.next/server/
 servers/frontend/out/
+
+#Other
+tools/__pycache__
