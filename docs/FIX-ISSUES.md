@@ -2,6 +2,8 @@
 
 This document outlines solutions for common environment and dependency issues encountered in the project.
 
+please note that all comands listed on this file must be runed from the **project_root**
+
 ## 🚀 Quick Fix (Recommended)
 
 If you are experiencing module errors, the fastest solution is to run the automated fix script. This handles both frontend and backend dependencies.
