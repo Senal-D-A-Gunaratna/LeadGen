@@ -1,7 +1,6 @@
 # Quick Start Guide For LeadGen Servers
 
-
-*please note that all comands listed on this file must be runed from project_root*
+please note that all comands listed on this file must be runed from the **project_root**
 
 ## Prerequisites Check
 
