@@ -32,7 +32,9 @@ Make sure you have:
    cd servers/frontend
    npm install
    cd ..
+   ```
    
+   ```bash
    # Install backend dependencies (must be in servers/backend directory)
    cd servers/backend
    pip3 install -r requirements.txt
