@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-# Import the existing ASGI app (Socket.IO + Flask wrapped earlier)
+# Import the existing ASGI app (Socket.IO + Flask wrapped earlier).
+# Prefer the fully-qualified package import so static checkers (mypy)
+# can resolve the module; fall back to relative import for different
+# run contexts.
 try:
-    import app as flask_app_module
+    from servers.backend import app as flask_app_module
 except Exception:
-    # Fallback if running as package
     from . import app as flask_app_module
 
 
