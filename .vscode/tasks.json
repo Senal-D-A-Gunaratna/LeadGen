@@ -61,5 +61,17 @@
 				"clear": true
 			}
 		}
+		,
+		{
+			"type": "npm",
+			"script": "uninstall-all",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Uninstall all dependencies",
+			"detail": "npm: Uninstall dependencies for both frontend and backend servers",
+			"presentation": {
+				"clear": true
+			}
+		}
 	]
 }
