@@ -12,18 +12,7 @@
 				"clear": true
 			}
 		}
-		,
-		{
-			"type": "npm",
-			"script": "typecheck",
-			"path": "servers/frontend",
-			"problemMatcher": [],
-			"label": "Typecheck frontend",
-			"detail": "npm: Run TypeScript type check for frontend",
-			"presentation": {
-				"clear": true
-			}
-		}
+		
 		,
 		{
 			"type": "npm",
@@ -56,6 +45,18 @@
 			"problemMatcher": [],
 			"label": "Run frontend server",
 			"detail": "npm: Run Frontend_Server (dev)",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "typecheck",
+			"path": "servers/frontend",
+			"problemMatcher": [],
+			"label": "Typecheck frontend",
+			"detail": "npm: Run TypeScript type check for frontend",
 			"presentation": {
 				"clear": true
 			}
