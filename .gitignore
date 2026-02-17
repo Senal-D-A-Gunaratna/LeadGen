@@ -2,6 +2,7 @@
 
 # Root level items (if any)
 node_modules/
+/.mypy_cache
 
 # Frontend dependencies & build
 servers/frontend/node_modules/
