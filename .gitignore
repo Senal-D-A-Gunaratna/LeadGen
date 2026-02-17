@@ -72,6 +72,6 @@ servers/frontend/.next/static/
 servers/frontend/.next/server/
 servers/frontend/out/
 
-#Other
+#Other (if any)
 tools/__pycache__
 servers/__pycache__
