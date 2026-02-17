@@ -30,13 +30,13 @@ cd servers/backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-./start_backend.sh  # or: python app.py
+./start_fastapi.sh  # or: python app.py
 ```
 2. Frontend
 ```bash
 cd servers/frontend
 npm install
-npm run dev
+npm run dev-frontend
 ```
 3. Defaults
 <!--
