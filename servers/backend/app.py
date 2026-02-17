@@ -13,9 +13,9 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Optional
-from .database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count
-from .config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
-from .utils import compute_attendance_status
+from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count
+from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
+from utils import compute_attendance_status
 import csv
 import io
 import base64
