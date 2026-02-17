@@ -233,50 +233,103 @@ def broadcast_data_change(event_type: str, data: Optional[dict] = None):
             pass
 
 def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
-    """Broadcast updated attendance summaries for affected students or all if None."""
-    if affected_student_ids is None:
-        # Emit all summaries
-        students = get_all_students_with_history()
-        summaries = []
-        for student in students:
-            summary = get_attendance_summary(student, students)
-            summaries.append({
-                'studentId': student['id'],
-                'name': student['name'],
-                'grade': student['grade'],
-                'className': student['className'],
-                'summary': summary
-            })
+    """Broadcast updated attendance summaries for affected students or all if None.
+
+    This function is a synchronous entrypoint that schedules the actual
+    work on the application's asyncio event loop. The heavy summary
+    computation is performed in a thread to avoid blocking the loop.
+    """
+
+    async def _compute_and_emit(affected_ids: Optional[list[int]]):
+        # Compute summaries in a background thread to avoid blocking the loop
+        def _compute():
+            summaries = []
+            if affected_ids is None:
+                students = get_all_students_with_history()
+                for student in students:
+                    summary = get_attendance_summary(student, students)
+                    summaries.append({
+                        'studentId': student['id'],
+                        'name': student['name'],
+                        'grade': student['grade'],
+                        'className': student['className'],
+                        'summary': summary
+                    })
+            else:
+                # Compute only for affected IDs
+                students = get_all_students_with_history()
+                id_map = {s['id']: s for s in students}
+                for sid in affected_ids:
+                    student = id_map.get(sid)
+                    if not student:
+                        continue
+                    summary = get_attendance_summary(student, students)
+                    summaries.append({
+                        'studentId': student['id'],
+                        'name': student['name'],
+                        'grade': student['grade'],
+                        'className': student['className'],
+                        'summary': summary
+                    })
+            return summaries
+
+        try:
+            summaries = await asyncio.to_thread(_compute)
+        except Exception:
+            summaries = []
+
         try:
             print(f"[broadcast] scheduling summary_update -> summaries_count={len(summaries)}")
         except Exception:
             pass
+
         payload = {'summaries': summaries}
 
-        async def _emit_summary(payload):
+        try:
+            await socketio.emit('summary_update', payload, namespace='/', broadcast=True)
+        except TypeError:
             try:
-                await socketio.emit('summary_update', payload, namespace='/', broadcast=True)
-            except TypeError:
-                try:
-                    await socketio.emit('summary_update', payload, namespace='/')
-                except Exception as e:
-                    try:
-                        print(f"[broadcast] failed to emit summary_update: {e}")
-                    except Exception:
-                        pass
+                await socketio.emit('summary_update', payload, namespace='/')
             except Exception as e:
                 try:
                     print(f"[broadcast] failed to emit summary_update: {e}")
                 except Exception:
                     pass
-
-        try:
-            socketio.start_background_task(_emit_summary, payload)
         except Exception as e:
             try:
-                print(f"[broadcast] failed to schedule summary_update task: {e}")
+                print(f"[broadcast] failed to emit summary_update: {e}")
             except Exception:
                 pass
+
+    # Schedule on the running event loop if available, otherwise submit
+    # to the main loop so calls from threads or synchronous endpoints
+    # are handled safely.
+    try:
+        loop = asyncio.get_running_loop()
+        # We're on the event loop — create a task
+        loop.create_task(_compute_and_emit(affected_student_ids))
+        return
+    except RuntimeError:
+        pass
+
+    try:
+        main_loop = asyncio.get_event_loop()
+        try:
+            asyncio.run_coroutine_threadsafe(_compute_and_emit(affected_student_ids), main_loop)
+            return
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    # Fallback: try socketio.start_background_task (best-effort)
+    try:
+        socketio.start_background_task(lambda ids=affected_student_ids: None, affected_student_ids)
+    except Exception:
+        try:
+            print('[broadcast] failed to schedule summary_update task (fallback)')
+        except Exception:
+            pass
 
 
 def compute_static_filters_from_db() -> Dict[str, List[str]]:
