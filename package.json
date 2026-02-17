@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "npm run dev-frontend & npm run dev-backend",
     "dev-frontend": "cd servers/frontend && npm run dev",
-    "dev-backend": "cd servers/backend && python3 app.py",
+    "dev-backend": "python3 -m servers.backend.app",
     "build": "cd servers/frontend && npm run build",
     "start": "cd servers/frontend && npm start",
     "lint": "cd servers/frontend && npm run lint",
