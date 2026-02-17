@@ -52,8 +52,20 @@
 		,
 		{
 			"type": "npm",
-			"script": "typecheck",
-			"path": "servers/frontend",
+			"script": "typecheck-backend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Typecheck backend",
+			"detail": "npm: Run mypy type check for backend",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "typecheck-frontend",
+			"path": ".",
 			"problemMatcher": [],
 			"label": "Typecheck frontend",
 			"detail": "npm: Run TypeScript type check for frontend",
