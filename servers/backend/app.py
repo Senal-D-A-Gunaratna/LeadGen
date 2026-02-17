@@ -13,7 +13,8 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Optional
-from servers.backend.database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count
+from servers.backend.database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count, register_post_mtime_change_callback, start_attendance_watcher
+import asyncio
 from servers.backend.config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
 from servers.backend.utils import compute_attendance_status
 import csv
@@ -2379,6 +2380,100 @@ register_endpoints(app, socketio, {
     'emit': socketio.emit,
     'authenticated_sessions': authenticated_sessions
 })
+
+
+# === DB MTIME -> application wiring ===
+# We register a lightweight thread callback (invoked by the watcher thread)
+# that enqueues a message into an asyncio.Queue on the main event loop.
+# An async processor consumes the queue, performs `recalculate_school_days`
+# off-thread and then publishes updates to connected clients from the
+# event loop (so Async Socket.IO emits run in the proper loop).
+_db_event_queue: "asyncio.Queue[bool]" = asyncio.Queue()
+_db_event_processor_task: Optional[asyncio.Task] = None
+
+
+def _db_watcher_thread_callback() -> None:
+    """Called from the database watcher thread when the attendance DB mtime changes.
+
+    This should be very small and must not block: it schedules a put into
+    the main event loop's queue using `call_soon_threadsafe`.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+    except Exception:
+        # No loop in this thread — try to find a running loop via the default policy
+        try:
+            loop = asyncio.get_event_loop()
+        except Exception:
+            return
+    try:
+        loop.call_soon_threadsafe(_db_event_queue.put_nowait, True)
+    except Exception:
+        pass
+
+
+async def _db_event_processor():
+    while True:
+        try:
+            await _db_event_queue.get()
+            # Perform recalculation in a thread to avoid blocking the event loop
+            try:
+                await asyncio.to_thread(recalculate_school_days)
+            except Exception:
+                pass
+
+            # Publish a concise db-changed event to clients
+            payload = {'type': 'attendance_db_changed', 'data': {}}
+            try:
+                await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
+            except Exception:
+                # Best-effort fallback: try socketio.start_background_task from loop
+                try:
+                    socketio.start_background_task(lambda p=payload: None, payload)
+                except Exception:
+                    pass
+
+            # Also publish summary update (existing helper will schedule its work)
+            try:
+                broadcast_summary_update(None)
+            except Exception:
+                pass
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(0.5)
+
+
+def setup_db_mtime_handler(loop: Optional[asyncio.AbstractEventLoop] = None):
+    """Initialize DB mtime handling: start the watcher and ensure the
+    async processor is running on the given `loop` (or current loop).
+    """
+    global _db_event_processor_task
+    if loop is None:
+        try:
+            loop = asyncio.get_event_loop()
+        except Exception:
+            return
+    # Ensure the processor task is running in the provided loop
+    try:
+        if _db_event_processor_task is None or _db_event_processor_task.done():
+            _db_event_processor_task = loop.create_task(_db_event_processor())
+    except Exception:
+        pass
+
+    # Register the thread-callback so the watcher notifies us
+    try:
+        register_post_mtime_change_callback(_db_watcher_thread_callback)
+    except Exception:
+        pass
+
+    # Start the database watcher thread owned by the database module; keep
+    # control in app.py by starting it here so only the application owns
+    # the watcher lifecycle.
+    try:
+        start_attendance_watcher()
+    except Exception:
+        pass
 
 if __name__ == '__main__':
     init_database()

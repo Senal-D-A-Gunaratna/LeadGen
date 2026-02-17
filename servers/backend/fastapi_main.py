@@ -153,21 +153,14 @@ async def api_attendance_has_data(month: Optional[str] = Query(None), start: Opt
 
 @fastapi_app.on_event('startup')
 async def _startup_watchers():
-    # Start background watcher for attendance DB changes
+    # Initialize the Flask app's DB-mtime handler on the FastAPI/ASGI
+    # event loop so `app.py` owns recalculation and broadcasting.
     try:
-        start_attendance_watcher()
-    except Exception:
-        pass
-    # Register callback so the ASGI/Flask app can broadcast updates when
-    # attendance recalculation completes (useful for clients to refresh)
-    try:
-        def _on_recalc():
-            try:
-                # Use existing Flask app helper to broadcast a data_changed event
-                flask_app.broadcast_data_change('attendance_db_changed', {})
-            except Exception:
-                pass
-        register_post_recalc_callback(_on_recalc)
+        import asyncio
+        try:
+            flask_app.setup_db_mtime_handler(asyncio.get_event_loop())
+        except Exception:
+            pass
     except Exception:
         pass
 

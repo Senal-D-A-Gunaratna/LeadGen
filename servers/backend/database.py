@@ -62,6 +62,12 @@ def get_db_connection(db_type: str = 'students'):
 # when the authoritative school_days table has been rebuilt.
 _post_recalc_callbacks = []
 
+# Callbacks invoked when the attendance DB file mtime changes.
+# The watcher in this module will notify these callbacks and
+# external modules (only `app.py` should register) should perform
+# the actual recalculation and publishing work.
+_post_mtime_change_callbacks = []
+
 # Track last recalculation state for the attendance DB watcher
 _last_recalc_mtime: float = 0.0
 _recalc_done_event: threading.Event = threading.Event()
@@ -76,6 +82,26 @@ def register_post_recalc_callback(cb):
     try:
         if cb not in _post_recalc_callbacks:
             _post_recalc_callbacks.append(cb)
+    except Exception:
+        pass
+
+
+def register_post_mtime_change_callback(cb):
+    """Register a callable to be invoked when the attendance DB file's
+    modification time changes. Callbacks are invoked with no arguments
+    and should run quickly or handle their own threading if necessary.
+    """
+    try:
+        if cb not in _post_mtime_change_callbacks:
+            _post_mtime_change_callbacks.append(cb)
+    except Exception:
+        pass
+
+
+def unregister_post_mtime_change_callback(cb):
+    try:
+        if cb in _post_mtime_change_callbacks:
+            _post_mtime_change_callbacks.remove(cb)
     except Exception:
         pass
 
@@ -725,8 +751,17 @@ def start_attendance_watcher(poll_interval: float = 1.0):
                 except Exception:
                     mtime = 0
                 if mtime != last_mtime:
+                    # Notify registered mtime-change callbacks instead
+                    # of performing recalculation here. The application
+                    # layer (`app.py`) is responsible for performing the
+                    # authoritative `recalculate_school_days()` and
+                    # publishing changes to clients.
                     try:
-                        recalculate_school_days()
+                        for cb in list(_post_mtime_change_callbacks):
+                            try:
+                                cb()
+                            except Exception:
+                                pass
                     except Exception:
                         pass
                     last_mtime = mtime
@@ -742,8 +777,15 @@ def start_attendance_watcher(poll_interval: float = 1.0):
     # changed since the process started. Do this in a background thread to
     # avoid blocking the caller.
     def _initial_recalc():
+        # On startup, notify mtime-change callbacks once so the
+        # application layer can perform an initial recalculation and
+        # publish initial state.
         try:
-            recalculate_school_days()
+            for cb in list(_post_mtime_change_callbacks):
+                try:
+                    cb()
+                except Exception:
+                    pass
         except Exception:
             pass
 
