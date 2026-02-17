@@ -18,6 +18,7 @@ from pathlib import Path
 from .database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days, start_attendance_watcher, register_post_recalc_callback
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus.flowables import Flowable
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
@@ -53,6 +54,9 @@ async def api_attendance_has_data(month: Optional[str] = Query(None), start: Opt
     """
     try:
         from datetime import date, timedelta
+        # allow None during parsing; will assert non-None later
+        start_date: Optional[date] = None
+        end_date: Optional[date] = None
         # derive date range
         if month:
             try:
@@ -91,16 +95,21 @@ async def api_attendance_has_data(month: Optional[str] = Query(None), start: Opt
                 # no records at all
                 return JSONResponse({'success': True, 'hasData': False})
 
+        # At this point both start_date and end_date should be non-None
+        assert start_date is not None and end_date is not None
+
         if start_date > end_date:
             start_date, end_date = end_date, start_date
 
         # Build count query; optionally join students for filters
-        params = [start_date.isoformat(), end_date.isoformat()]
+        from typing import List, Any
+        params: List[Any] = [start_date.isoformat(), end_date.isoformat()]
         join_students = False
         where_clauses = ['ar.date BETWEEN ? AND ?']
         if grade and grade != 'all':
             join_students = True
             where_clauses.append('s.grade = ?')
+            # sqlite3 accepts ints; allow mixed param types
             params.append(int(grade))
         if classFilter and classFilter != 'all':
             join_students = True
@@ -797,7 +806,8 @@ async def download_student_data_pdf():
     students = flask_app.get_all_students_with_history()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
-    elements = []
+    from typing import List
+    elements: List[Flowable] = []
     styles = getSampleStyleSheet()
     elements.append(Paragraph("All Student Data", styles['Title']))
     elements.append(Spacer(1, 12))
@@ -820,7 +830,8 @@ async def download_attendance_summary_pdf():
     students = flask_app.get_all_students_with_history()
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
-    elements = []
+    from typing import List
+    elements: List[Flowable] = []
     styles = getSampleStyleSheet()
     elements.append(Paragraph("Attendance Summary", styles['Title']))
     elements.append(Spacer(1, 12))
@@ -849,7 +860,8 @@ async def download_student_attendance_summary_pdf(request: Request):
     summary = flask_app.get_attendance_summary(student, students)
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
-    elements = []
+    from typing import List
+    elements: List[Flowable] = []
     styles = getSampleStyleSheet()
     elements.append(Paragraph(student['name'], styles['Title']))
     elements.append(Paragraph(f"ID: {student['id']} | Grade: {student['grade']} | Class: {student['className']}", styles['Normal']))

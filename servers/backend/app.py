@@ -533,7 +533,11 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
     back to legacy in-memory logic.
     """
     try:
-        sid = int(student.get('id'))
+        sid_val = student.get('id')
+        if isinstance(sid_val, (int, str)):
+            sid = int(sid_val)
+        else:
+            sid = 0
         db_summary = get_student_attendance_summary(sid)
         total = int(db_summary.get('total_school_days', 0))
         present = int(db_summary.get('present_days', 0))
@@ -812,7 +816,14 @@ def api_attendance_aggregate():
         def student_matches(s: dict) -> bool:
             if grade and grade != 'all':
                 try:
-                    if int(s.get('grade')) != int(grade):
+                    try:
+                        gval = s.get('grade')
+                        if isinstance(gval, (int, str)):
+                            if int(gval) != int(grade):
+                                return False
+                        else:
+                            return False
+                    except Exception:
                         return False
                 except Exception:
                     return False
