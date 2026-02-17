@@ -66,3 +66,8 @@ If the backend is on a different host/port, replace localhost:5000. To verify th
 
 ss -ltnp | grep ':5000'
 
+
+
+
+RUN uvicorn backend
+clear && python3 -m uvicorn servers.backend.fastapi_main:fastapi_app --host 0.0.0.0 --port 5000
