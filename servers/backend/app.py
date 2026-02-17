@@ -4,7 +4,7 @@ Handles all API endpoints and real-time updates via WebSocket.
 """
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-import socketio as socketio_module
+import socketio as socketio_module  # type: ignore[import]
 import sqlite3
 import json
 from datetime import datetime, date, timezone
