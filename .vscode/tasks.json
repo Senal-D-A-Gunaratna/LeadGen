@@ -2,6 +2,15 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"type": "shell",
+			"command": "npm run install-all && npm run dev",
+			"label": "Deploy",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
 			"type": "npm",
 			"script": "install-all",
 			"path": ".",
