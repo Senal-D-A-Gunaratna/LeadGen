@@ -30,7 +30,7 @@
 			"script": "dev",
 			"path": ".",
 			"problemMatcher": [],
-			"label": "Run both servers",
+			"label": "Run all",
 			"detail": "npm: Run both frontend and backend servers (dev)",
 			"presentation": {
 				"clear": true
