@@ -5,7 +5,7 @@ from flask import request, jsonify, send_file
 import os
 from flask_socketio import emit
 import asyncio
-from .database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days
+from .database import get_db_connection, DatabaseContext, create_db_file_backup
 from datetime import datetime, date
 import json
 import csv
@@ -64,6 +64,7 @@ def register_endpoints(app, socketio, helpers):
     get_attendance_summary = helpers['get_attendance_summary']
     broadcast_data_change = helpers['broadcast_data_change']
     broadcast_summary_update = helpers['broadcast_summary_update']
+    request_recalc = helpers.get('request_recalc')
     emit = helpers['emit']
     authenticated_sessions = helpers['authenticated_sessions']
     # Allow forcing insecure HTTP for development (set to '1' to bypass HTTPS checks)
@@ -168,10 +169,11 @@ def register_endpoints(app, socketio, helpers):
             await emit('restore_backup_response', {'success': False, 'message': err}, to=sid)
             return
 
-        # After replacing the attendance DB file, recalculate derived school_days
-        if data_type == 'attendance':
+        # After replacing the attendance DB file, request the central
+        # application to perform authoritative recalculation of school_days.
+        if data_type == 'attendance' and request_recalc:
             try:
-                await asyncio.to_thread(recalculate_school_days)
+                await asyncio.to_thread(request_recalc)
             except Exception as e:
                 await emit('restore_backup_response', {'success': False, 'message': 'Failed to recalculate school days', 'error': str(e)}, to=sid)
                 return
@@ -1104,7 +1106,12 @@ def register_endpoints(app, socketio, helpers):
         conn_attendance.close()
         # Recalculate derived school_days after clearing attendance records
         try:
-            recalculate_school_days()
+                if request_recalc:
+                    request_recalc()
+                else:
+                    # Fallback to direct recalculation if helper not available
+                    from .database import recalculate_school_days as _rr
+                    _rr()
         except Exception as e:
             return jsonify({'success': False, 'error': f'Failed to recalculate after delete: {str(e)}'}), 500
 
@@ -1128,7 +1135,11 @@ def register_endpoints(app, socketio, helpers):
         conn_attendance.close()
         # Recalculate derived school_days after removing all data
         try:
-            recalculate_school_days()
+                if request_recalc:
+                    request_recalc()
+                else:
+                    from .database import recalculate_school_days as _rr
+                    _rr()
         except Exception as e:
             return jsonify({'success': False, 'error': f'Failed to recalculate after delete all: {str(e)}'}), 500
 

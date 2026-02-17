@@ -2423,17 +2423,6 @@ async def handle_request_attendance_trend(sid, data):
 # Import additional endpoints
 from .api_endpoints import register_endpoints
 
-# Register all additional endpoints with helper functions
-register_endpoints(app, socketio, {
-    'get_all_students_with_history': get_all_students_with_history,
-    'get_student_by_id': get_student_by_id,
-    'get_attendance_summary': get_attendance_summary,
-    'broadcast_data_change': broadcast_data_change,
-    'broadcast_summary_update': broadcast_summary_update,
-    'emit': socketio.emit,
-    'authenticated_sessions': authenticated_sessions
-})
-
 
 # === DB MTIME -> application wiring ===
 # We register a lightweight thread callback (invoked by the watcher thread)
@@ -2527,6 +2516,43 @@ def setup_db_mtime_handler(loop: Optional[asyncio.AbstractEventLoop] = None):
         start_attendance_watcher()
     except Exception:
         pass
+
+
+def request_recalc():
+    """Synchronous request to perform authoritative recalculation and
+    publish updates to connected clients. This centralizes DB-derived
+    computation and broadcasting in `app.py` so other modules simply
+    request the work instead of doing it themselves.
+    """
+    try:
+        recalculate_school_days()
+    except Exception:
+        pass
+
+    # Notify clients that the attendance DB changed and publish summaries
+    try:
+        broadcast_data_change('attendance_db_changed', {})
+    except Exception:
+        pass
+
+    try:
+        # Use None to indicate full summaries
+        broadcast_summary_update(None)
+    except Exception:
+        pass
+
+
+    # Register all additional endpoints with helper functions
+    register_endpoints(app, socketio, {
+        'get_all_students_with_history': get_all_students_with_history,
+        'get_student_by_id': get_student_by_id,
+        'get_attendance_summary': get_attendance_summary,
+        'broadcast_data_change': broadcast_data_change,
+        'broadcast_summary_update': broadcast_summary_update,
+        'request_recalc': request_recalc,
+        'emit': socketio.emit,
+        'authenticated_sessions': authenticated_sessions
+    })
 
 if __name__ == '__main__':
     init_database()

@@ -15,7 +15,7 @@ import csv
 import io
 import shutil
 from pathlib import Path
-from .database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days, start_attendance_watcher, register_post_recalc_callback
+from .database import get_db_connection, DatabaseContext, create_db_file_backup
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.platypus.flowables import Flowable
@@ -690,10 +690,10 @@ async def restore_backup(request: Request):
     if not ok:
         return JSONResponse({'success': False, 'message': err}, status_code=500)
 
-    # After replacing the attendance DB file, recalculate derived school_days
+    # After replacing the attendance DB file, request authoritative recalculation
     if data_type == 'attendance':
         try:
-            await asyncio.to_thread(recalculate_school_days)
+            await asyncio.to_thread(flask_app.request_recalc)
         except Exception as e:
             return JSONResponse({'success': False, 'message': 'Failed to recalculate school days', 'error': str(e)}, status_code=500)
 
