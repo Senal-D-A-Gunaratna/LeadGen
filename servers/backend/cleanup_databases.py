@@ -5,7 +5,7 @@ WARNING: This script will remove tables that shouldn't exist in each database.
 """
 import sqlite3
 from pathlib import Path
-from database import STUDENTS_DB_PATH, ATTENDANCE_DB_PATH, LOGS_DB_PATH
+from .database import STUDENTS_DB_PATH, ATTENDANCE_DB_PATH, LOGS_DB_PATH
 
 def cleanup_database(db_path: Path, db_name: str, keep_tables: list, remove_tables: list):
     """Remove unwanted tables from a database."""

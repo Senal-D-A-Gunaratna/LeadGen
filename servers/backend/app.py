@@ -13,9 +13,9 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Optional
-from database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count
-from config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
-from utils import compute_attendance_status
+from .database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count
+from .config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
+from .utils import compute_attendance_status
 import csv
 import io
 import base64
@@ -358,7 +358,7 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
 
     # Build attendanceHistory aligned to authoritative school_days
     try:
-        from database import get_school_days
+        from .database import get_school_days
         school_days = get_school_days()
     except Exception:
         # Fallback: use dates from existing rows
@@ -463,7 +463,7 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
         student_id = student['id']
         
         # Build attendance history aligned to authoritative `school_days`
-        from database import get_school_days
+        from .database import get_school_days
         school_days = get_school_days()
         student_att_map = attendance_by_student.get(student_id, {})
         history = []
@@ -774,7 +774,7 @@ def api_attendance_aggregate():
 
         # Ensure attendance-derived school_days are up-to-date before using them
         try:
-            from database import ensure_recalculated
+            from .database import ensure_recalculated
             ensure_recalculated()
         except Exception:
             pass

@@ -5,7 +5,7 @@ Checks for corruption, misplaced tables, and data consistency.
 """
 import sqlite3
 from pathlib import Path
-from database import STUDENTS_DB_PATH, ATTENDANCE_DB_PATH, LOGS_DB_PATH
+from .database import STUDENTS_DB_PATH, ATTENDANCE_DB_PATH, LOGS_DB_PATH
 
 def check_database_integrity(db_path: Path, db_name: str):
     """Check database integrity and return issues."""

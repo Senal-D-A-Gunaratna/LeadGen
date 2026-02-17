@@ -5,7 +5,7 @@ from flask import request, jsonify, send_file
 import os
 from flask_socketio import emit
 import asyncio
-from database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days
+from .database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days
 from datetime import datetime, date
 import json
 import csv

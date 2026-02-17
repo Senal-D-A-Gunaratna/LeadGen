@@ -15,14 +15,14 @@ import csv
 import io
 import shutil
 from pathlib import Path
-from database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days, start_attendance_watcher, register_post_recalc_callback
+from .database import get_db_connection, DatabaseContext, create_db_file_backup, recalculate_school_days, start_attendance_watcher, register_post_recalc_callback
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
 # Import existing helpers from app.py
-import app as flask_app
+from . import app as flask_app
 
 fastapi_app = FastAPI(title="LeadGen Backend (FastAPI) - Student APIs")
 
@@ -881,7 +881,7 @@ async def append_action_log(data: dict):
     if not timestamp or not action:
         return JSONResponse({'success': False, 'error': 'Missing timestamp or action'}, status_code=400)
     try:
-        from database import DatabaseContext
+        from .database import DatabaseContext
         try:
             with DatabaseContext('logs') as conn:
                 cursor = conn.cursor()
@@ -908,7 +908,7 @@ async def append_auth_log(data: dict):
     if not timestamp or not message:
         return JSONResponse({'success': False, 'error': 'Missing timestamp or message'}, status_code=400)
     try:
-        from database import DatabaseContext
+        from .database import DatabaseContext
         with DatabaseContext('logs') as conn:
             cursor = conn.cursor()
             cursor.execute('INSERT INTO auth_logs (timestamp, message) VALUES (?, ?)', (timestamp, message))
@@ -922,7 +922,7 @@ async def append_auth_log(data: dict):
 async def clear_auth_logs(data: dict):
     role = (data or {}).get('role', 'unknown')
     try:
-        from database import get_db_connection
+        from .database import get_db_connection
         conn_logs = get_db_connection('logs')
         cursor_logs = conn_logs.cursor()
         cursor_logs.execute('DELETE FROM auth_logs')
