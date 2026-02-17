@@ -68,8 +68,13 @@ if not root_logger.handlers:
 # Prefer project-local certs stored in servers/backend/certificates (localhost.pem/localhost-key.pem).
 from pathlib import Path as _Path
 # Adapter to convert Flask (WSGI) app to ASGI for uvicorn
+from typing import Optional, Tuple
+
+# Adapter type for converting Flask (WSGI) app to ASGI; default to None.
+WsgiToAsgi: Optional[type] = None
 try:
-    from asgiref.wsgi import WsgiToAsgi
+    from asgiref.wsgi import WsgiToAsgi as _WsgiToAsgi
+    WsgiToAsgi = _WsgiToAsgi
 except Exception:
     WsgiToAsgi = None
 _repo_root = _Path(__file__).parent.parent
@@ -77,7 +82,7 @@ _cert_dir = _repo_root / 'backend' / 'certificates'
 _cert_file = _cert_dir / 'localhost.pem'
 _key_file = _cert_dir / 'localhost-key.pem'
 if _cert_file.exists() and _key_file.exists():
-    ssl_context = (str(_cert_file), str(_key_file))
+    ssl_context: Optional[Tuple[str, str]] = (str(_cert_file), str(_key_file))
 else:
     # Fall back to no SSL if certs are not available (dev only).
     ssl_context = None
@@ -172,7 +177,9 @@ def validate_password(role: str, password: str) -> bool:
     return stored_password is not None and stored_password == password
 
 # Store authenticated WebSocket sessions
-authenticated_sessions = {}
+from typing import Any, Dict
+
+authenticated_sessions: Dict[str, Any] = {}
 # Track all connected socket session IDs (unauthenticated + authenticated)
 connected_sids = set()
 # Optional scanner token for unauthenticated scanner devices
@@ -434,7 +441,7 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
     conn_attendance.close()
     
     # Group attendance by student_id -> date for quick lookup
-    attendance_by_student = {}
+    attendance_by_student: Dict[int, Dict[str, Any]] = {}
     for record in attendance_records:
         student_id = record['student_id']
         if student_id not in attendance_by_student:
@@ -2349,7 +2356,7 @@ async def handle_request_attendance_trend(sid, data):
 # File-related endpoints kept as REST for downloads/uploads
 
 # Import additional endpoints
-from api_endpoints import register_endpoints
+from .api_endpoints import register_endpoints
 
 # Register all additional endpoints with helper functions
 register_endpoints(app, socketio, {

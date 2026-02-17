@@ -417,7 +417,7 @@ async def download_backup(request: Request):
     authorizer_valid = False
     if header_role and header_pass:
         try:
-            from api_endpoints import validate_password
+            from .api_endpoints import validate_password
             authorizer_valid = validate_password(header_role, header_pass)
         except Exception:
             authorizer_valid = False
@@ -426,7 +426,7 @@ async def download_backup(request: Request):
         body_pass = data.get('authorizerPassword')
         if body_role and body_pass and not authorizer_valid:
             try:
-                from api_endpoints import validate_password
+                from .api_endpoints import validate_password
                 authorizer_valid = validate_password(body_role, body_pass)
             except Exception:
                 authorizer_valid = False
@@ -603,7 +603,7 @@ async def upload_student_data_csv(request: Request):
 
     # Validate authorizer
     try:
-        from api_endpoints import validate_password
+        from .api_endpoints import validate_password
         if not validate_password(authorizer_role, authorizer_password):
             return JSONResponse({'success': False, 'message': 'Unauthorized'}, status_code=401)
     except Exception:
@@ -646,7 +646,7 @@ async def restore_backup(request: Request):
     header_pass = request.headers.get('X-Authorizer-Password')
     authorizer_valid = False
     try:
-        from api_endpoints import validate_password
+        from .api_endpoints import validate_password
         if header_role and header_pass:
             authorizer_valid = validate_password(header_role, header_pass)
         if not authorizer_valid:

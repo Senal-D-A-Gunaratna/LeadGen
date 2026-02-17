@@ -62,6 +62,11 @@ def get_db_connection(db_type: str = 'students'):
 # when the authoritative school_days table has been rebuilt.
 _post_recalc_callbacks = []
 
+# Track last recalculation state for the attendance DB watcher
+_last_recalc_mtime: float = 0.0
+_recalc_done_event: threading.Event = threading.Event()
+_recalc_done_event.set()
+
 def register_post_recalc_callback(cb):
     """Register a callable to be invoked (safely) after each recalc.
 

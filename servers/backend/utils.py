@@ -23,10 +23,10 @@ def compute_attendance_status(dt_local: Union[datetime, None], ontime_cutoff: st
         parts = s.split(':')
         if len(parts) == 2:
             h, m = parts
-            sec = 0
+            sec_str = '0'
         else:
-            h, m, sec = parts
-        return time(int(h), int(m), int(sec))
+            h, m, sec_str = parts
+        return time(int(h), int(m), int(sec_str))
 
     on_t = parse_t(ontime_cutoff)
     late_t = parse_t(late_cutoff)
