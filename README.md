@@ -42,16 +42,21 @@ npm run deploy
 ---
 ### Starting servers separately
 
+Installing dependency's
+
+```bash
+npm run install-servers
+```
+
 Backend Server
 
 ```bash
-npm run install-backend
 npm run backend
 ```
+
 Frontend Server
 
 ```bash
-npm run install-frontend
 npm run frontend
 ```
 ---

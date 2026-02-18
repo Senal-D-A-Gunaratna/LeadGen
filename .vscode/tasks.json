@@ -15,16 +15,15 @@
 		,
 		{
 			"type": "npm",
-			"script": "install-all",
+			"script": "install-servers",
 			"path": ".",
 			"problemMatcher": [],
-			"label": "Install all dependencies",
+			"label": "Install all server dependencies",
 			"detail": "npm: Install dependencies for both frontend and backend servers",
 			"presentation": {
 				"clear": true
 			}
 		}
-		
 		,
 		{
 			"type": "npm",
@@ -33,6 +32,18 @@
 			"problemMatcher": [],
 			"label": "Run all",
 			"detail": "npm: Run both frontend and backend servers (dev)",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "install-all",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Install all server dependencies",
+			"detail": "npm: Install dependencies for both servers and dev tools",
 			"presentation": {
 				"clear": true
 			}
