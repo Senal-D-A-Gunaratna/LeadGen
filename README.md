@@ -85,6 +85,4 @@ npm run frontend
 ### Contributing and license
 - Contributions: fork the repository, create a feature branch, add tests where appropriate, and open a pull request
 - License: MIT. See the `LICENSE` file for details
----
-
 
