@@ -1,22 +1,5 @@
 # Flask Backend for LeadGen
 
-This is the Flask backend that replaces the Next.js server actions with a Python-based API and WebSocket support.
-
-## Setup
-
-1. Install Python dependencies:
-```bash
-cd servers/backend
-pip install -r requirements.txt
-```
-
-2. Run the backend:
-```bash
-python app.py
-```
-
-The backend will start on `http://localhost:5000` with WebSocket support enabled.
-
 ## Database
 
 The backend uses SQLite for data storage. The database file is created at `servers/backend/data/attendance.db` on first run.

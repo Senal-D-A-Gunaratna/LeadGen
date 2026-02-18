@@ -23,17 +23,14 @@ LeadGen is an attendance monitoring system intended for school environments. It 
 - Frontend runs on port 9002 and communicates with the backend API and Socket.IO server.
 - Backend serves REST endpoints and Socket.IO events on port 5000 and stores data in local SQLite files: `students.db`, `attendance.db`, `logs.db`.
 
-Quick start (development)
----
-**Run the flowing commands**
+## Quick start (development)
 
-1. Install NodeJs and Python
-   
-```bash
-add the python and NodeJs install commands here
-```
+Make sure you have
+- Node.js v18+
+- Python v3.8+
+- npm
 
-2. Install all server dependency's and Run both servers
+Install all server dependency's and run both servers using this command
    
 ```bash
 npm run deploy
@@ -65,7 +62,7 @@ npm run frontend
 - Frontend: http://localhost:9002 or http://host_ip:9002
 - Backend API and WebSockets: http://localhost:5000 or http://host_ip:5000
 - Replace <host> with your machine's IP/hostname when accessing from other devices on the network
-- To point the frontend to another backend, set `NEXT_PUBLIC_BACKEND_URL`.
+- To point the frontend to another backend, set `NEXT_PUBLIC_BACKEND_URL`
 
 ### Repository layout
 - `servers/backend/` — Flask application, API endpoints, utilities and helper scripts
@@ -78,7 +75,7 @@ npm run frontend
 - Use `bash fix-setup.sh` for common dependency fixes
 - Check `servers/backend/debug.log` for runtime errors and diagnostic information
 - For additional implementation details, consult the source under `servers/backend/` and `servers/frontend/` or review the documents in `docs/`
-- 
+
 ### Security and production guidance
 - LeadGen is intended for trusted networks. For production, deploy behind a TLS-terminating reverse proxy (for example, nginx), enforce strict CORS rules, rotate default credentials, and restrict access to the database files
 
