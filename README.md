@@ -28,11 +28,16 @@ Quick start (development)
 **Run the folwing comands**
 
 1. Install nodeJs and Python
-  ```bash
-add the depandancyes here
+```bash
+add the python and NodeJs install comands here
 ```
 
-2. Run both servers using the package.json script
+2. Install depandancys
+```bash
+npm install-all
+```
+
+3. Run both servers using the package.json script
 ```bash
 npm run dev
 ```
