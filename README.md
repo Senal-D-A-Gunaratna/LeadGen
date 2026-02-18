@@ -1,9 +1,9 @@
-# **LeadGen**
+# LeadGen
 
 Overview
 LeadGen is an attendance monitoring system intended for school environments. It combines a Next.js-based user interface with a Flask backend to provide real-time attendance capture, administrative controls for prefects and staff, and local data persistence via SQLite. The project is suitable for single-host or LAN deployments where simplicity and reliability are priorities.
 
-Core technologies
+### Core technologies
 - Frontend: Next.js (React) with TypeScript
 - Styling: Tailwind CSS; optional Radix UI components
 - State management: Zustand
@@ -11,7 +11,7 @@ Core technologies
 - Backend: Flask with Flask-SocketIO
 - Storage: SQLite databases stored in `servers/backend/data/`
 
-Primary capabilities
+### Primary capabilities
 - Real-time attendance marking with live dashboard synchronization
 - Student records management, search, and role assignments (e.g., prefect)
 - Integration points for RFID/fingerprint scanners for rapid check-ins
@@ -19,35 +19,43 @@ Primary capabilities
 - Role-based access control (Admin, Moderator, Developer)
 - Lightweight migration tools and data integrity checks
 
-Architecture (high level)
+### Architecture
 - Frontend runs on port 9002 and communicates with the backend API and Socket.IO server.
 - Backend serves REST endpoints and Socket.IO events on port 5000 and stores data in local SQLite files: `students.db`, `attendance.db`, `logs.db`.
 
 Quick start (development)
-1. Backend
+---
+**Run the folwing comands**
+
+1. Install nodeJs and Python
+   ```bash
+add the depandancyes here
+   ```
+
+2. Run both servers using the package.json script
+   ```bash
+   npm run dev
+   ```
+---
+### Starting servers separtly
+
+Backend Server
 ```bash
 cd servers/backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-./start_fastapi.sh  # or: python app.py
+cd .. && cd ..
+python3 -m servers.backend.app
 ```
-2. Frontend
+Frontend erver
 ```bash
-cd servers/frontend
 npm install
 npm run dev-frontend
 ```
-3. Defaults
-<!--
-Development servers
-- Frontend: served on localhost:9002
-- Backend: API and WebSockets: served on localhost:5000
+---
+### Defaults
 
-Notes:
-- Typo corrected: "Websokets" → "WebSockets"
-- Start/backend should be running before the frontend; adjust PORT env vars if needed.
--->
 - Frontend: http://localhost:9002 or http://host_ip:9002
 - Backend API and WebSockets: http://localhost:5000 or http://host_ip:5000
 - Replace <host> with your machine's IP/hostname when accessing from other devices on the network.
