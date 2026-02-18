@@ -41,18 +41,13 @@ npm run dev
 
 Backend Server
 ```bash
-cd servers/backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-cd .. && cd ..
-python3 -m servers.backend.app
+npm install backend
+npm run backend
 ```
 Frontend Server
 ```bash
-npm install
-npm run dev-frontend
+npm install frontend
+npm run frontend
 ```
 ---
 ### Defaults
