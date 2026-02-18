@@ -541,22 +541,22 @@ export function AttendanceHistoryTab() {
         resolve();
       }, 250);
     });
+  };
 
-    const fetchDayAggregate = async (date: Date | null) => {
-      if (!date) {
-        setDayAggregate(null);
-        return;
-      }
-      try {
-        const iso = date.toISOString().slice(0, 10);
-        // Use start/end to request a single day's aggregate
-        const resp = await getAttendanceAggregate({ start: iso, end: iso, grade: gradeFilter || 'all', classFilter: classFilter || undefined, roleFilter: roleFilter || undefined });
-        setDayAggregate(resp ?? null);
-      } catch (e) {
-        console.warn('day aggregate fetch failed', e);
-        setDayAggregate(null);
-      }
-    };
+  const fetchDayAggregate = async (date: Date | null) => {
+    if (!date) {
+      setDayAggregate(null);
+      return;
+    }
+    try {
+      const iso = date.toISOString().slice(0, 10);
+      // Use start/end to request a single day's aggregate
+      const resp = await getAttendanceAggregate({ start: iso, end: iso, grade: gradeFilter || 'all', classFilter: classFilter || undefined, roleFilter: roleFilter || undefined });
+      setDayAggregate(resp ?? null);
+    } catch (e) {
+      console.warn('day aggregate fetch failed', e);
+      setDayAggregate(null);
+    }
   };
 
   // Run fetch whenever displayedMonth or gradeFilter changes
