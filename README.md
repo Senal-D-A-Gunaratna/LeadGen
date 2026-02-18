@@ -64,7 +64,7 @@ npm run frontend
 
 - Frontend: http://localhost:9002 or http://host_ip:9002
 - Backend API and WebSockets: http://localhost:5000 or http://host_ip:5000
-- Replace <host> with your machine's IP/hostname when accessing from other devices on the network.
+- Replace <host> with your machine's IP/hostname when accessing from other devices on the network
 - To point the frontend to another backend, set `NEXT_PUBLIC_BACKEND_URL`.
 
 ### Repository layout
@@ -74,16 +74,17 @@ npm run frontend
 - `docs/` — design notes and operational guidance
 
 ### Operational notes
-- Back up `servers/backend/data/*.db` regularly before migrations or destructive operations.
-- Use `bash fix-setup.sh` for common dependency fixes.
-- Check `servers/backend/debug.log` for runtime errors and diagnostic information.
-
+- Back up `servers/backend/data/*.db` regularly before migrations or destructive operations
+- Use `bash fix-setup.sh` for common dependency fixes
+- Check `servers/backend/debug.log` for runtime errors and diagnostic information
+- For additional implementation details, consult the source under `servers/backend/` and `servers/frontend/` or review the documents in `docs/`
+- 
 ### Security and production guidance
-- LeadGen is intended for trusted networks. For production, deploy behind a TLS-terminating reverse proxy (for example, nginx), enforce strict CORS rules, rotate default credentials, and restrict access to the database files.
+- LeadGen is intended for trusted networks. For production, deploy behind a TLS-terminating reverse proxy (for example, nginx), enforce strict CORS rules, rotate default credentials, and restrict access to the database files
 
 ### Contributing and license
-- Contributions: fork the repository, create a feature branch, add tests where appropriate, and open a pull request.
-- License: MIT. See the `LICENSE` file for details.
+- Contributions: fork the repository, create a feature branch, add tests where appropriate, and open a pull request
+- License: MIT. See the `LICENSE` file for details
 ---
 
-For additional implementation details, consult the source under `servers/backend/` and `servers/frontend/` or review the documents in `docs/`.
+
