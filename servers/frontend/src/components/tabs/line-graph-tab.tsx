@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from "react";
 import { useStudentStore } from "@/hooks/use-student-store";
+import { getAttendanceAggregate } from "@/lib/api-client";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { format } from "date-fns";
@@ -38,13 +39,27 @@ export function LineGraphTab() {
     // noop: connection performed at app root
   }, []);
 
+  const selectedDate = useStudentStore((s: any) => s.selectedDate);
+
   useEffect(() => {
     let mounted = true;
     const fetchData = async () => {
       setLoading(true);
       try {
-        const resp = await wsClient.getAttendanceAggregate(range, grade, status);
-        if (!mounted) return;
+        let resp: any;
+        // If viewing a single day and a date is selected, prefer the HTTP aggregate with start/end
+        if (range === 'day' && selectedDate) {
+          const iso = selectedDate.toISOString().slice(0,10);
+          resp = await getAttendanceAggregate({ start: iso, end: iso, grade: grade === 'all' ? undefined : grade });
+          // API returns result directly with points or data
+          const points = resp?.points ?? resp?.data ?? [];
+          if (!mounted) return;
+          // reuse points handling below by assigning to resp
+          resp = { points };
+        } else {
+          resp = await wsClient.getAttendanceAggregate(range, grade, status);
+          if (!mounted) return;
+        }
         const points = resp.points || [];
         // Helper to format labels based on selected range
         const formatLabel = (lab: string) => {

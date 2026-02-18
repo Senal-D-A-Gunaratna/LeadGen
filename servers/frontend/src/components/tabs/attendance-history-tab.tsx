@@ -217,6 +217,7 @@ export function AttendanceHistoryTab() {
   const [fetchError, setFetchError] = useState<boolean>(false);
   const [monthPoints, setMonthPoints] = useState<any[] | null>(null);
   const [monthAggregate, setMonthAggregate] = useState<any | null>(null);
+  const [dayAggregate, setDayAggregate] = useState<any | null>(null);
 
   const onPieClick = useCallback((data: any, index: number, event?: any) => {
     event?.stopPropagation();
@@ -252,6 +253,21 @@ export function AttendanceHistoryTab() {
 
   type AttendanceDatum = { name: string; value: number; color: string; percent: number };
   const attendanceData = useMemo<AttendanceDatum[]>(() => {
+    // Prefer server-provided day aggregate when a specific date is selected
+    if (dayAggregate && dayAggregate.pie) {
+      const p = dayAggregate.pie;
+      const totalStudents = p.studentCount || 0;
+      const presPerc = p.presencePercentage ? (p.presencePercentage / 100) : 0;
+      const onTimeVal = Math.round(totalStudents * presPerc * 0.8);
+      const lateVal = Math.round(totalStudents * presPerc * 0.2);
+      const absentVal = totalStudents - (onTimeVal + lateVal);
+      return [
+        { name: "On Time", value: onTimeVal, color: COLORS["on time"], percent: totalStudents > 0 ? (onTimeVal / totalStudents) : 0 },
+        { name: "Late", value: lateVal, color: COLORS.late, percent: totalStudents > 0 ? (lateVal / totalStudents) : 0 },
+        { name: "Absent", value: absentVal, color: COLORS.absent, percent: totalStudents > 0 ? (absentVal / totalStudents) : 0 },
+      ];
+    }
+
     // Prefer server-provided aggregate for the currently selected month if available
     if (monthAggregate && monthAggregate.pie) {
       const p = monthAggregate.pie;
@@ -291,6 +307,27 @@ export function AttendanceHistoryTab() {
 
   type GradeBarDatum = { grade: string; onTime: number; late: number; absent: number; onTimeCount: number; lateCount: number; absentCount: number };
   const gradeWiseStatusData = useMemo<GradeBarDatum[]>(() => {
+    // If server provided gradeBars for the selected day, prefer them
+    if (dayAggregate && Array.isArray(dayAggregate.gradeBars) && dayAggregate.gradeBars.length > 0) {
+      return dayAggregate.gradeBars.map((g: any) => ({
+        grade: `${g.grade}`.startsWith('Grade') ? g.grade : g.grade,
+        onTime: g.onTime || 0,
+        late: g.late || 0,
+        absent: g.absent || 0,
+        onTimeCount: g.onTimeCount || 0,
+        lateCount: g.lateCount || 0,
+        absentCount: g.absentCount || 0,
+      })).map((gb:any) => ({
+        grade: `Grade ${gb.grade}`,
+        onTime: gb.onTime,
+        late: gb.late,
+        absent: gb.absent,
+        onTimeCount: gb.onTimeCount,
+        lateCount: gb.lateCount,
+        absentCount: gb.absentCount,
+      }));
+    }
+
     // If server provided gradeBars for the month, prefer them
     if (monthAggregate && Array.isArray(monthAggregate.gradeBars) && monthAggregate.gradeBars.length > 0) {
       return monthAggregate.gradeBars.map((g: any) => ({
@@ -504,6 +541,22 @@ export function AttendanceHistoryTab() {
         resolve();
       }, 250);
     });
+
+    const fetchDayAggregate = async (date: Date | null) => {
+      if (!date) {
+        setDayAggregate(null);
+        return;
+      }
+      try {
+        const iso = date.toISOString().slice(0, 10);
+        // Use start/end to request a single day's aggregate
+        const resp = await getAttendanceAggregate({ start: iso, end: iso, grade: gradeFilter || 'all', classFilter: classFilter || undefined, roleFilter: roleFilter || undefined });
+        setDayAggregate(resp ?? null);
+      } catch (e) {
+        console.warn('day aggregate fetch failed', e);
+        setDayAggregate(null);
+      }
+    };
   };
 
   // Run fetch whenever displayedMonth or gradeFilter changes
@@ -540,6 +593,11 @@ export function AttendanceHistoryTab() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMonth, gradeFilter]);
+
+  // Fetch day-level aggregate when selectedDate (the calendar pick) changes
+  useEffect(() => {
+    fetchDayAggregate(selectedDate || null);
+  }, [selectedDate, gradeFilter, classFilter, roleFilter]);
 
   const filteredStudentsForTable = useMemo(() => {
     if (!selectedStatus) return students;
