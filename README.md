@@ -45,13 +45,13 @@ npm run deploy
 Backend Server
 
 ```bash
-npm run install backend
+npm run install-backend
 npm run backend
 ```
 Frontend Server
 
 ```bash
-npm run install frontend
+npm run install-frontend
 npm run frontend
 ```
 ---
