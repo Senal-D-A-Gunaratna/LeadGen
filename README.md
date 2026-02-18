@@ -45,10 +45,11 @@ cd servers/backend
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cd .. && cd ..
 python3 -m servers.backend.app
 ```
-Frontend erver
+Frontend Server
 ```bash
 npm install
 npm run dev-frontend
@@ -61,22 +62,23 @@ npm run dev-frontend
 - Replace <host> with your machine's IP/hostname when accessing from other devices on the network.
 - To point the frontend to another backend, set `NEXT_PUBLIC_BACKEND_URL`.
 
-Repository layout
+### Repository layout
 - `servers/backend/` — Flask application, API endpoints, utilities and helper scripts
 - `servers/backend/data/` — SQLite files (keep backups before changes)
 - `servers/frontend/` — Next.js application, components, and client code
 - `docs/` — design notes and operational guidance
 
-Operational notes
+### Operational notes
 - Back up `servers/backend/data/*.db` regularly before migrations or destructive operations.
 - Use `bash fix-setup.sh` for common dependency fixes.
 - Check `servers/backend/debug.log` for runtime errors and diagnostic information.
 
-Security and production guidance
+### Security and production guidance
 - LeadGen is intended for trusted networks. For production, deploy behind a TLS-terminating reverse proxy (for example, nginx), enforce strict CORS rules, rotate default credentials, and restrict access to the database files.
 
-Contributing and license
+### Contributing and license
 - Contributions: fork the repository, create a feature branch, add tests where appropriate, and open a pull request.
 - License: MIT. See the `LICENSE` file for details.
+---
 
 For additional implementation details, consult the source under `servers/backend/` and `servers/frontend/` or review the documents in `docs/`.

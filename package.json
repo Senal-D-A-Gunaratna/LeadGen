@@ -16,7 +16,8 @@
     "install-backend-dev": "cd servers/backend && pip3 install -r requirements-dev.txt",
     "install-all": "npm run install-frontend && npm run install-backend && npm run install-backend-dev",
     "uninstall-frontend": "cd servers/frontend && rm -rf node_modules package-lock.json",
-    "uninstall-backend": "cd servers/backend && pip3 uninstall -r requirements.txt -y && pip3 uninstall -r requirements-dev.txt -y",
+    "uninstall-backend": "cd servers/backend && pip3 uninstall -r requirements.txt -y",
+    "uninstall-backend-dev":  "pip3 uninstall -r requirements-dev.txt -y",
     "uninstall-all": "npm run uninstall-frontend && npm run uninstall-backend && npm run uninstall-backend-dev"
   }
 }
