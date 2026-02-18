@@ -4,7 +4,7 @@
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { Pie, PieChart, Cell, ResponsiveContainer, Sector, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
-import { motion } from "framer-motion";
+// framer-motion removed for chart wrappers to rely on Recharts animations only
 import { Search, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, FilterX, LineChart } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -300,8 +300,7 @@ export function AttendanceHistoryTab() {
     ];
   }, [students, monthAggregate]);
 
-  // Tween attendance data for smooth transitions when filters applied
-  const tweenedAttendance = useTweenedArray(attendanceData, 'name', ['value', 'percent'], 450);
+  // Use API/derived `attendanceData` directly so Recharts handles animation
 
   const selectedStatus = activeIndex !== -1 ? attendanceData[activeIndex]?.name.toLowerCase() as AttendanceStatus : null;
 
@@ -374,8 +373,7 @@ export function AttendanceHistoryTab() {
     return barData;
   }, [students, availableGrades, selectedStatus, monthAggregate]);
 
-  // Tween grade-wise data (onTime/late/absent) for smooth transitions
-  const tweenedGradeWiseStatusData = useTweenedArray(gradeWiseStatusData, 'grade', ['onTime', 'late', 'absent'], 450);
+  // Use API/derived `gradeWiseStatusData` directly so Recharts handles animation
 
   // Compute DayPicker modifiers from server-provided month points.
 
@@ -678,14 +676,14 @@ export function AttendanceHistoryTab() {
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[350px] w-full" onClick={onContainerClick}>
-            <motion.div layout transition={{ duration: 0.35, ease: "easeOut" }} className="h-full">
+            <div className="h-full">
               <ResponsiveContainer>
                 <PieChart margin={{ top: 30, right: 30, bottom: 30, left: 30 }}>
                   <Pie
                     key={`pie-${animateKey}`}
                     activeIndex={activeIndex}
                     activeShape={renderActiveShape}
-                    data={tweenedAttendance}
+                    data={attendanceData}
                     cx="50%"
                     cy="60%"
                     innerRadius={100}
@@ -706,7 +704,7 @@ export function AttendanceHistoryTab() {
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
-            </motion.div>
+            </div>
           </CardContent>
         </Card>
         
@@ -717,9 +715,9 @@ export function AttendanceHistoryTab() {
             </CardHeader>
             <CardContent>
               <div className="h-[350px] w-full">
-                <motion.div layout transition={{ duration: 0.35, ease: "easeOut" }} className="h-full">
+                <div className="h-full">
                   <ResponsiveContainer>
-                    <BarChart data={tweenedGradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
+                    <BarChart data={gradeWiseStatusData} layout="vertical" margin={{ top: 20, right: 30, left: 20, bottom: 5 }} onClick={handleBarClick} className="cursor-pointer">
                       <XAxis type="number" domain={[0, 1]} tickFormatter={percentageFormatter} stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                       <YAxis type="category" dataKey="grade" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
                       <Tooltip
@@ -734,7 +732,7 @@ export function AttendanceHistoryTab() {
                       <Bar dataKey="absent" name="Absent" stackId="a" fill={COLORS["absent"]} isAnimationActive={true} animationDuration={500} animationBegin={100} animationEasing="ease-out" />
                     </BarChart>
                   </ResponsiveContainer>
-                </motion.div>
+                </div>
               </div>
             </CardContent>
           </Card>
