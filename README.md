@@ -30,7 +30,7 @@ Make sure you have
 - Python v3.8+
 - npm
 
-Install all server dependency's and run both servers using this command
+Then install all server dependency's and run both servers using this command
    
 ```bash
 npm run deploy
