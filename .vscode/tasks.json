@@ -3,8 +3,11 @@
 	"tasks": [
 		{
 			"type": "npm",
-			"command": "npm run deploy",
+			"script": "npm run deploy",
+			"path": ".",
+			"problemMatcher": [],
 			"label": "Deploy",
+			"detail": "npm: Install all server dependencies and run them",
 			"presentation": {
 				"clear": true
 			}
