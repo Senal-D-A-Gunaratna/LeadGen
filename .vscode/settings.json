@@ -4,5 +4,9 @@
   "python.analysis.typeCheckingMode": "basic",
   "[python]": {
     "editor.defaultFormatter": "ms-python.python"
-  }
+  },
+  "cSpell.words": [
+    "leadgen",
+    "mypy"
+  ]
 }

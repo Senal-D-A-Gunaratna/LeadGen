@@ -1,8 +1,9 @@
 {
-  "name": "leadgen-frontend",
+  "name": "leadgen",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "deploy": "npm run install-frontend && npm run install-backend && npm run all",
     "all": "npm run frontend & npm run backend",
     "frontend": "cd servers/frontend && npm run dev",
     "backend": "python3 -m servers.backend.app",

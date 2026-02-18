@@ -27,31 +27,31 @@ Quick start (development)
 ---
 **Run the flowing commands**
 
-1. Install nodeJs and Python
+1. Install NodeJs and Python
+   
 ```bash
 add the python and NodeJs install commands here
 ```
 
-2. Install dependency's
+2. Install dependency's and Run both servers using the package.json script
+   
 ```bash
-npm install-all
+npm run deploy
 ```
 
-3. Run both servers using the package.json script
-```bash
-npm run all
-```
 ---
 ### Starting servers separately
 
 Backend Server
+
 ```bash
-npm install backend
+npm run install backend
 npm run backend
 ```
 Frontend Server
+
 ```bash
-npm install frontend
+npm run install frontend
 npm run frontend
 ```
 ---
