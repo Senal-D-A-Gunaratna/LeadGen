@@ -7,6 +7,10 @@
   },
   "cSpell.words": [
     "leadgen",
-    "mypy"
+    "mypy",
+    "pycache",
+    "pytest",
+    "venv",
+    "vercel"
   ]
 }
