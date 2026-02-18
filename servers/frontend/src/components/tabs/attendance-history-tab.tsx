@@ -253,7 +253,7 @@ export function AttendanceHistoryTab() {
 
   type AttendanceDatum = { name: string; value: number; color: string; percent: number };
   const attendanceData = useMemo<AttendanceDatum[]>(() => {
-    // Prefer server-provided day aggregate when a specific date is selected
+    // Strict: Use only server-provided aggregates for pie data.
     if (dayAggregate && dayAggregate.pie) {
       const p = dayAggregate.pie;
       const totalStudents = p.studentCount || 0;
@@ -268,15 +268,11 @@ export function AttendanceHistoryTab() {
       ];
     }
 
-    // Prefer server-provided aggregate for the currently selected month if available
     if (monthAggregate && monthAggregate.pie) {
       const p = monthAggregate.pie;
       const totalStudents = p.studentCount || 0;
-      const presentDays = p.presentDays || 0;
-      const absentDays = p.absentDays || 0;
-      // Convert to simple counts per-student (approx) for pie slices: use presencePercentage
       const presPerc = p.presencePercentage ? (p.presencePercentage / 100) : 0;
-      const onTimeVal = Math.round(totalStudents * presPerc * 0.8); // heuristic split if exact counts not provided
+      const onTimeVal = Math.round(totalStudents * presPerc * 0.8);
       const lateVal = Math.round(totalStudents * presPerc * 0.2);
       const absentVal = totalStudents - (onTimeVal + lateVal);
       return [
@@ -286,19 +282,9 @@ export function AttendanceHistoryTab() {
       ];
     }
 
-    const totalStudents = students.length;
-    if (totalStudents === 0) return [];
-
-    const onTime = students.filter((s: Student) => s.status === "on time").length;
-    const late = students.filter((s: Student) => s.status === "late").length;
-    const absent = students.filter((s: Student) => s.status === "absent").length;
-
-    return [
-      { name: "On Time", value: onTime, color: COLORS["on time"], percent: totalStudents > 0 ? (onTime / totalStudents) : 0 },
-      { name: "Late", value: late, color: COLORS.late, percent: totalStudents > 0 ? (late / totalStudents) : 0 },
-      { name: "Absent", value: absent, color: COLORS.absent, percent: totalStudents > 0 ? (absent / totalStudents) : 0 },
-    ];
-  }, [students, monthAggregate]);
+    // No server-provided data available — return empty to strictly rely on API
+    return [];
+  }, [dayAggregate, monthAggregate]);
 
   // Use API/derived `attendanceData` directly so Recharts handles animation
 
@@ -306,7 +292,8 @@ export function AttendanceHistoryTab() {
 
   type GradeBarDatum = { grade: string; onTime: number; late: number; absent: number; onTimeCount: number; lateCount: number; absentCount: number };
   const gradeWiseStatusData = useMemo<GradeBarDatum[]>(() => {
-    // If server provided gradeBars for the selected day, prefer them
+    // Strict: prefer server-provided gradeBars for the currently selected day
+    // (dayAggregate is fetched with grade/class/role filters).
     if (dayAggregate && Array.isArray(dayAggregate.gradeBars) && dayAggregate.gradeBars.length > 0) {
       return dayAggregate.gradeBars.map((g: any) => ({
         grade: `${g.grade}`.startsWith('Grade') ? g.grade : g.grade,
@@ -327,8 +314,9 @@ export function AttendanceHistoryTab() {
       }));
     }
 
-    // If server provided gradeBars for the month, prefer them
-    if (monthAggregate && Array.isArray(monthAggregate.gradeBars) && monthAggregate.gradeBars.length > 0) {
+    // Use monthAggregate gradeBars only when class/role filters are not applied
+    // because monthAggregate may not be scoped by those filters.
+    if ((classFilter === 'all' || !classFilter) && (roleFilter === 'all' || !roleFilter) && monthAggregate && Array.isArray(monthAggregate.gradeBars) && monthAggregate.gradeBars.length > 0) {
       return monthAggregate.gradeBars.map((g: any) => ({
         grade: `${g.grade}`.startsWith('Grade') ? g.grade : g.grade,
         onTime: g.onTime || 0,
@@ -348,30 +336,9 @@ export function AttendanceHistoryTab() {
       }));
     }
 
-    const barData = (availableGrades || []).map((gradeStr: string) => {
-      const grade = parseInt(gradeStr, 10);
-      const gradeStudents = students.filter((s: Student) => s.grade === grade && (!selectedStatus || s.status === selectedStatus));
-      const totalInGrade = gradeStudents.length;
-
-      if (totalInGrade === 0) return null;
-
-      const onTimeCount = gradeStudents.filter((s: Student) => s.status === 'on time').length;
-      const lateCount = gradeStudents.filter((s: Student) => s.status === 'late').length;
-      const absentCount = gradeStudents.filter((s: Student) => s.status === 'absent').length;
-
-      return {
-        grade: `Grade ${grade}`,
-        onTime: totalInGrade > 0 ? (onTimeCount / totalInGrade) : 0,
-        late: totalInGrade > 0 ? (lateCount / totalInGrade) : 0,
-        absent: totalInGrade > 0 ? (absentCount / totalInGrade) : 0,
-        onTimeCount,
-        lateCount,
-        absentCount,
-      };
-    }).filter(Boolean) as GradeBarDatum[];
-
-    return barData;
-  }, [students, availableGrades, selectedStatus, monthAggregate]);
+    // No server-provided gradeBars for current filters — return empty (strict API-only)
+    return [];
+  }, [dayAggregate, monthAggregate, classFilter, roleFilter]);
 
   // Use API/derived `gradeWiseStatusData` directly so Recharts handles animation
 
