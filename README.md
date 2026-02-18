@@ -39,7 +39,7 @@ npm install-all
 
 3. Run both servers using the package.json script
 ```bash
-npm run dev
+npm run all
 ```
 ---
 ### Starting servers separately

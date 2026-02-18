@@ -3,7 +3,7 @@
 	"tasks": [
 		{
 			"type": "shell",
-			"command": "npm run install-all && npm run dev",
+			"command": "npm run install-all && npm run all",
 			"label": "Deploy",
 			"presentation": {
 				"clear": true
@@ -25,7 +25,7 @@
 		,
 		{
 			"type": "npm",
-			"script": "dev",
+			"script": "all",
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Run all",
