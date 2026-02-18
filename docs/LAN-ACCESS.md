@@ -1,95 +1,66 @@
 # LAN Access Configuration
 
-The application is now configured to work via LAN (Local Area Network) access.
+This page explains how to access the running LeadGen services from other devices on your local network. For instructions on starting the servers, see `docs/QUICKSTART.md`.
 
-## How It Works
+## How it works
 
-1. **Servers bind to all interfaces**: Both Next.js and Flask servers are configured to listen on `0.0.0.0`, which means they accept connections from any network interface (localhost, LAN IP, etc.)
+- Both frontend and backend bind to all interfaces (0.0.0.0) in development, so the services are reachable via your machine's LAN IP.
+- The frontend will usually use the hostname or IP you used to open it in the browser to contact the backend, so cross-device access works out of the box.
 
-2. **Automatic hostname detection**: The frontend automatically detects the hostname from the browser's URL. This means:
-   - If you access via `http://localhost:9002` → Backend connects to `http://localhost:5000`
-   - If you access via `http://192.168.1.100:9002` → Backend connects to `http://192.168.1.100:5000`
-   - Works automatically for any IP address!
+## Finding your LAN IP
 
-## Finding Your LAN IP Address
-
-### Linux:
+### Linux
 ```bash
 ip addr show | grep "inet " | grep -v 127.0.0.1
-# Or
+# or
 hostname -I
 ```
 
-### Windows:
+### Windows
 ```bash
 ipconfig
-# Look for IPv4 Address under your network adapter
 ```
 
-### macOS:
+### macOS
 ```bash
 ifconfig | grep "inet " | grep -v 127.0.0.1
 ```
 
-## Accessing from Other Devices
+## Accessing from other devices
 
-1. **Start the servers** (from project root):
-   ```bash
-   npm run dev
-   ```
+1. Start the services using the steps in `docs/QUICKSTART.md`.
+2. From another device on the same network, open a browser and visit:
 
-2. **Find your computer's LAN IP** (e.g., `192.168.1.100`)
+   http://<YOUR_MACHINE_IP>:9002
 
-3. **Access from any device on the same network**:
-   - Open browser on phone/tablet/other computer
-   - Go to: `http://YOUR_IP:9002`
-   - Example: `http://192.168.1.100:9002`
+   The frontend should automatically connect to the backend at the corresponding IP and port (5000).
 
-4. **The frontend will automatically connect to the backend** at `http://YOUR_IP:5000`
+## Firewall
 
-## Firewall Configuration
+Allow the following ports if your firewall blocks local connections:
 
-Make sure your firewall allows connections on ports:
-- **9002** (Next.js frontend)
-- **5000** (Flask backend)
+- 9002/tcp — frontend
+- 5000/tcp — backend
 
-### Linux (firewalld):
-```bash
-sudo firewall-cmd --permanent --add-port=9002/tcp
-sudo firewall-cmd --permanent --add-port=5000/tcp
-sudo firewall-cmd --reload
-```
-
-### Linux (ufw):
+Examples (Linux ufw):
 ```bash
 sudo ufw allow 9002/tcp
 sudo ufw allow 5000/tcp
 ```
 
-### Windows:
-- Go to Windows Defender Firewall
-- Add inbound rules for ports 9002 and 5000
+## Optional: set a fixed backend URL
 
-## Manual Configuration (Optional)
+If you need to force a backend address, create/update `servers/frontend/.env.local` with:
 
-
-If you want to manually set the backend URL, create/update `.env.local` in the `servers/frontend/` directory:
-
-```bash
-NEXT_PUBLIC_BACKEND_URL=http://192.168.1.100:5000
+```text
+NEXT_PUBLIC_BACKEND_URL=http://<YOUR_MACHINE_IP>:5000
 ```
 
-But this is **not necessary** - the automatic detection should work for most cases!
+This is usually unnecessary because the frontend detects the host automatically.
 
 ## Troubleshooting
 
-**Can't access from other devices:**
-- Check firewall settings
-- Ensure both devices are on the same network
-- Verify the IP address is correct
-- Check that servers are running and bound to `0.0.0.0`
+- Ensure both devices are on the same network.
+- Verify servers are running (see `docs/QUICKSTART.md`).
+- Check firewall rules and port availability.
 
-**Backend connection fails:**
-- The frontend automatically uses the same hostname you accessed it from
-- If you access via IP, it will connect to backend via IP
-- If you access via localhost, it will connect via localhost

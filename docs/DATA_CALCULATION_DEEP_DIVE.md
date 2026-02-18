@@ -22,269 +22,139 @@ Use this document to:
 Example UI snippet (replace):
 ```
 Overall Presence: 66.7%
-├─ On Time: 2 days (33.3%)
-├─ Late: 2 days (33.3%)
-└─ Absent: 2 days (33.3%)
-```
+# Student Profile Dialog - Data Calculation Deep Dive
 
-### State Management
-`(placeholder)`: describe how the component obtains the summary (store lookup, props, API call). Include the store hook file and the cache shape (e.g., `Map<studentId, summary>`).
+## Overview
 
-Code excerpt to include (replace with real snippet):
-```tsx
-// from student-profile-dialog.tsx
-const [attendanceStats, setAttendanceStats] = useState(null);
-useEffect(() => {
-  // store lookup -> fallback fetch -> set state
-}, [studentId]);
-```
+This document describes how student attendance summaries are produced and surfaced to the UI. It preserves decision rules, points to the canonical files to change, and leaves a small set of placeholders for exact code excerpts that should be filled in during a follow-up pass.
 
----
+Where practical, the file references below point to the current workspace layout under `servers/frontend` and `servers/backend`.
 
-## 2. API Client Layer (Frontend)
+## 1. Data Display (Frontend UI)
 
 ### Location
-`(placeholder)`: API client file used by the UI (example: `servers/frontend/src/lib/api-client.ts`).
+Likely location: `servers/frontend/src/components/dashboard/student-profile-dialog.tsx` (component that renders the profile and attendance summary).
 
-### Purpose
-Describe whether the client uses WebSocket or HTTP, timeouts, error shapes, and any retry logic. Provide exact function signatures.
+### What's displayed
+- Overall presence: percentage of canonical school days the student was present (on time + late).
+- On time: count and percentage.
+- Late: count and percentage.
+- Absent: count and percentage.
 
-Example (replace with current):
-```ts
-export async function getStudentSummary(studentId: number) {
-  return transportClient.getStudentSummary(studentId);
-}
-```
+### State flow
+- The dialog reads from `useStudentStore` (Zustand). On mount it looks up a cached summary and falls back to `GET /api/students/:id` if missing.
 
----
+## 2. API client layer (frontend)
 
-## 3. Transport Layer (WebSocket / REST)
+Location: `servers/frontend/src/lib/api-client.ts`.
 
-### Protocol (placeholder)
-Document the actual transport and event/route names. If WebSocket, list emitted event names and response event names; if REST, list routes and HTTP verbs.
+Primary behavior: HTTP for snapshots (`GET /api/students`, `GET /api/students/:id`), small WebSocket RPCs for peripheral operations. Errors are surfaced as standard HTTP error shapes; retry logic is minimal and left to callers.
 
-Example (fill in):
-- Emit: `get_student_summary` → `{ studentId }`
-- Response: `get_student_summary_response` → `{ success, summary, message }`
-- Timeout: 15s (confirm)
+## 3. Transport layer
 
----
+- HTTP: snapshots and single-record fetches (`GET /api/students`, `GET /api/students/:id`).
+- WebSocket: lightweight notifications initialized in `servers/frontend/src/app/page.tsx`. Important events: `data_changed`, `authenticate`, `scan_student`.
 
-## 4. Backend Endpoint / Handler
+## 4. Backend handler
 
-### Location
-`(placeholder)`: backend file handling summary requests (e.g., `servers/backend/api_endpoints.py`).
+Likely code locations: `servers/backend/api_endpoints.py` and `servers/backend/app.py` (or `fastapi_app.py`/`fastapi_main.py` depending on which entrypoint is used in your deployment).
 
-### Flow (template)
-1. Receive request (event or HTTP) with `studentId`.
-2. Validate `studentId`, fetch student record.
-3. Retrieve attendance source (raw rows or aggregates).
-4. Compute or fetch summary.
-5. Return/emit summary to client.
+Flow:
+1. Validate input (studentId, filters).
+2. Query the appropriate DB (see `servers/backend/data/` files).
+3. Compute aggregates or return precomputed results.
+4. Return JSON snapshot or single-record response.
 
-Include function/route signature and a short code excerpt here.
+## 5. Core calculation logic
 
----
+Canonical steps:
+1. Determine canonical school days for the requested range (business-calendar or derived from attendance rows).
+2. Filter attendance rows to those canonical days.
+3. Count on-time and late entries; sum as present; remaining canonical days are absent.
+4. Percentages use canonical school days as the denominator unless a different policy is configured.
 
-## 5. Core Calculation Logic
+Policy decisions to confirm:
+- School-day definition (Mon–Fri vs calendar with holidays).
+- Whether missing rows count as absent.
+- Rounding/precision rules.
 
-### Location
-`(placeholder)`: canonical calculation function or aggregation job (example: `servers/backend/app.py`).
+## 6. Data source: attendance history
 
-### Calculation steps (confirm and document)
-1. Determine canonical school days (source: business calendar table or derived from attendance rows).
-2. Filter student records to canonical school days.
-3. Count `on time` and `late` days; sum as `present`.
-4. Decide policy for missing records (absent vs ignored).
-5. Compute percentages using the agreed denominator and apply rounding.
+Primary storage: SQLite DB `servers/backend/data/attendance.db` with a table like `attendance_records` containing columns such as `date`, `status`, `arrival_time`, and `student_id`.
 
-### Rules to confirm
-- School-day definition: Mon–Fri vs calendar/holidays.
-- Percentages denominator: total canonical school days vs days with activity.
-- Missing-records policy: count as absent or not.
-- Rounding: number of decimal places.
+## 7. Calculation example
 
----
+Provide a verified example after confirming the policy above. Example template:
 
-## 6. Data Source: Attendance History
-
-### Where records live
-`(placeholder)`: DB and table (e.g., SQLite `attendance` table). Include columns: `date`, `status`, `arrival_time`, `student_id`.
-
-### Record format
-- `date`: `YYYY-MM-DD`
-- `status`: canonical values (e.g., `on time`, `late`, `absent`)
-- `arrival_time`: optional
-
----
-
-## 7. Calculation Example (replace with verified data)
-Provide a concrete example using the production rules and data. Example template:
-
-Input rows (example):
-- 2025-12-19: on time
-- 2025-12-22: late
-- 2025-12-23: absent
-
-Expected summary (example):
 ```json
 {
   "totalSchoolDays": 3,
-  "presentDays": 2,
-  "absentDays": 1,
   "onTimeDays": 1,
   "lateDays": 1,
-  "presencePercentage": 66.7,
-  "absencePercentage": 33.3,
-  "onTimePercentage": 33.3,
-  "latePercentage": 33.3
+  "absentDays": 1,
+  "presencePercentage": 66.67
 }
 ```
 
----
+## 8. Key rules
 
-## 8. Key Calculation Rules (record definitively)
 - Weekday vs calendar-driven school days
-- Percentage basis
-- Missing-records policy
-- Rounding/precision
+- Percentages denominated on canonical days
+- Missing-records policy (absent vs ignored)
 
----
+## 9. Caching & frontend store
 
-## 9. Caching & Frontend Store
+Location: `servers/frontend/src/hooks/use-student-store.ts`.
 
-Describe cache location, shape, invalidation triggers, and event listeners (placeholders for file links).
+Cache shape: Map keyed by `studentId` storing computed summaries. Cache is invalidated by `data_changed` events or explicit refreshes.
 
----
+## 10. Real-time updates
 
-## 10. Real-time Updates
+WebSocket events of interest:
+- `data_changed`: triggers upsert or refresh depending on payload (single id vs bulk)
+- `summary_update`, `attendance_trend`: used for bulk/analytic updates when available
 
-List events and expected client behavior (update cache, refetch, or no-op). Provide event names and handler locations.
+## 11. Data flow diagram
 
----
+UI → `useStudentStore` → `api-client` (HTTP GET snapshot) → backend handler → DB / calculation → JSON snapshot → store update → UI
 
-## 11. Data Flow Diagram
+## 12. Performance considerations
 
-Recreate the original flow diagram but confirm event/route names and handler locations.
+- Use on-demand snapshots for filtered lists; precompute per-student summaries if a single-student report is expensive.
+- Cache canonical school days server-side to avoid recomputing date sets.
 
-UI → Store lookup → API client → Transport → Backend handler → Calculation/Aggregate → Response → Store update → UI
+## 13. Error handling
 
----
+- Backend: return clear HTTP error codes and messages for invalid input.
+- Frontend: show concise messages and allow retry for network errors.
 
-## 12. Performance Considerations
+## 14. Response shape (recommended)
 
-Discuss on-demand vs precomputed summaries, server-side caching of canonical school days, and large-dataset strategies.
+Canonical response for a student summary:
 
----
-
-## 13. Error Handling
-
-Document frontend and backend error handling patterns (placeholders for exact messages/codes).
-
----
-
-## 14. Response Shape (authoritative)
-Confirm and record the backend response object and the frontend mapping to UI fields.
-
-Example shape (verify & replace):
 ```json
 {
-  "totalSchoolDays": 0,
-  "presentDays": 0,
-  "absentDays": 0,
-  "onTimeDays": 0,
-  "lateDays": 0,
-  "presencePercentage": 0.0,
-  "absencePercentage": 0.0,
-  "onTimePercentage": 0.0,
-  "latePercentage": 0.0
+  "studentId": 123,
+  "totalSchoolDays": 180,
+  "onTimeDays": 150,
+  "lateDays": 10,
+  "absentDays": 20,
+  "presencePercentage": 88.89
 }
 ```
 
-Frontend mapping example:
-- `onTimeCount` ← `onTimeDays`
-- `lateCount` ← `lateDays`
-- `absentCount` ← `absentDays`
-- `overallPercentage` ← `presencePercentage`
+## 15. File references (suggested)
 
----
+- Student profile UI: `servers/frontend/src/components/dashboard/student-profile-dialog.tsx`
+- API client: `servers/frontend/src/lib/api-client.ts`
+- Transport (WS): `servers/frontend/src/lib/websocket-client.ts` or `servers/frontend/src/app/page.tsx`
+- Backend handlers: `servers/backend/api_endpoints.py`, `servers/backend/app.py` or `servers/backend/fastapi_app.py`
+- Calculation/aggregates: `servers/backend/*` (search for attendance aggregation helpers)
 
-## 15. Files Reference (fill with exact links)
+## Next steps
 
-- Student profile UI: `(placeholder)`
-- API client: `(placeholder)`
-- Transport client: `(placeholder)`
-- Backend handlers: `(placeholder)`
-- Calculation/aggregates: `(placeholder)`
+If you want, I can scan the repository and populate the remaining placeholders with exact file snippets and line links. The next pass would (optionally) insert short code excerpts and confirm the precise endpoints used by the running backend.
 
----
-
-## Summary & Next Steps
-1. Replace placeholders with concrete file paths and code excerpts.
-2. Confirm the canonical rules and record them here.
-3. Add a verified example from production/dev data.
-
-If you want, I can scan the repo and auto-populate the placeholders with file links and short excerpts — would you like me to do that now?
-
-Document last updated: draft — update with author/date after verification.
-
----
-
-## 9. Caching Strategy
-
-### Frontend Cache (Store)
-**Location:** [frontend/src/hooks/use-student-store.ts](../frontend/src/hooks/use-student-store.ts)
-
-The `useStudentStore` hook maintains a `Map<studentId, summary>` for:
-- Avoiding redundant API calls
-- Instant UI updates
-- Real-time updates via WebSocket
-
-### When Cache is Updated
-1. After successful API fetch
-2. When server sends `summary_update` event
-3. When `attendance_trend` push is received
-
----
-
-## 10. Real-time Updates
-
-### WebSocket Events
-The system listens for these events to trigger recalculation:
-- `data_changed`: Attendance record modified
-- `summary_update`: Bulk summary update from server
-- `attendance_trend`: Monthly trend data update
-
-**Location:** [frontend/src/components/dashboard/student-profile-dialog.tsx](../frontend/src/components/dashboard/student-profile-dialog.tsx#L505-L520)
-
----
-
-## 11. Data Flow Diagram
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Student Profile Dialog (React Component)                   │
-│  Displays: Overall Presence, On Time, Late, Absent          │
-└──────────────┬──────────────────────────────────────────────┘
-               │ student.id + fetch on open
-               ↓
-┌──────────────────────────────────────────────────────────────┐
-│  useStudentStore (Zustand)                                   │
-│  studentSummaries: Map<studentId, SummaryData>               │
-│  (Checks cache first)                                        │
-└──────┬───────────────────────────────┬───────────────────────┘
-       │ (cached)                       │ (not cached)
-       │ return immediately            │ call API
-       ↓                               ↓
-   [UI Updates]          ┌─────────────────────────────────┐
-   (instant)             │ getStudentSummary (api-client)  │
-                         └──────────────┬──────────────────┘
-                                        │
-                         ┌──────────────↓──────────────┐
-                         │  wsClient.getStudentSummary │
-                         │  emit('get_student_summary')│
-                         └──────────────┬──────────────┘
-                                        │
                          ┌──────────────↓──────────────────────────┐
                          │  WebSocket to Backend                   │
                          │  handle_get_student_summary             │

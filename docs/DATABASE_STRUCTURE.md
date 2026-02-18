@@ -1,44 +1,36 @@
 # Database Structure
 
-The system now uses **3 separate SQLite database files** for better organization:
+The system organizes data into separate SQLite files under `servers/backend/data/`.
 
-## Database Files
+## Database files
 
-1. **`backend/data/students.db`** - Student data
-   - `students` table - All student information
-   - `backups` table - Backup metadata
+1. `servers/backend/data/students.db` — student records and backups
+   - `students` table: student profiles and metadata
+   - `backups` table: backup metadata
 
-2. **`backend/data/attendance.db`** - Attendance history
-   - `attendance_records` table - All attendance records
+2. `servers/backend/data/attendance.db` — attendance history
+   - `attendance_records` table: per-day attendance entries
 
-3. **`backend/data/logs.db`** - System logs
-   - `action_logs` table - System action logs
-   - `auth_logs` table - Authentication logs
+3. `servers/backend/data/logs.db` — system logs
+   - `action_logs` table: system actions
+   - `auth_logs` table: authentication events
 
-## Benefits of Separate Databases
+## Benefits
 
-- **Better organization**: Each database has a clear purpose
-- **Improved performance**: Smaller databases are faster to query
-- **Easier backups**: Can backup each database independently
-- **Reduced locking**: Less contention between different operations
+- Clear separation of concerns (students, attendance, logs)
+- Smaller files improve query performance and reduce locking
+- Easier targeted backups and restores
 
-## Migration
+## Migration behavior
 
-On first startup, the system will:
-1. Create all 3 database files
-2. Migrate existing JSON data to the appropriate databases
-3. Set up all required tables
+On first startup the backend will create the database files if missing and migrate any legacy JSON data into the appropriate DBs.
 
-## Database Access
+## Access pattern
 
-All database operations use `get_db_connection(db_type)` where `db_type` is:
-- `'students'` - For student data, backups
-- `'attendance'` - For attendance records
-- `'logs'` - For action and auth logs
+Backend code uses a helper like `get_db_connection(db_type)` where `db_type` is one of `students`, `attendance`, or `logs` to open the appropriate SQLite file in `servers/backend/data/`.
 
-## Password Storage
+## Passwords
 
-**Passwords are stored in JSON file only**: `src/lib/passwords.json`
-- Not stored in SQLite
-- Managed by helper functions in `app.py` and `api_endpoints.py`
+Passwords and small credential data live in `servers/backend/data/passwords.json` (not in SQLite). Password helper routines in the backend read and update that JSON file; see `servers/backend/app.py` and `servers/backend/api_endpoints.py` for the exact helpers.
+
 
