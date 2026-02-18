@@ -14,7 +14,7 @@ LeadGen is an attendance monitoring system intended for school environments. It 
 ### Primary capabilities
 - Real-time attendance marking with live dashboard synchronization
 - Student records management, search, and role assignments (e.g., prefect)
-- Integration points for RFID/fingerprint scanners for rapid check-ins
+- Integration points for fingerprint scanners for rapid check-ins
 - Historical records, CSV import/export, and automated local backups
 - Role-based access control (Admin, Moderator, Developer)
 - Lightweight migration tools and data integrity checks
@@ -25,14 +25,14 @@ LeadGen is an attendance monitoring system intended for school environments. It 
 
 Quick start (development)
 ---
-**Run the folwing comands**
+**Run the flowing commands**
 
 1. Install nodeJs and Python
 ```bash
-add the python and NodeJs install comands here
+add the python and NodeJs install commands here
 ```
 
-2. Install depandancys
+2. Install dependency's
 ```bash
 npm install-all
 ```
@@ -42,7 +42,7 @@ npm install-all
 npm run dev
 ```
 ---
-### Starting servers separtly
+### Starting servers separately
 
 Backend Server
 ```bash
