@@ -33,7 +33,7 @@ Quick start (development)
 add the python and NodeJs install commands here
 ```
 
-2. Install dependency's and Run both servers using the provided package.json script
+2. Install all server dependency's and Run both servers
    
 ```bash
 npm run deploy
