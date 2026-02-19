@@ -439,6 +439,16 @@ export function AttendanceHistoryTab() {
   // Local UI filter for attendance status (overrides pie selection when set)
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
+  // Map UI status strings to backend API status parameter values
+  const mapStatusToApi = (s: string | null | undefined) => {
+    if (!s) return 'all';
+    const v = String(s).toLowerCase();
+    if (v === 'on time' || v === 'ontime') return 'on_time';
+    if (v === 'late') return 'late';
+    if (v === 'absent') return 'absent';
+    return 'all';
+  };
+
   const isMonthWithinRange = (month: Date) => {
     // backend 'month' aggregate covers last ~30 days ending today; consider month has possible data if it overlaps last 30 days
     const today = new Date();
@@ -487,7 +497,7 @@ export function AttendanceHistoryTab() {
               // the authoritative aggregate fetch for accuracy.
 
               // Otherwise fetch full aggregate
-              const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all' });
+              const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all', status: mapStatusToApi(statusFilter) });
               const normalizedPoints = resp?.points ?? resp?.data ?? [];
               setMonthPoints(normalizedPoints);
               setMonthAggregate(resp ?? null);
@@ -516,7 +526,7 @@ export function AttendanceHistoryTab() {
     try {
       const iso = date.toISOString().slice(0, 10);
       // Use start/end to request a single day's aggregate
-      const resp = await getAttendanceAggregate({ start: iso, end: iso, grade: gradeFilter || 'all', classFilter: classFilter || undefined, roleFilter: roleFilter || undefined });
+      const resp = await getAttendanceAggregate({ start: iso, end: iso, grade: gradeFilter || 'all', classFilter: classFilter || undefined, roleFilter: roleFilter || undefined, status: mapStatusToApi(statusFilter) });
       setDayAggregate(resp ?? null);
     } catch (e) {
       console.warn('day aggregate fetch failed', e);

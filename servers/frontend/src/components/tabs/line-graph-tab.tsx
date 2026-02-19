@@ -50,7 +50,18 @@ export function LineGraphTab() {
         // If viewing a single day and a date is selected, prefer the HTTP aggregate with start/end
         if (range === 'day' && selectedDate) {
           const iso = selectedDate.toISOString().slice(0,10);
-          resp = await getAttendanceAggregate({ start: iso, end: iso, grade: grade === 'all' ? undefined : grade });
+          // Map UI status values to backend API expected values
+          const mapStatusToApi = (s: string) => {
+            if (!s) return undefined;
+            const v = s.toLowerCase();
+            if (v === 'ontime' || v === 'on time') return 'on_time';
+            if (v === 'late') return 'late';
+            if (v === 'absent') return 'absent';
+            // overview/attendance -> request full multi-series
+            return 'all';
+          };
+
+          resp = await getAttendanceAggregate({ start: iso, end: iso, grade: grade === 'all' ? undefined : grade, status: mapStatusToApi(status) });
           // API returns result directly with points or data
           const points = resp?.points ?? resp?.data ?? [];
           if (!mounted) return;
