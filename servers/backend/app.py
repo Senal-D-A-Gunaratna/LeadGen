@@ -798,6 +798,9 @@ def api_attendance_aggregate():
         grade = request.args.get('grade', 'all')
         classFilter = request.args.get('classFilter')
         roleFilter = request.args.get('roleFilter')
+        # Optional: scope gradeBars to a single status. Accepted values:
+        # 'on_time'|'on time'|'ontime', 'late', 'absent', or 'all' (default)
+        status = (request.args.get('status') or 'all').strip().lower()
 
         # Determine date range
         from datetime import timedelta
@@ -973,11 +976,31 @@ def api_attendance_aggregate():
                 total_possible_grade = students_in_grade * total_school_days
                 present_grade = data['present']
                 absent_grade = total_possible_grade - present_grade
+
+                # Compute ratios depending on requested status scope.
+                if status in ('on_time', 'on time', 'ontime'):
+                    on_ratio = round((data.get('on_time', 0) / total_possible_grade), 3) if total_possible_grade > 0 else 0
+                    late_ratio = 0
+                    absent_ratio = 0
+                elif status == 'late':
+                    on_ratio = 0
+                    late_ratio = round((data.get('late', 0) / total_possible_grade), 3) if total_possible_grade > 0 else 0
+                    absent_ratio = 0
+                elif status == 'absent':
+                    on_ratio = 0
+                    late_ratio = 0
+                    absent_ratio = round((absent_grade / total_possible_grade), 3) if total_possible_grade > 0 else 0
+                else:
+                    # default: include all statuses (backwards compatible)
+                    on_ratio = round((data.get('on_time', 0) / total_possible_grade), 3) if total_possible_grade > 0 else 0
+                    late_ratio = round((data.get('late', 0) / total_possible_grade), 3) if total_possible_grade > 0 else 0
+                    absent_ratio = round((absent_grade / total_possible_grade), 3) if total_possible_grade > 0 else 0
+
                 gradeBars.append({
                     'grade': g,
-                    'onTime': round((data['on_time'] if data.get('on_time') else data['on_time']) / total_possible_grade, 3) if total_possible_grade > 0 else 0,
-                    'late': round((data['late'] if data.get('late') else data['late']) / total_possible_grade, 3) if total_possible_grade > 0 else 0,
-                    'absent': round((absent_grade) / total_possible_grade, 3) if total_possible_grade > 0 else 0,
+                    'onTime': on_ratio,
+                    'late': late_ratio,
+                    'absent': absent_ratio,
                     'onTimeCount': data.get('on_time', 0),
                     'lateCount': data.get('late', 0),
                     'absentCount': absent_grade,
