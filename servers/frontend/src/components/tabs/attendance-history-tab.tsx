@@ -253,14 +253,15 @@ export function AttendanceHistoryTab() {
 
   type AttendanceDatum = { name: string; value: number; color: string; percent: number };
   const attendanceData = useMemo<AttendanceDatum[]>(() => {
-    // Strict: Use only server-provided aggregates for pie data.
+    // Rely entirely on server-provided day aggregate. Do NOT fabricate
+    // values client-side or fall back to month aggregates.
     if (dayAggregate && dayAggregate.pie) {
       const p = dayAggregate.pie;
-      const totalStudents = p.studentCount || 0;
-      const presPerc = p.presencePercentage ? (p.presencePercentage / 100) : 0;
-      const onTimeVal = Math.round(totalStudents * presPerc * 0.8);
-      const lateVal = Math.round(totalStudents * presPerc * 0.2);
-      const absentVal = totalStudents - (onTimeVal + lateVal);
+      const totalStudents = Number(p.studentCount || 0);
+      const onTimeVal = Number(p.onTimeDays ?? p.on_time_days ?? p.on_time ?? p.onTime ?? 0);
+      const lateVal = Number(p.lateDays ?? p.late_days ?? p.late ?? 0);
+      const absentVal = Number(p.absentDays ?? p.absent_days ?? p.absent ?? (totalStudents - (onTimeVal + lateVal)));
+
       return [
         { name: "On Time", value: onTimeVal, color: COLORS["on time"], percent: totalStudents > 0 ? (onTimeVal / totalStudents) : 0 },
         { name: "Late", value: lateVal, color: COLORS.late, percent: totalStudents > 0 ? (lateVal / totalStudents) : 0 },
@@ -268,23 +269,9 @@ export function AttendanceHistoryTab() {
       ];
     }
 
-    if (monthAggregate && monthAggregate.pie) {
-      const p = monthAggregate.pie;
-      const totalStudents = p.studentCount || 0;
-      const presPerc = p.presencePercentage ? (p.presencePercentage / 100) : 0;
-      const onTimeVal = Math.round(totalStudents * presPerc * 0.8);
-      const lateVal = Math.round(totalStudents * presPerc * 0.2);
-      const absentVal = totalStudents - (onTimeVal + lateVal);
-      return [
-        { name: "On Time", value: onTimeVal, color: COLORS["on time"], percent: totalStudents > 0 ? (onTimeVal / totalStudents) : 0 },
-        { name: "Late", value: lateVal, color: COLORS.late, percent: totalStudents > 0 ? (lateVal / totalStudents) : 0 },
-        { name: "Absent", value: absentVal, color: COLORS.absent, percent: totalStudents > 0 ? (absentVal / totalStudents) : 0 },
-      ];
-    }
-
-    // No server-provided data available — return empty to strictly rely on API
+    // No authoritative day aggregate -> render no slices (UI should show empty state)
     return [];
-  }, [dayAggregate, monthAggregate]);
+  }, [dayAggregate]);
 
   // Use API/derived `attendanceData` directly so Recharts handles animation
 
@@ -324,11 +311,11 @@ export function AttendanceHistoryTab() {
       absentCount: gb.absentCount,
     }));
 
+    // Only use the authoritative day-level `gradeBars`. Do not fall back
+    // to month aggregates or compute client-side equivalents.
     let base: GradeBarDatum[] = [];
     if (dayAggregate && Array.isArray(dayAggregate.gradeBars) && dayAggregate.gradeBars.length > 0) {
       base = normalize(dayAggregate.gradeBars);
-    } else if ((classFilter === 'all' || !classFilter) && (roleFilter === 'all' || !roleFilter) && monthAggregate && Array.isArray(monthAggregate.gradeBars) && monthAggregate.gradeBars.length > 0) {
-      base = normalize(monthAggregate.gradeBars);
     } else {
       base = [];
     }
