@@ -290,55 +290,57 @@ export function AttendanceHistoryTab() {
 
   const selectedStatus = activeIndex !== -1 ? attendanceData[activeIndex]?.name.toLowerCase() as AttendanceStatus : null;
 
+  // Local UI filter for attendance status (overrides pie selection when set)
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  // Map UI status strings to backend API status parameter values
+  const mapStatusToApi = (s: string | null | undefined) => {
+    if (!s) return 'all';
+    const v = String(s).toLowerCase();
+    if (v === 'on time' || v === 'ontime') return 'on_time';
+    if (v === 'late') return 'late';
+    if (v === 'absent') return 'absent';
+    return 'all';
+  };
+
   type GradeBarDatum = { grade: string; onTime: number; late: number; absent: number; onTimeCount: number; lateCount: number; absentCount: number };
   const gradeWiseStatusData = useMemo<GradeBarDatum[]>(() => {
-    // Strict: prefer server-provided gradeBars for the currently selected day
-    // (dayAggregate is fetched with grade/class/role filters).
+    // Helper to normalize server gradeBars to the UI shape
+    const normalize = (arr: any[] = []) => arr.map((g: any) => ({
+      grade: `${g.grade}`.startsWith('Grade') ? g.grade : g.grade,
+      onTime: g.onTime || 0,
+      late: g.late || 0,
+      absent: g.absent || 0,
+      onTimeCount: g.onTimeCount || 0,
+      lateCount: g.lateCount || 0,
+      absentCount: g.absentCount || 0,
+    })).map((gb:any) => ({
+      grade: `Grade ${gb.grade}`,
+      onTime: gb.onTime,
+      late: gb.late,
+      absent: gb.absent,
+      onTimeCount: gb.onTimeCount,
+      lateCount: gb.lateCount,
+      absentCount: gb.absentCount,
+    }));
+
+    let base: GradeBarDatum[] = [];
     if (dayAggregate && Array.isArray(dayAggregate.gradeBars) && dayAggregate.gradeBars.length > 0) {
-      return dayAggregate.gradeBars.map((g: any) => ({
-        grade: `${g.grade}`.startsWith('Grade') ? g.grade : g.grade,
-        onTime: g.onTime || 0,
-        late: g.late || 0,
-        absent: g.absent || 0,
-        onTimeCount: g.onTimeCount || 0,
-        lateCount: g.lateCount || 0,
-        absentCount: g.absentCount || 0,
-      })).map((gb:any) => ({
-        grade: `Grade ${gb.grade}`,
-        onTime: gb.onTime,
-        late: gb.late,
-        absent: gb.absent,
-        onTimeCount: gb.onTimeCount,
-        lateCount: gb.lateCount,
-        absentCount: gb.absentCount,
-      }));
+      base = normalize(dayAggregate.gradeBars);
+    } else if ((classFilter === 'all' || !classFilter) && (roleFilter === 'all' || !roleFilter) && monthAggregate && Array.isArray(monthAggregate.gradeBars) && monthAggregate.gradeBars.length > 0) {
+      base = normalize(monthAggregate.gradeBars);
+    } else {
+      base = [];
     }
 
-    // Use monthAggregate gradeBars only when class/role filters are not applied
-    // because monthAggregate may not be scoped by those filters.
-    if ((classFilter === 'all' || !classFilter) && (roleFilter === 'all' || !roleFilter) && monthAggregate && Array.isArray(monthAggregate.gradeBars) && monthAggregate.gradeBars.length > 0) {
-      return monthAggregate.gradeBars.map((g: any) => ({
-        grade: `${g.grade}`.startsWith('Grade') ? g.grade : g.grade,
-        onTime: g.onTime || 0,
-        late: g.late || 0,
-        absent: g.absent || 0,
-        onTimeCount: g.onTimeCount || 0,
-        lateCount: g.lateCount || 0,
-        absentCount: g.absentCount || 0,
-      })).map((gb:any) => ({
-        grade: `Grade ${gb.grade}`,
-        onTime: gb.onTime,
-        late: gb.late,
-        absent: gb.absent,
-        onTimeCount: gb.onTimeCount,
-        lateCount: gb.lateCount,
-        absentCount: gb.absentCount,
-      }));
-    }
+    // When a specific status filter is active, hide grades with zero count for that status
+    const sf = (statusFilter || 'all').toLowerCase();
+    if (sf === 'all') return base;
+    const countKey = sf === 'on time' || sf === 'ontime' ? 'onTimeCount' : (sf === 'late' ? 'lateCount' : (sf === 'absent' ? 'absentCount' : null));
+    if (!countKey) return base;
 
-    // No server-provided gradeBars for current filters — return empty (strict API-only)
-    return [];
-  }, [dayAggregate, monthAggregate, classFilter, roleFilter]);
+    return base.filter((g) => Number((g as any)[countKey] || 0) > 0);
+  }, [dayAggregate, monthAggregate, classFilter, roleFilter, statusFilter]);
 
   // Use API/derived `gradeWiseStatusData` directly so Recharts handles animation
 
@@ -371,6 +373,8 @@ export function AttendanceHistoryTab() {
     return { onTime, late, absent } as any;
   }, [monthPoints, displayedMonth]);
   const fetchTimerRef = useRef<number | null>(null);
+
+  
 
   // Control popover open state so we can intercept Radix outside events
   const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
@@ -436,18 +440,6 @@ export function AttendanceHistoryTab() {
     };
   }, [displayedMonth, gradeFilter]);
 
-  // Local UI filter for attendance status (overrides pie selection when set)
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-
-  // Map UI status strings to backend API status parameter values
-  const mapStatusToApi = (s: string | null | undefined) => {
-    if (!s) return 'all';
-    const v = String(s).toLowerCase();
-    if (v === 'on time' || v === 'ontime') return 'on_time';
-    if (v === 'late') return 'late';
-    if (v === 'absent') return 'absent';
-    return 'all';
-  };
 
   const isMonthWithinRange = (month: Date) => {
     // backend 'month' aggregate covers last ~30 days ending today; consider month has possible data if it overlaps last 30 days
