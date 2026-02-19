@@ -399,7 +399,7 @@ export async function getAllStudentsSummaries() {
   return wsClient.getAllStudentsSummaries();
 }
 
-export async function getAttendanceAggregate(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string }) {
+export async function getAttendanceAggregate(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string; status?: string }) {
   const params = new URLSearchParams();
   if (opts.month) params.set('month', opts.month);
   if (opts.start) params.set('start', opts.start);
@@ -407,6 +407,7 @@ export async function getAttendanceAggregate(opts: { month?: string; start?: str
   if (opts.grade) params.set('grade', opts.grade);
   if (opts.classFilter) params.set('classFilter', opts.classFilter);
   if (opts.roleFilter) params.set('roleFilter', opts.roleFilter);
+  if (opts.status) params.set('status', opts.status);
   const qs = params.toString() ? `?${params.toString()}` : '';
   const result = await fetchAPI(`/api/attendance/aggregate${qs}`);
   return result;
