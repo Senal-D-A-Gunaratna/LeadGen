@@ -244,8 +244,8 @@ export function AttendanceHistoryTab() {
       } else {
         setGradeFilter(grade);
       }
-      
-      studentListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Removed automatic scrolling to avoid jumping the UI when users
+      // interact with the grade bar chart.
     } else {
       setGradeFilter("all");
     }
