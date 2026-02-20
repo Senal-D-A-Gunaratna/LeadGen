@@ -15,7 +15,7 @@ servers/backend/venv/
 servers/backend/__pycache__/
 servers/backend/*.pyc
 servers/backend/*.pyo
-servers/backend/debug.log
+servers/backend/backend.log
 
 # Backend data & secrets (should not be committed)
 servers/backend/database/
@@ -37,7 +37,7 @@ servers/backend/*.egg-info/
 servers/backend/*.egg
 servers/backend/pip-log.txt
 servers/backend/pip-delete-this-directory.txt
-servers/backend/debug.log
+servers/backend/backend.log
 servers/backend/__pycache__/
 
 # Compiled files for moved `src` package
@@ -48,8 +48,8 @@ servers/backend/src/*.pyo
 # Node.js
 package-lock.json
 yarn.lock
-npm-debug.log*
-yarn-debug.log*
+npm-backend.log*
+yarn-backend.log*
 yarn-error.log*
 
 # OS

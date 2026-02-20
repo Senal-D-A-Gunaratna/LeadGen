@@ -73,7 +73,7 @@ npm run frontend
 ### Operational notes
 - Back up `servers/backend/data/*.db` regularly before migrations or destructive operations
 - Use `bash fix-setup.sh` for common dependency fixes
-- Check `servers/backend/debug.log` for runtime errors and diagnostic information
+- Check `servers/backend/backend.log` for runtime errors and diagnostic information
 - For additional implementation details, consult the source under `servers/backend/` and `servers/frontend/` or review the documents in `docs/`
 
 ### Security and production guidance

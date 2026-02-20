@@ -26,11 +26,11 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Configure logging: write DEBUG to `debug.log` and send INFO+ to console.
+# Configure logging: write DEBUG to `backend.log` and send INFO+ to console.
 # Capture warnings and route most library logs into the root logger so
-# `debug.log` contains nearly everything useful for debugging.
+# `backend.log` contains nearly everything useful for debugging.
 _log_dir = Path(__file__).resolve().parents[1]
-_debug_log = _log_dir / 'debug.log'
+_debug_log = _log_dir / 'backend.log'
 _log_dir.mkdir(parents=True, exist_ok=True)
 
 root_logger = logging.getLogger()
