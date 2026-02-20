@@ -561,7 +561,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         }
 
         try {
+          console.debug('[StudentProfile] fetching summary for', student.id);
           const res = await getStudentSummary(student.id);
+          console.debug('[StudentProfile] getStudentSummary response', res);
           const s = res?.summary;
           if (s) {
             updateStudentSummaries([{
@@ -1051,7 +1053,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       } else {
         // Fetch and update store
         try {
+          console.debug('[StudentProfile] fetchSummary() calling getStudentSummary for', student?.id);
           const res = await getStudentSummary(student.id);
+          console.debug('[StudentProfile] fetchSummary() getStudentSummary response', res);
           const s = res?.summary;
           if (!cancelled && s) {
             // Update the store with the fetched summary
