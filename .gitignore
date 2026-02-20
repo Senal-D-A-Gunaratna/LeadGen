@@ -39,6 +39,12 @@ servers/backend/*.egg
 servers/backend/pip-log.txt
 servers/backend/pip-delete-this-directory.txt
 
+# Ignore compiled files under the moved `src` directory
+servers/backend/src/__pycache__/
+servers/backend/src/*.pyc
+servers/backend/src/*.pyo
+ervers/backend/src/debug.log
+
 # Node.js
 package-lock.json
 yarn.lock

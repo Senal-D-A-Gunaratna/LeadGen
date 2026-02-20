@@ -470,7 +470,7 @@ def register_endpoints(app, socketio, helpers):
         # Security: prevent directory traversal
         filename = Path(filename).name
 
-            backups_root = Path(__file__).resolve().parents[1] / 'backups'
+        backups_root = Path(__file__).resolve().parents[1] / 'backups'
         if data_type == 'students':
             file_path = backups_root / 'students' / filename
         elif data_type == 'attendance':
