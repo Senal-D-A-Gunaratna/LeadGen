@@ -34,11 +34,17 @@ async function ensureBackendUrl(): Promise<string> {
 async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   const backendUrl = await ensureBackendUrl();
   try {
+    // Only set Content-Type when sending a body (or non-GET methods).
+    const method = (options.method || 'GET').toUpperCase();
+    const baseHeaders: Record<string, string> = {};
+    if (method !== 'GET' || options.body) {
+      baseHeaders['Content-Type'] = 'application/json';
+    }
     const response = await fetch(`${backendUrl}${endpoint}`, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
+        ...baseHeaders,
+        ...(options.headers as Record<string, string> | undefined),
       },
     });
 
