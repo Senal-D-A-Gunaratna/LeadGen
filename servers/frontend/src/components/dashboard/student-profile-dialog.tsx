@@ -17,6 +17,7 @@ import { Mail, Phone, GraduationCap, Trash2, Loader2, Save, Pencil, UserCheck, C
 import WhatsAppIcon from "@/icons/WhatsAppIcon";
 import MiniTrendChart from "@/components/ui/mini-trend-chart";
 import { useMemo, useState, useEffect, useRef } from "react";
+import { clientLog } from "@/lib/client-logger";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -562,8 +563,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
         try {
           console.debug('[StudentProfile] fetching summary for', student.id);
+          clientLog('debug', 'fetching summary for', { studentId: student.id });
           const res = await getStudentSummary(student.id);
           console.debug('[StudentProfile] getStudentSummary response', res);
+          clientLog('debug', 'getStudentSummary response', { studentId: student.id, res });
           const s = res?.summary;
           if (s) {
             updateStudentSummaries([{
@@ -593,6 +596,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           }
         } catch (e) {
           console.error('Failed to fetch student summary on open', e);
+          clientLog('error', 'Failed to fetch student summary on open', { studentId: student?.id, error: String(e) });
         }
       } catch (e) {
         console.warn('Failed to refresh student profile data on open', e);
@@ -635,6 +639,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         // Refresh summary
         try {
           const res = await getStudentSummary(student.id);
+          clientLog('debug', 'sync getStudentSummary response', { studentId: student.id, res });
           const s = res?.summary;
           if (s) {
             updateStudentSummaries([{
@@ -662,8 +667,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
               totalSchoolDays: s.totalSchoolDays,
             });
           }
-        } catch (e) {
-          console.warn('sync refresh: failed to fetch student summary', e);
+        } catch (err) {
+          console.warn('sync refresh: failed to fetch student summary', err);
+          clientLog('error', 'sync refresh failed to fetch student summary', { studentId: student.id, error: String(err) });
         }
       } catch (e) {
         console.error('sync refresh error', e);
@@ -1054,8 +1060,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         // Fetch and update store
         try {
           console.debug('[StudentProfile] fetchSummary() calling getStudentSummary for', student?.id);
+          clientLog('debug', 'fetchSummary calling getStudentSummary', { studentId: student?.id });
           const res = await getStudentSummary(student.id);
           console.debug('[StudentProfile] fetchSummary() getStudentSummary response', res);
+          clientLog('debug', 'fetchSummary getStudentSummary response', { studentId: student?.id, res });
           const s = res?.summary;
           if (!cancelled && s) {
             // Update the store with the fetched summary
@@ -1086,6 +1094,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           }
         } catch (e) {
           console.error('Failed to fetch student summary', e);
+          clientLog('error', 'Failed to fetch student summary', { studentId: student?.id, error: String(e) });
           if (!cancelled) setAttendanceStats(null);
         }
       }
