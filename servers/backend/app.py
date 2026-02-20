@@ -1360,7 +1360,36 @@ def http_get_student_by_id(student_id):
         student = get_student_by_id(student_id)
         if not student:
             return jsonify({'success': False, 'message': 'Student not found'}), 404
-        return jsonify({'success': True, 'student': student})
+
+        # Compute authoritative summary using server helpers. If computation
+        # fails, continue returning the student object without summary to avoid
+        # breaking clients.
+        try:
+            all_students = get_all_students_with_history()
+            summary = get_attendance_summary(student, all_students)
+        except Exception:
+            summary = None
+
+        # Build ordered student payload placing `summary` before `attendanceHistory`.
+        ordered_student = {
+            'id': student.get('id'),
+            'name': student.get('name'),
+            'grade': student.get('grade'),
+            'className': student.get('className'),
+            'role': student.get('role'),
+            'contact': student.get('contact'),
+            'specialRoles': student.get('specialRoles'),
+            'notes': student.get('notes'),
+            'fingerprints': student.get('fingerprints', []),
+            'summary': summary,
+            'status': student.get('status'),
+            'hasScannedToday': student.get('hasScannedToday'),
+            'created_at': student.get('created_at'),
+            'updated_at': student.get('updated_at'),
+        }
+        ordered_student['attendanceHistory'] = student.get('attendanceHistory', [])
+
+        return jsonify({'success': True, 'student': ordered_student})
     except Exception as e:
         return jsonify({'success': False, 'message': 'Error fetching student', 'error': str(e)}), 500
 
