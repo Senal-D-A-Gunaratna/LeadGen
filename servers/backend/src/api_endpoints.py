@@ -22,7 +22,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
 # Password file path
-PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'data' / 'passwords.json'
+PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'database' / 'passwords.json'
 
 def get_passwords() -> Dict[str, str]:
     """Read passwords from JSON file."""
@@ -148,7 +148,7 @@ def register_endpoints(app, socketio, helpers):
                     return False, 'Backup file not found'
 
                 # Replace the main students database file with the backup
-                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'students.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'database' / 'students.db'
                 import shutil
                 shutil.copy2(file_path, main_db_path)
                 return True, None
@@ -158,7 +158,7 @@ def register_endpoints(app, socketio, helpers):
                     return False, 'Backup file not found'
 
                 # Replace the main attendance database file with the backup
-                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'attendance.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'database' / 'attendance.db'
                 import shutil
                 shutil.copy2(file_path, main_db_path)
                 return True, None

@@ -11,14 +11,14 @@ servers/frontend/.env.local
 servers/frontend/package-lock.json
 
 # Backend dependencies & generated
-servers/src/backend/venv/
-servers/src/backend/__pycache__
-servers/src/backend/*.pyc
-servers/src/backend/*.pyo
-servers/src/backend/debug.log
+servers/backend/venv/
+servers/backend/__pycache__/
+servers/backend/*.pyc
+servers/backend/*.pyo
+servers/backend/debug.log
 
 # Backend data & secrets (should not be committed)
-servers/backend/data/
+servers/backend/database/
 servers/backend/certificates/
 servers/backend/backups/
 
@@ -33,13 +33,17 @@ servers/frontend/.env.production.local
 servers/frontend/tsconfig.tsbuildinfo
 
 # Python (backend-specific)
-servers/backend/src/*.egg-info/
-servers/backend/src/*.egg
-servers/backend/src/pip-log.txt
-servers/backend/src/pip-delete-this-directory.txt
+servers/backend/*.egg-info/
+servers/backend/*.egg
+servers/backend/pip-log.txt
+servers/backend/pip-delete-this-directory.txt
 servers/backend/debug.log
-servers/backend/__pycache__
-servers/backend/src/__pycache__
+servers/backend/__pycache__/
+
+# Compiled files for moved `src` package
+servers/backend/src/__pycache__/
+servers/backend/src/*.pyc
+servers/backend/src/*.pyo
 
 # Node.js
 package-lock.json

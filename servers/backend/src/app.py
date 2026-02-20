@@ -138,7 +138,7 @@ def handle_uncaught_exception(e):
     return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 # Password file path
-PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'data' / 'passwords.json'
+PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'database' / 'passwords.json'
 
 def get_passwords() -> Dict[str, str]:
     """Read passwords from JSON file."""

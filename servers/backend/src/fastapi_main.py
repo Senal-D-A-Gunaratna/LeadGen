@@ -643,14 +643,14 @@ async def restore_backup(request: Request):
                 file_path = backups_root / 'students' / Path(filename).name
                 if not file_path.exists():
                     return False, 'Backup file not found'
-                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'students.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'database' / 'students.db'
                 shutil.copy2(file_path, main_db_path)
                 return True, None
             elif data_type == 'attendance':
                 file_path = backups_root / 'attendance' / Path(filename).name
                 if not file_path.exists():
                     return False, 'Backup file not found'
-                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'attendance.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'database' / 'attendance.db'
                 shutil.copy2(file_path, main_db_path)
                 return True, None
             return False, 'Invalid dataType'

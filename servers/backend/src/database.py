@@ -11,7 +11,7 @@ import threading
 import time
 
 # Three separate database files
-DATA_DIR = Path(__file__).resolve().parents[1] / 'data'
+DATA_DIR = Path(__file__).resolve().parents[1] / 'database'
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 STUDENTS_DB_PATH = DATA_DIR / 'students.db'
