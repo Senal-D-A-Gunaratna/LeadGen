@@ -1636,10 +1636,6 @@ def http_get_student_summary(student_id):
         return jsonify({'success': True, 'studentId': student_id, 'summary': summary})
     except Exception as e:
         return jsonify({'success': False, 'message': 'Error computing summary', 'error': str(e)}), 500
-    await socketio.emit('student_by_id_response', {
-        'success': False,
-        'message': 'Removed: use HTTP GET /api/students/<id>'
-    }, to=sid)
 
 @socketio.on('save_attendance')
 async def handle_save_attendance(sid, data):
