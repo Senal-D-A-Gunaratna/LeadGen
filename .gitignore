@@ -38,6 +38,8 @@ servers/backend/src/*.egg
 servers/backend/src/pip-log.txt
 servers/backend/src/pip-delete-this-directory.txt
 servers/backend/debug.log
+servers/backend/__pycache__
+servers/backend/src/__pycache__
 
 # Node.js
 package-lock.json
