@@ -793,38 +793,27 @@ class WebSocketClient {
   }
 
   getActionLogs(): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.connected) {
-        this.connect();
-        // Wait for connection
-        setTimeout(() => {
-          this.getActionLogs().then(resolve).catch(reject);
-        }, 1000);
-        return;
+    return (async (): Promise<any[]> => {
+      try {
+        const ok = await this.waitForConnected(5000);
+        if (!ok || !this.socket || !this.socket.connected) return [];
+
+        const data = await this.requestWithResponse<{ success: boolean; logs?: any[]; message?: string }>(
+          'get_auth_logs',
+          'get_auth_logs_response',
+          undefined,
+          15000
+        );
+
+        if (data.success) return data.logs || [];
+        if (data.message && data.message.toLowerCase().includes('not authenticated')) return [];
+        // Unexpected server response — fall back to empty list.
+        return [];
+      } catch (e) {
+        console.debug('wsClient.getAuthLogs failed or timed out, returning empty logs', e);
+        return [];
       }
-
-      const handler = (data: { success: boolean; logs?: any[]; message?: string }) => {
-        this.socket?.off('get_action_logs_response', handler);
-        if (data.success) {
-          resolve(data.logs || []);
-        } else {
-          // Treat 'Not authenticated' as empty logs instead of an error
-          if (data.message && data.message.toLowerCase().includes('not authenticated')) {
-            resolve([]);
-          } else {
-            reject(new Error(data.message || 'Failed to get logs'));
-          }
-        }
-      };
-
-      this.socket.on('get_action_logs_response', handler);
-      this.socket.emit('get_action_logs');
-
-      setTimeout(() => {
-        this.socket?.off('get_action_logs_response', handler);
-        reject(new Error('Request timeout'));
-      }, 15000);
-    });
+    })();
   }
 
   getStudentSummary(studentId: number): Promise<any> {
@@ -995,16 +984,29 @@ class WebSocketClient {
   }
 
   getAuthLogs(): Promise<any[]> {
-    return this.requestWithResponse<{ success: boolean; logs?: any[]; message?: string }>('get_auth_logs', 'get_auth_logs_response', undefined, 15000)
-      .then((data) => {
-        if (data.success) {
-          return data.logs || [];
-        }
-        if (data.message && data.message.toLowerCase().includes('not authenticated')) {
-          return [];
-        }
-        throw new Error(data.message || 'Failed to get logs');
-      });
+    // Be forgiving: if socket is not connected or the request times out / fails,
+    // return an empty array instead of throwing so the UI doesn't break.
+    return (async (): Promise<any[]> => {
+      try {
+        const ok = await this.waitForConnected(5000);
+        if (!ok || !this.socket || !this.socket.connected) return [];
+
+        const data = await this.requestWithResponse<{ success: boolean; logs?: any[]; message?: string }>(
+          'get_auth_logs',
+          'get_auth_logs_response',
+          undefined,
+          15000
+        );
+
+        if (data.success) return data.logs || [];
+        if (data.message && data.message.toLowerCase().includes('not authenticated')) return [];
+        // Unexpected server response — fall back to empty list.
+        return [];
+      } catch (e) {
+        console.debug('wsClient.getAuthLogs failed or timed out, returning empty logs', e);
+        return [];
+      }
+    })();
   }
 
   on(event: string, callback: (data: any) => void) {
