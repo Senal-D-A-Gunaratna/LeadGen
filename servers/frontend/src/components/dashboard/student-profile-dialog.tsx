@@ -520,6 +520,24 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     }
   }, [open]);
 
+  
+
+  const [attendanceStats, setAttendanceStats] = useState<any | null>(null);
+
+  // Month aggregate check state (copied logic from attendance-history-tab)
+  const [displayedMonth, setDisplayedMonth] = useState<Date>(new Date());
+  const [monthHasData, setMonthHasData] = useState<boolean | null>(null); // null = unknown/loading
+  const [fetchError, setFetchError] = useState<boolean>(false);
+  const fetchTimerRef = useRef<number | null>(null);
+  // Trend (line chart) state + cache
+  const [showTrend, setShowTrend] = useState<boolean>(true);
+  const [trendLoading, setTrendLoading] = useState<boolean>(false);
+  const [trendError, setTrendError] = useState<boolean>(false);
+  const [attendanceTrend, setAttendanceTrend] = useState<any[] | null>(null);
+  const attendanceTrendCache = useRef<Map<string, any[]>>(new Map());
+  const [studentMonthlyHistory, setStudentMonthlyHistory] = useState<any[] | null>(null);
+  const monthlyHistoryFetchRef = useRef<number | null>(null);
+
   // Always refresh authoritative student data when opening the profile.
   useEffect(() => {
     if (!open || !student) return;
@@ -579,22 +597,6 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       }
     })();
   }, [open, student, displayedMonth]);
-
-  const [attendanceStats, setAttendanceStats] = useState<any | null>(null);
-
-  // Month aggregate check state (copied logic from attendance-history-tab)
-  const [displayedMonth, setDisplayedMonth] = useState<Date>(new Date());
-  const [monthHasData, setMonthHasData] = useState<boolean | null>(null); // null = unknown/loading
-  const [fetchError, setFetchError] = useState<boolean>(false);
-  const fetchTimerRef = useRef<number | null>(null);
-  // Trend (line chart) state + cache
-  const [showTrend, setShowTrend] = useState<boolean>(true);
-  const [trendLoading, setTrendLoading] = useState<boolean>(false);
-  const [trendError, setTrendError] = useState<boolean>(false);
-  const [attendanceTrend, setAttendanceTrend] = useState<any[] | null>(null);
-  const attendanceTrendCache = useRef<Map<string, any[]>>(new Map());
-  const [studentMonthlyHistory, setStudentMonthlyHistory] = useState<any[] | null>(null);
-  const monthlyHistoryFetchRef = useRef<number | null>(null);
 
   // Single top-level flag indicating whether student monthly history exists
   const hasMonthlyHistory = Array.isArray(studentMonthlyHistory) && studentMonthlyHistory.length > 0;
