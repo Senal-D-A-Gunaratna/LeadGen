@@ -681,6 +681,52 @@ class WebSocketClient {
     });
   }
 
+  // Generic request helper that emits an event and waits for a single response
+  private requestWithResponse<T = any>(emitEvent: string, responseEvent: string, payload?: any, timeoutMs: number = 15000): Promise<T> {
+    return new Promise(async (resolve, reject) => {
+      const ok = await this.waitForConnected(5000);
+      if (!ok || !this.socket || !this.socket.connected) {
+        reject(new Error('Not connected'));
+        return;
+      }
+
+      let timer: number | undefined;
+
+      const handler = (data: any) => {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+        try { this.socket?.off(responseEvent, handler); } catch (e) {}
+        resolve(data as T);
+      };
+
+      try {
+        // Use `once` to ensure the handler is only invoked a single time
+        this.socket?.once(responseEvent, handler);
+      } catch (e) {
+        reject(new Error('Failed to attach response handler'));
+        return;
+      }
+
+      try {
+        if (payload === undefined) {
+          this.socket?.emit(emitEvent);
+        } else {
+          this.socket?.emit(emitEvent, payload);
+        }
+      } catch (e) {
+        try { this.socket?.off(responseEvent, handler); } catch (ee) {}
+        reject(e);
+        return;
+      }
+
+      timer = setTimeout(() => {
+        try { this.socket?.off(responseEvent, handler); } catch (e) {}
+        reject(new Error('Request timeout'));
+      }, timeoutMs) as unknown as number;
+    });
+  }
+
   listBackups(): Promise<{ students: string[]; attendance: string[] }> {
     return new Promise((resolve, reject) => {
       if (!this.socket || !this.socket.connected) {
@@ -936,38 +982,16 @@ class WebSocketClient {
   }
 
   getAuthLogs(): Promise<any[]> {
-    return new Promise((resolve, reject) => {
-      if (!this.socket || !this.socket.connected) {
-        this.connect();
-        // Wait for connection
-        setTimeout(() => {
-          this.getAuthLogs().then(resolve).catch(reject);
-        }, 1000);
-        return;
-      }
-
-      const handler = (data: { success: boolean; logs?: any[]; message?: string }) => {
-        this.socket?.off('get_auth_logs_response', handler);
+    return this.requestWithResponse<{ success: boolean; logs?: any[]; message?: string }>('get_auth_logs', 'get_auth_logs_response', undefined, 15000)
+      .then((data) => {
         if (data.success) {
-          resolve(data.logs || []);
-        } else {
-          // Treat 'Not authenticated' as empty logs instead of an error
-          if (data.message && data.message.toLowerCase().includes('not authenticated')) {
-            resolve([]);
-          } else {
-            reject(new Error(data.message || 'Failed to get logs'));
-          }
+          return data.logs || [];
         }
-      };
-
-      this.socket.on('get_auth_logs_response', handler);
-      this.socket.emit('get_auth_logs');
-
-      setTimeout(() => {
-        this.socket?.off('get_auth_logs_response', handler);
-        reject(new Error('Request timeout'));
-      }, 15000);
-    });
+        if (data.message && data.message.toLowerCase().includes('not authenticated')) {
+          return [];
+        }
+        throw new Error(data.message || 'Failed to get logs');
+      });
   }
 
   on(event: string, callback: (data: any) => void) {
