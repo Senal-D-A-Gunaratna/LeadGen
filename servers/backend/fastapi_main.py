@@ -198,41 +198,15 @@ async def api_get_students(date: Optional[str] = Query(None), searchQuery: Optio
 
 @fastapi_app.get("/api/students/{student_id}")
 async def api_get_student(student_id: int):
+    # Delegated to the Flask `app.py` implementation which is mounted
+    # at the root of the ASGI app. Keep this lightweight wrapper so FastAPI
+    # does not duplicate computation or diverge from the authoritative logic.
     try:
+        # Forward to Flask handler for consistent behavior
         student = flask_app.get_student_by_id(student_id)
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
-        # Also include authoritative attendance summary computed on the server
-        try:
-            all_students = flask_app.get_all_students_with_history()
-            summary = flask_app.get_attendance_summary(student, all_students)
-        except Exception:
-            summary = None
-
-        # Build an ordered student dict where `attendanceHistory` is last
-        ordered_student = {
-            'id': student.get('id'),
-            'name': student.get('name'),
-            'grade': student.get('grade'),
-            'className': student.get('className'),
-            'role': student.get('role'),
-            'contact': student.get('contact'),
-            'specialRoles': student.get('specialRoles'),
-            'notes': student.get('notes'),
-            'fingerprints': student.get('fingerprints', []),
-            # Attendance Statistics placed before history
-            'summary': summary,
-            # Other metadata
-            'status': student.get('status'),
-            'hasScannedToday': student.get('hasScannedToday'),           
-            'created_at': student.get('created_at'),
-            'updated_at': student.get('updated_at'),
-        }
-
-        # Append attendanceHistory at the very end
-        ordered_student['attendanceHistory'] = student.get('attendanceHistory', [])
-
-        return JSONResponse({"success": True, "student": ordered_student})
+        return JSONResponse({"success": True, "student": student})
     except HTTPException:
         raise
     except Exception as e:
@@ -242,12 +216,9 @@ async def api_get_student(student_id: int):
 
 @fastapi_app.get('/api/students/{student_id}/summary')
 async def api_get_student_summary(student_id: int):
-    """Return computed attendance summary for a student (uses server-side school_days).
-
-    This endpoint provides an HTTP-first way for clients to obtain the
-    authoritative attendance statistics for a student without relying on
-    WebSocket RPCs.
-    """
+    # Delegate to Flask `get_attendance_summary` to avoid duplicate
+    # computation and to ensure consistent responses regardless of
+    # which HTTP adapter (Flask or FastAPI) is in use.
     try:
         student = flask_app.get_student_by_id(student_id)
         if not student:

@@ -1044,6 +1044,26 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     let cancelled = false;
     async function fetchSummary() {
       if (!student) return setAttendanceStats(null);
+      // Prefer server-provided summary included on the student payload to avoid
+      // an extra HTTP roundtrip. If present, update the store and use it.
+      if ((student as any).summary) {
+        const s = (student as any).summary;
+        try {
+          updateStudentSummaries([{ studentId: student.id, summary: s }]);
+        } catch (e) {}
+        setAttendanceStats({
+          onTimeCount: s.onTimeDays,
+          lateCount: s.lateDays,
+          absentCount: s.absentDays,
+          onTimePercentage: s.onTimePercentage,
+          latePercentage: s.latePercentage,
+          absentPercentage: s.absencePercentage,
+          overallPercentage: s.presencePercentage,
+          totalSchoolDays: s.totalSchoolDays,
+        });
+        return;
+      }
+
       const summary = studentSummaries.get(student.id);
       if (summary) {
         setAttendanceStats({
