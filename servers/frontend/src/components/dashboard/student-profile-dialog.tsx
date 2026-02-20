@@ -1039,84 +1039,74 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     return pts;
   }, [studentMonthlyHistory, displayedMonth]);
 
-  
   useEffect(() => {
     let cancelled = false;
+
+    const applySummary = (studentId: number, s: any) => {
+      if (!s) return;
+      try {
+        updateStudentSummaries([{
+          studentId,
+          summary: {
+            totalSchoolDays: s.totalSchoolDays,
+            presentDays: s.presentDays,
+            absentDays: s.absentDays,
+            onTimeDays: s.onTimeDays,
+            lateDays: s.lateDays,
+            presencePercentage: s.presencePercentage,
+            absencePercentage: s.absencePercentage,
+            onTimePercentage: s.onTimePercentage,
+            latePercentage: s.latePercentage,
+          }
+        }]);
+      } catch (e) {}
+      setAttendanceStats({
+        onTimeCount: s.onTimeDays,
+        lateCount: s.lateDays,
+        absentCount: s.absentDays,
+        onTimePercentage: s.onTimePercentage,
+        latePercentage: s.latePercentage,
+        absentPercentage: s.absencePercentage,
+        overallPercentage: s.presencePercentage,
+        totalSchoolDays: s.totalSchoolDays,
+      });
+    };
+
     async function fetchSummary() {
-      if (!student) return setAttendanceStats(null);
-      // Prefer server-provided summary included on the student payload to avoid
-      // an extra HTTP roundtrip. If present, update the store and use it.
-      if ((student as any).summary) {
-        const s = (student as any).summary;
-        try {
-          updateStudentSummaries([{ studentId: student.id, summary: s }]);
-        } catch (e) {}
-        setAttendanceStats({
-          onTimeCount: s.onTimeDays,
-          lateCount: s.lateDays,
-          absentCount: s.absentDays,
-          onTimePercentage: s.onTimePercentage,
-          latePercentage: s.latePercentage,
-          absentPercentage: s.absencePercentage,
-          overallPercentage: s.presencePercentage,
-          totalSchoolDays: s.totalSchoolDays,
-        });
+      if (!student) {
+        setAttendanceStats(null);
         return;
       }
 
-      const summary = studentSummaries.get(student.id);
-      if (summary) {
-        setAttendanceStats({
-          onTimeCount: summary.onTimeDays,
-          lateCount: summary.lateDays,
-          absentCount: summary.absentDays,
-          onTimePercentage: summary.onTimePercentage,
-          latePercentage: summary.latePercentage,
-          absentPercentage: summary.absencePercentage,
-          overallPercentage: summary.presencePercentage,
-          totalSchoolDays: summary.totalSchoolDays,
-        });
-      } else {
-        // Fetch and update store
-        try {
-          console.debug('[StudentProfile] fetchSummary() calling getStudentSummary for', student?.id);
-          clientLog('debug', 'fetchSummary calling getStudentSummary', { studentId: student?.id });
-          const res = await getStudentSummary(student.id);
-          console.debug('[StudentProfile] fetchSummary() getStudentSummary response', res);
-          clientLog('debug', 'fetchSummary getStudentSummary response', { studentId: student?.id, res });
-          const s = res?.summary;
-          if (!cancelled && s) {
-            // Update the store with the fetched summary
-            updateStudentSummaries([{
-              studentId: student.id,
-              summary: {
-                totalSchoolDays: s.totalSchoolDays,
-                presentDays: s.presentDays,
-                absentDays: s.absentDays,
-                onTimeDays: s.onTimeDays,
-                lateDays: s.lateDays,
-                presencePercentage: s.presencePercentage,
-                absencePercentage: s.absencePercentage,
-                onTimePercentage: s.onTimePercentage,
-                latePercentage: s.latePercentage,
-              }
-            }]);
-            setAttendanceStats({
-              onTimeCount: s.onTimeDays,
-              lateCount: s.lateDays,
-              absentCount: s.absentDays,
-              onTimePercentage: s.onTimePercentage,
-              latePercentage: s.latePercentage,
-              absentPercentage: s.absencePercentage,
-              overallPercentage: s.presencePercentage,
-              totalSchoolDays: s.totalSchoolDays,
-            });
-          }
-        } catch (e) {
-          console.error('Failed to fetch student summary', e);
-          clientLog('error', 'Failed to fetch student summary', { studentId: student?.id, error: String(e) });
-          if (!cancelled) setAttendanceStats(null);
+      // Prefer embedded summary on student payload
+      const embedded = (student as any).summary;
+      if (embedded) {
+        applySummary(student.id, embedded);
+        return;
+      }
+
+      // Check store cache
+      const cached = studentSummaries.get(student.id);
+      if (cached) {
+        applySummary(student.id, cached);
+        return;
+      }
+
+      // Fallback: fetch from server
+      try {
+        console.debug('[StudentProfile] fetchSummary() calling getStudentSummary for', student?.id);
+        clientLog('debug', 'fetchSummary calling getStudentSummary', { studentId: student?.id });
+        const res = await getStudentSummary(student.id);
+        console.debug('[StudentProfile] fetchSummary() getStudentSummary response', res);
+        clientLog('debug', 'fetchSummary getStudentSummary response', { studentId: student?.id, res });
+        const s = res?.summary;
+        if (!cancelled && s) {
+          applySummary(student.id, s);
         }
+      } catch (e) {
+        console.error('Failed to fetch student summary', e);
+        clientLog('error', 'Failed to fetch student summary', { studentId: student?.id, error: String(e) });
+        if (!cancelled) setAttendanceStats(null);
       }
     }
 
