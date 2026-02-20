@@ -85,11 +85,29 @@ export async function getAuthLogsAction(): Promise<LogEntry[]> {
   return apiGetAuthLogs();
 }
 
-export async function appendToAuthLogAction(logEntry: LogEntry): Promise<void> {
-  const timestamp = logEntry.timestamp instanceof Date 
-    ? logEntry.timestamp.toISOString() 
-    : new Date(logEntry.timestamp).toISOString();
-  await apiAppendToAuthLog(timestamp, logEntry.message);
+export async function appendToAuthLogAction(entryOrTimestamp: LogEntry | string, maybeMessage?: string) {
+  // Accept either a LogEntry object or (timestamp, message) pair for
+  // backward compatibility with existing callers.
+  let timestamp: string;
+  let message: string;
+
+  if (typeof entryOrTimestamp === 'string') {
+    timestamp = entryOrTimestamp;
+    message = maybeMessage || '';
+  } else {
+    const e = entryOrTimestamp as LogEntry;
+    timestamp = e.timestamp instanceof Date ? e.timestamp.toISOString() : new Date(e.timestamp).toISOString();
+    message = e.message || '';
+  }
+
+  if (!message) return;
+
+  try {
+    // Use API client helper (swallow errors so logs remain best-effort)
+    await apiAppendToAuthLog(timestamp, message);
+  } catch (error) {
+    console.warn('appendToAuthLogAction: backend unavailable or request failed, skipping append', error);
+  }
 }
 
 export async function clearAuthLogsAction(role: Role): Promise<void> {
