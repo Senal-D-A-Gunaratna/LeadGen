@@ -12,7 +12,7 @@ const SelectGroup = SelectPrimitive.Group
 
 const SelectValue = SelectPrimitive.Value
 
-const _SelectTrigger = React.forwardRef<
+const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
 >(({ className, children, ...props }, ref) => (
@@ -30,10 +30,7 @@ const _SelectTrigger = React.forwardRef<
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ))
-
-// Memoize to avoid unnecessary re-renders and set a stable displayName
-const SelectTrigger = React.memo(_SelectTrigger) as typeof _SelectTrigger
-SelectTrigger.displayName = 'SelectTrigger'
+SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
 
 const SelectScrollUpButton = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.ScrollUpButton>,

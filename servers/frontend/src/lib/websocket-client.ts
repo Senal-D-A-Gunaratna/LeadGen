@@ -690,40 +690,53 @@ class WebSocketClient {
         return;
       }
 
-      let timer: number | undefined;
+      const sock = this.socket;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
+      const cleanup = () => {
+        try { sock.off(responseEvent, handler); } catch (e) {}
+        try { sock.off('disconnect', onDisconnect); } catch (e) {}
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+      };
 
       const handler = (data: any) => {
-        if (timer !== undefined) {
-          clearTimeout(timer);
-        }
-        try { this.socket?.off(responseEvent, handler); } catch (e) {}
+        cleanup();
         resolve(data as T);
       };
 
+      const onDisconnect = () => {
+        cleanup();
+        reject(new Error('Socket disconnected'));
+      };
+
       try {
-        // Use `once` to ensure the handler is only invoked a single time
-        this.socket?.once(responseEvent, handler);
+        sock.once(responseEvent, handler);
+        sock.once('disconnect', onDisconnect);
       } catch (e) {
+        cleanup();
         reject(new Error('Failed to attach response handler'));
         return;
       }
 
       try {
         if (payload === undefined) {
-          this.socket?.emit(emitEvent);
+          sock.emit(emitEvent);
         } else {
-          this.socket?.emit(emitEvent, payload);
+          sock.emit(emitEvent, payload);
         }
       } catch (e) {
-        try { this.socket?.off(responseEvent, handler); } catch (ee) {}
+        cleanup();
         reject(e);
         return;
       }
 
       timer = setTimeout(() => {
-        try { this.socket?.off(responseEvent, handler); } catch (e) {}
+        cleanup();
         reject(new Error('Request timeout'));
-      }, timeoutMs) as unknown as number;
+      }, timeoutMs);
     });
   }
 
