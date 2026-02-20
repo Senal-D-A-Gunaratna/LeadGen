@@ -374,7 +374,7 @@ async def download_backup(request: Request):
     if not filename or not data_type:
         return JSONResponse({'error': 'Missing filename or dataType'}, status_code=400)
     filename = Path(filename).name
-    backups_root = Path(__file__).parent / 'backups'
+    backups_root = Path(__file__).resolve().parents[1] / 'backups'
     if data_type == 'students':
         file_path = backups_root / 'students' / filename
     elif data_type == 'attendance':
@@ -464,7 +464,7 @@ async def delete_backup(request: Request):
                 conn_attendance.commit()
             conn_attendance.close()
         try:
-            backups_root = Path(__file__).parent / 'backups'
+            backups_root = Path(__file__).resolve().parents[1] / 'backups'
             dir_name = 'students' if data_type == 'students' else 'attendance'
             file_path = backups_root / dir_name / filename
             if file_path.exists():
@@ -501,7 +501,7 @@ async def delete_all_backups(request: Request):
         conn_attendance.commit()
         conn_attendance.close()
         try:
-            backups_root = Path(__file__).parent / 'backups'
+            backups_root = Path(__file__).resolve().parents[1] / 'backups'
             for sub in ['students', 'attendance']:
                 subdir = backups_root / sub
                 if subdir.exists():
@@ -635,7 +635,7 @@ async def restore_backup(request: Request):
         host_no_port = (request.headers.get('host','') or '').split(':')[0]
         return JSONResponse({'error': 'Backup operations must use HTTPS or valid authorizer headers', 'debug': {'is_secure': request.url.scheme == 'https', 'allow_insecure': allow_insecure, 'dev_force': dev_force, 'is_local': is_local, 'authorizer_valid': authorizer_valid, 'host': host_no_port, 'remote': remote}}, status_code=403)
 
-    backups_root = Path(__file__).parent / 'backups'
+    backups_root = Path(__file__).resolve().parents[1] / 'backups'
 
     def _restore():
         try:
@@ -643,14 +643,14 @@ async def restore_backup(request: Request):
                 file_path = backups_root / 'students' / Path(filename).name
                 if not file_path.exists():
                     return False, 'Backup file not found'
-                main_db_path = Path(__file__).parent / 'data' / 'students.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'students.db'
                 shutil.copy2(file_path, main_db_path)
                 return True, None
             elif data_type == 'attendance':
                 file_path = backups_root / 'attendance' / Path(filename).name
                 if not file_path.exists():
                     return False, 'Backup file not found'
-                main_db_path = Path(__file__).parent / 'data' / 'attendance.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'attendance.db'
                 shutil.copy2(file_path, main_db_path)
                 return True, None
             return False, 'Invalid dataType'

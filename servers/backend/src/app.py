@@ -29,7 +29,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # Configure logging: write DEBUG to `debug.log` and send INFO+ to console.
 # Capture warnings and route most library logs into the root logger so
 # `debug.log` contains nearly everything useful for debugging.
-_log_dir = Path(__file__).parent
+_log_dir = Path(__file__).resolve().parents[1]
 _debug_log = _log_dir / 'debug.log'
 _log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -78,8 +78,8 @@ try:
     WsgiToAsgi = _WsgiToAsgi
 except Exception:
     WsgiToAsgi = None
-_repo_root = _Path(__file__).parent.parent
-_cert_dir = _repo_root / 'backend' / 'certificates'
+_repo_root = _Path(__file__).resolve().parents[1]
+_cert_dir = _repo_root / 'certificates'
 _cert_file = _cert_dir / 'localhost.pem'
 _key_file = _cert_dir / 'localhost-key.pem'
 if _cert_file.exists() and _key_file.exists():
@@ -138,7 +138,7 @@ def handle_uncaught_exception(e):
     return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 # Password file path
-PASSWORDS_JSON_PATH = Path(__file__).parent.parent / 'backend' / 'data' / 'passwords.json'
+PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'data' / 'passwords.json'
 
 def get_passwords() -> Dict[str, str]:
     """Read passwords from JSON file."""

@@ -22,7 +22,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
 # Password file path
-PASSWORDS_JSON_PATH = Path(__file__).parent.parent / 'backend' / 'data' / 'passwords.json'
+PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'data' / 'passwords.json'
 
 def get_passwords() -> Dict[str, str]:
     """Read passwords from JSON file."""
@@ -111,7 +111,7 @@ def register_endpoints(app, socketio, helpers):
             return
 
         def _list():
-            backups_root = Path(__file__).parent / 'backups'
+            backups_root = Path(__file__).resolve().parents[1] / 'backups'
             students_dir = backups_root / 'students'
             attendance_dir = backups_root / 'attendance'
 
@@ -139,7 +139,7 @@ def register_endpoints(app, socketio, helpers):
             await emit('restore_backup_response', {'success': False, 'message': 'Missing dataType or filename'}, to=sid)
             return
 
-        backups_root = Path(__file__).parent / 'backups'
+        backups_root = Path(__file__).resolve().parents[1] / 'backups'
 
         def _restore():
             if data_type == 'students':
@@ -148,7 +148,7 @@ def register_endpoints(app, socketio, helpers):
                     return False, 'Backup file not found'
 
                 # Replace the main students database file with the backup
-                main_db_path = Path(__file__).parent / 'data' / 'students.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'students.db'
                 import shutil
                 shutil.copy2(file_path, main_db_path)
                 return True, None
@@ -158,7 +158,7 @@ def register_endpoints(app, socketio, helpers):
                     return False, 'Backup file not found'
 
                 # Replace the main attendance database file with the backup
-                main_db_path = Path(__file__).parent / 'data' / 'attendance.db'
+                main_db_path = Path(__file__).resolve().parents[1] / 'data' / 'attendance.db'
                 import shutil
                 shutil.copy2(file_path, main_db_path)
                 return True, None
@@ -470,7 +470,7 @@ def register_endpoints(app, socketio, helpers):
         # Security: prevent directory traversal
         filename = Path(filename).name
 
-        backups_root = Path(__file__).parent / 'backups'
+            backups_root = Path(__file__).resolve().parents[1] / 'backups'
         if data_type == 'students':
             file_path = backups_root / 'students' / filename
         elif data_type == 'attendance':
@@ -581,7 +581,7 @@ def register_endpoints(app, socketio, helpers):
 
             # Also remove matching filesystem-level .db file if it exists
             try:
-                backups_root = Path(__file__).parent / 'backups'
+                backups_root = Path(__file__).resolve().parents[1] / 'backups'
                 dir_name = 'students' if data_type == 'students' else 'attendance'
                 file_path = backups_root / dir_name / filename
                 if file_path.exists():
@@ -636,7 +636,7 @@ def register_endpoints(app, socketio, helpers):
 
             # ---------- Delete all filesystem-level .db backup files ----------
             try:
-                backups_root = Path(__file__).parent / 'backups'
+                backups_root = Path(__file__).resolve().parents[1] / 'backups'
                 for sub in ['students', 'attendance']:
                     subdir = backups_root / sub
                     if subdir.exists():

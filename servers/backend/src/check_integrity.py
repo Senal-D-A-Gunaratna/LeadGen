@@ -84,7 +84,7 @@ def main():
     print()
     
     # Check passwords.json
-    passwords_path = Path(__file__).parent.parent / 'backend' / 'data' / 'passwords.json'
+    passwords_path = Path(__file__).resolve().parents[1] / 'data' / 'passwords.json'
     if passwords_path.exists():
         print(f"✅ passwords.json: File exists")
         try:

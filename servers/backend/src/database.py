@@ -11,8 +11,8 @@ import threading
 import time
 
 # Three separate database files
-DATA_DIR = Path(__file__).parent / 'data'
-DATA_DIR.mkdir(exist_ok=True)
+DATA_DIR = Path(__file__).resolve().parents[1] / 'data'
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 STUDENTS_DB_PATH = DATA_DIR / 'students.db'
 ATTENDANCE_DB_PATH = DATA_DIR / 'attendance.db'
@@ -20,8 +20,8 @@ LOGS_DB_PATH = DATA_DIR / 'logs.db'
 
 # Backups directory structure (filesystem-level .db copies)
 # Only students and attendance databases are backed up here.
-BACKUPS_DIR = Path(__file__).parent / 'backups'
-BACKUPS_DIR.mkdir(exist_ok=True)
+BACKUPS_DIR = Path(__file__).resolve().parents[1] / 'backups'
+BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
 
 DB_BACKUP_DIRS: Dict[str, Path] = {
     'students': BACKUPS_DIR / 'students',
