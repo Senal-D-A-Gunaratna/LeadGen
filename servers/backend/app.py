@@ -1614,6 +1614,28 @@ async def handle_get_student_by_id(sid, data):
         print('Hard-fail: get_student_by_id RPC removed; use HTTP GET /api/students/<id>')
     except Exception:
         pass
+
+
+@app.route('/api/students/<int:student_id>/summary', methods=['GET'])
+def http_get_student_summary(student_id):
+    """Return computed attendance summary for a student.
+
+    This provides the same functionality as the FastAPI `/api/students/{id}/summary`
+    endpoint and ensures the path is available when the application is run via
+    the Flask/Socket.IO ASGI wrapper (the default dev startup path).
+    """
+    try:
+        student = get_student_by_id(student_id)
+        if not student:
+            return jsonify({'success': False, 'message': 'Student not found'}), 404
+        try:
+            all_students = get_all_students_with_history()
+            summary = get_attendance_summary(student, all_students)
+        except Exception:
+            summary = None
+        return jsonify({'success': True, 'studentId': student_id, 'summary': summary})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error computing summary', 'error': str(e)}), 500
     await socketio.emit('student_by_id_response', {
         'success': False,
         'message': 'Removed: use HTTP GET /api/students/<id>'
