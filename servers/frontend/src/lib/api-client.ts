@@ -372,27 +372,8 @@ export async function downloadStudentAttendanceSummaryAsCsv(student: any): Promi
 
 export async function getStudentSummary(studentId: number) {
   // Use authoritative HTTP endpoint on FastAPI to get computed student summary.
-  try {
-    const res = await fetchAPI(`/api/students/${studentId}/summary`);
-    // API returns { success: True, studentId, summary }
-    return res;
-  } catch (err) {
-    // As a last resort, fall back to previous behavior: compute locally from /api/students
-    try {
-      console.debug('HTTP summary fetch failed, falling back to compute locally', err);
-      const studentResp = await fetchAPI(`/api/students/${studentId}`);
-      const allResp = await fetchAPI(`/api/students`);
-      const student = studentResp?.student;
-      const allStudents = allResp?.students || [];
-      if (!student) return { success: false, message: 'Student not found (HTTP fallback)' };
-      const utils = await import('./utils');
-      const summary = utils.getAttendanceSummary(student as any, allStudents as any[]);
-      return { success: true, studentId, summary };
-    } catch (httpErr) {
-      console.error('getStudentSummary fallback compute failed:', httpErr);
-      throw httpErr;
-    }
-  }
+  const res = await fetchAPI(`/api/students/${studentId}/summary`);
+  return res;
 }
 
 export async function getAllStudentsSummaries() {
@@ -411,6 +392,13 @@ export async function getAttendanceAggregate(opts: { month?: string; start?: str
   const qs = params.toString() ? `?${params.toString()}` : '';
   const result = await fetchAPI(`/api/attendance/aggregate${qs}`);
   return result;
+}
+
+// Static filters (grades/classes/roles) - authoritative HTTP endpoint on FastAPI
+export async function getStaticFilters() {
+  const result = await fetchAPI('/api/static-filters');
+  // Expecting: { grades: string[], classes: string[], roles: string[] }
+  return result || { grades: [], classes: [], roles: [] };
 }
 
 // PDF exports

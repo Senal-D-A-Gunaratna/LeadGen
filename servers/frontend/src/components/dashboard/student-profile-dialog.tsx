@@ -11,7 +11,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { MonthYearSelector } from "@/components/ui/month-year-selector";
-import { wsClient } from "@/lib/websocket-client";
 import { syncClient } from "@/lib/sync-client";
 import type { Student, AttendanceStatus, PrefectRole } from "@/lib/types";
 import { Mail, Phone, GraduationCap, Trash2, Loader2, Save, Pencil, UserCheck, Clock, UserX, Edit, Download, FileText, Fingerprint, File as FileIcon, ChevronLeft, ChevronRight, TrendingUp, Calendar as CalendarIcon } from "lucide-react";
@@ -45,7 +44,7 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { parseDate } from "@/lib/utils";
 import { format } from "date-fns";
-import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend, getAttendanceAggregate } from "@/lib/api-client";
+import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend, getAttendanceAggregate, getStaticFilters } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
 import { downloadStudentAttendanceSummaryAsCsvAction, downloadStudentAttendanceSummaryAsPdfAction } from "@/app/actions";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
@@ -201,7 +200,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
   useEffect(() => {
     let mounted = true;
     if (!open) return;
-    wsClient.getStaticFilters().then((resp) => {
+    getStaticFilters().then((resp) => {
       if (!mounted) return;
       if (resp.grades && resp.grades.length) setGradeOptions(resp.grades);
       if (resp.classes && resp.classes.length) setClassOptions(resp.classes);
@@ -521,6 +520,66 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     }
   }, [open]);
 
+  // Always refresh authoritative student data when opening the profile.
+  useEffect(() => {
+    if (!open || !student) return;
+    (async () => {
+      try {
+        const year = displayedMonth.getFullYear();
+        const monthZero = displayedMonth.getMonth();
+        const key = formatTrendKey(student.id, year, monthZero + 1);
+        attendanceTrendCache.current.delete(key);
+        await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+
+        try {
+          const mon = displayedMonth.getMonth() + 1;
+          const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
+          const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
+          const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
+          setStudentMonthlyHistory(hist);
+        } catch (e) {
+          console.warn('Failed to fetch student monthly attendance on open', e);
+          setStudentMonthlyHistory(null);
+        }
+
+        try {
+          const res = await getStudentSummary(student.id);
+          const s = res?.summary;
+          if (s) {
+            updateStudentSummaries([{
+              studentId: student.id,
+              summary: {
+                totalSchoolDays: s.totalSchoolDays,
+                presentDays: s.presentDays,
+                absentDays: s.absentDays,
+                onTimeDays: s.onTimeDays,
+                lateDays: s.lateDays,
+                presencePercentage: s.presencePercentage,
+                absencePercentage: s.absencePercentage,
+                onTimePercentage: s.onTimePercentage,
+                latePercentage: s.latePercentage,
+              }
+            }]);
+            setAttendanceStats({
+              onTimeCount: s.onTimeDays,
+              lateCount: s.lateDays,
+              absentCount: s.absentDays,
+              onTimePercentage: s.onTimePercentage,
+              latePercentage: s.latePercentage,
+              absentPercentage: s.absencePercentage,
+              overallPercentage: s.presencePercentage,
+              totalSchoolDays: s.totalSchoolDays,
+            });
+          }
+        } catch (e) {
+          console.error('Failed to fetch student summary on open', e);
+        }
+      } catch (e) {
+        console.warn('Failed to refresh student profile data on open', e);
+      }
+    })();
+  }, [open, student, displayedMonth]);
+
   const [attendanceStats, setAttendanceStats] = useState<any | null>(null);
 
   // Month aggregate check state (copied logic from attendance-history-tab)
@@ -534,18 +593,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const [trendError, setTrendError] = useState<boolean>(false);
   const [attendanceTrend, setAttendanceTrend] = useState<any[] | null>(null);
   const attendanceTrendCache = useRef<Map<string, any[]>>(new Map());
-  const [wsConnected, setWsConnected] = useState<boolean>(wsClient.isConnected());
   const [studentMonthlyHistory, setStudentMonthlyHistory] = useState<any[] | null>(null);
   const monthlyHistoryFetchRef = useRef<number | null>(null);
 
   // Single top-level flag indicating whether student monthly history exists
   const hasMonthlyHistory = Array.isArray(studentMonthlyHistory) && studentMonthlyHistory.length > 0;
 
-  useEffect(() => {
-    const connHandler = (connected: boolean) => setWsConnected(Boolean(connected));
-    wsClient.on('connection', connHandler);
-    return () => wsClient.off('connection', connHandler);
-  }, []);
+  // No local websocket connection listeners — profile data is fetched via HTTP
+  // and updated via `syncClient` push events elsewhere in this component.
 
   const fetchMonthAggregate = async (month: Date) => {
     if (fetchTimerRef.current) window.clearTimeout(fetchTimerRef.current);
