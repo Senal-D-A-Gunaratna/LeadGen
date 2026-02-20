@@ -604,6 +604,112 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   // No local websocket connection listeners — profile data is fetched via HTTP
   // and updated via `syncClient` push events elsewhere in this component.
 
+  // Listen to `syncClient` high-level events and refresh the currently
+  // displayed student's data (trend, monthly history, summary) when
+  // relevant backend changes occur.
+  useEffect(() => {
+    if (!student) return;
+
+    const tryRefetchForStudent = async (reason?: string, payload?: any) => {
+      try {
+        const year = displayedMonth.getFullYear();
+        const monthZero = displayedMonth.getMonth();
+        // Refresh trend
+        const key = formatTrendKey(student.id, year, monthZero + 1);
+        attendanceTrendCache.current.delete(key);
+        await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+
+        // Refresh monthly history
+        try {
+          const mon = displayedMonth.getMonth() + 1;
+          const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
+          const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
+          const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
+          setStudentMonthlyHistory(hist);
+        } catch (e) {
+          console.warn('sync refresh: failed to fetch monthly attendance', e);
+        }
+
+        // Refresh summary
+        try {
+          const res = await getStudentSummary(student.id);
+          const s = res?.summary;
+          if (s) {
+            updateStudentSummaries([{
+              studentId: student.id,
+              summary: {
+                totalSchoolDays: s.totalSchoolDays,
+                presentDays: s.presentDays,
+                absentDays: s.absentDays,
+                onTimeDays: s.onTimeDays,
+                lateDays: s.lateDays,
+                presencePercentage: s.presencePercentage,
+                absencePercentage: s.absencePercentage,
+                onTimePercentage: s.onTimePercentage,
+                latePercentage: s.latePercentage,
+              }
+            }]);
+            setAttendanceStats({
+              onTimeCount: s.onTimeDays,
+              lateCount: s.lateDays,
+              absentCount: s.absentDays,
+              onTimePercentage: s.onTimePercentage,
+              latePercentage: s.latePercentage,
+              absentPercentage: s.absencePercentage,
+              overallPercentage: s.presencePercentage,
+              totalSchoolDays: s.totalSchoolDays,
+            });
+          }
+        } catch (e) {
+          console.warn('sync refresh: failed to fetch student summary', e);
+        }
+      } catch (e) {
+        console.error('sync refresh error', e);
+      }
+    };
+
+    const handler = (event: string, payload?: any) => {
+      try {
+        if (!student) return;
+        // Events that may affect a student's profile
+        if (event === 'student_summary' && payload?.studentId === student.id) {
+          tryRefetchForStudent('student_summary', payload);
+          return;
+        }
+
+        if (event === 'attendance_updated') {
+          const ids: number[] = payload?.affectedIds || payload?.data?.affectedIds || [];
+          if (ids.length === 0 || ids.includes(student.id)) {
+            tryRefetchForStudent('attendance_updated', payload);
+          }
+          return;
+        }
+
+        if (event === 'data_changed') {
+          const type = payload?.type || payload?.data?.type || null;
+          const ids: number[] = payload?.data?.affectedIds || payload?.affectedIds || [];
+          if (type === 'attendance_db_changed' || type === 'attendance_updated' || type === 'student_updated' || type === 'student_added' || type === 'student_removed') {
+            tryRefetchForStudent('data_changed', payload);
+            return;
+          }
+          if (Array.isArray(ids) && ids.includes(student.id)) {
+            tryRefetchForStudent('data_changed', payload);
+            return;
+          }
+        }
+
+        if (event === 'students_refreshed') {
+          const ids: number[] = payload?.students?.map((s: any) => s.id) || [];
+          if (ids.includes(student.id)) tryRefetchForStudent('students_refreshed', payload);
+        }
+      } catch (e) {
+        console.error('sync handler error', e);
+      }
+    };
+
+    try { syncClient.on(handler); } catch (e) {}
+    return () => { try { syncClient.off(handler); } catch (e) {} };
+  }, [student, displayedMonth]);
   const fetchMonthAggregate = async (month: Date) => {
     if (fetchTimerRef.current) window.clearTimeout(fetchTimerRef.current);
     return new Promise<void>((resolve) => {
