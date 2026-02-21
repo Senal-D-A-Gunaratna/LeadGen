@@ -2469,15 +2469,15 @@ def _worker_loop() -> None:
                     else:
                         id_map = {s['id']: s for s in students}
                         for sid in affected:
-                            student = id_map.get(sid)
-                            if not student:
+                            srec = id_map.get(sid)
+                            if not srec:
                                 continue
-                            summary = get_attendance_summary(student, students)
+                            summary = get_attendance_summary(srec, students)
                             summaries.append({
-                                'studentId': student['id'],
-                                'name': student['name'],
-                                'grade': student['grade'],
-                                'className': student['className'],
+                                'studentId': srec['id'],
+                                'name': srec['name'],
+                                'grade': srec['grade'],
+                                'className': srec['className'],
                                 'summary': summary
                             })
                 except Exception:
