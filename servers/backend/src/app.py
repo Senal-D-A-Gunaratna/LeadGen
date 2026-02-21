@@ -206,29 +206,37 @@ def broadcast_data_change(event_type: str, data: Optional[dict] = None):
     except Exception:
         pass
     payload = {'type': event_type, 'data': data or {}}
-
     async def _emit(payload):
         try:
             await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
-        except TypeError:
-            try:
-                await socketio.emit('data_changed', payload, namespace='/')
-            except Exception as e:
-                try:
-                    print(f"[broadcast] failed to emit data_changed: {e}")
-                except Exception:
-                    pass
         except Exception as e:
             try:
                 print(f"[broadcast] failed to emit data_changed: {e}")
             except Exception:
                 pass
 
-    try:
-        socketio.start_background_task(_emit, payload)
-    except Exception as e:
+    # Prefer the stored main loop for thread-safe scheduling when available
+    global _main_event_loop
+    if _main_event_loop is not None:
         try:
-            print(f"[broadcast] failed to schedule data_changed task: {e}")
+            asyncio.run_coroutine_threadsafe(_emit(payload), _main_event_loop)
+            return
+        except Exception:
+            pass
+
+    try:
+        main_loop = asyncio.get_event_loop()
+        try:
+            asyncio.run_coroutine_threadsafe(_emit(payload), main_loop)
+            return
+        except Exception as e:
+            try:
+                print(f"[broadcast] failed to schedule data_changed task: {e}")
+            except Exception:
+                pass
+    except Exception:
+        try:
+            print('[broadcast] failed to schedule data_changed task: no event loop available')
         except Exception:
             pass
 
@@ -333,14 +341,11 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     except Exception:
         pass
 
-    # Fallback: try socketio.start_background_task (best-effort)
     try:
-        socketio.start_background_task(lambda ids=affected_student_ids: None, affected_student_ids)
+        # If we reach here, scheduling failed — log once for diagnostics.
+        print('[broadcast] failed to schedule summary_update task')
     except Exception:
-        try:
-            print('[broadcast] failed to schedule summary_update task (fallback)')
-        except Exception:
-            pass
+        pass
 
 
 def compute_static_filters_from_db() -> Dict[str, List[str]]:
@@ -2568,9 +2573,8 @@ async def _db_event_processor():
             try:
                 await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
             except Exception:
-                # Best-effort fallback: try socketio.start_background_task from loop
                 try:
-                    socketio.start_background_task(lambda p=payload: None, payload)
+                    print(f"[broadcast] failed to emit data_changed from _db_event_processor")
                 except Exception:
                     pass
 
