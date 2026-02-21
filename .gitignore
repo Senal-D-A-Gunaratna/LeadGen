@@ -38,10 +38,10 @@ servers/backend/*.egg
 servers/backend/pip-log.txt
 servers/backend/pip-delete-this-directory.txt
 servers/backend/backend.log
-servers/backend/__pycache__/
+servers/backend/__pycache__
 
 # Compiled files for moved `src` package
-servers/backend/src/__pycache__/
+servers/backend/src/__pycache__
 servers/backend/src/*.pyc
 servers/backend/src/*.pyo
 
