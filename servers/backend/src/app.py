@@ -15,6 +15,8 @@ from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Optional
 from .database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count, register_post_mtime_change_callback, start_attendance_watcher
 import asyncio
+import threading
+import queue
 from .config import ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END, GRADES as CANONICAL_GRADES, PREFECT_ROLES as CANONICAL_PREFECT_ROLES, CLASSES as CANONICAL_CLASSES
 from .utils import compute_attendance_status
 import csv
@@ -206,27 +208,16 @@ def broadcast_data_change(event_type: str, data: Optional[dict] = None):
     except Exception:
         pass
     payload = {'type': event_type, 'data': data or {}}
-    # Enqueue the payload to the broadcast queue so a dedicated async
-    # processor publishes `data_changed` events sequentially. This
-    # prevents races and avoid scheduling emits directly from threads.
-    global _main_event_loop, _broadcast_event_queue
+    # Enqueue an emit-only task for the worker thread. The worker will
+    # schedule the actual Socket.IO emits on the main asyncio loop so
+    # background threads never call asyncio APIs directly.
     try:
-        if _main_event_loop is not None:
-            _main_event_loop.call_soon_threadsafe(_broadcast_event_queue.put_nowait, payload)
-            return
-        # Try obtaining a loop from the policy as a fallback
+        _work_queue.put({'action': 'emit_data_changed', 'payload': payload})
+    except Exception:
         try:
-            loop = asyncio.get_event_loop_policy().get_event_loop()
-            loop.call_soon_threadsafe(_broadcast_event_queue.put_nowait, payload)
-            return
+            print('[broadcast] failed to enqueue data_changed task')
         except Exception:
             pass
-    except Exception:
-        pass
-    try:
-        print('[broadcast] failed to enqueue data_changed: no event loop available')
-    except Exception:
-        pass
 
 def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     """Broadcast updated attendance summaries for affected students or all if None.
@@ -236,104 +227,15 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     computation is performed in a thread to avoid blocking the loop.
     """
 
-    async def _compute_and_emit(affected_ids: Optional[list[int]]):
-        # Compute summaries in a background thread to avoid blocking the loop
-        def _compute():
-            summaries = []
-            if affected_ids is None:
-                students = get_all_students_with_history()
-                for student in students:
-                    summary = get_attendance_summary(student, students)
-                    summaries.append({
-                        'studentId': student['id'],
-                        'name': student['name'],
-                        'grade': student['grade'],
-                        'className': student['className'],
-                        'summary': summary
-                    })
-            else:
-                # Compute only for affected IDs
-                students = get_all_students_with_history()
-                id_map = {s['id']: s for s in students}
-                for sid in affected_ids:
-                    student = id_map.get(sid)
-                    if not student:
-                        continue
-                    summary = get_attendance_summary(student, students)
-                    summaries.append({
-                        'studentId': student['id'],
-                        'name': student['name'],
-                        'grade': student['grade'],
-                        'className': student['className'],
-                        'summary': summary
-                    })
-            return summaries
-
-        try:
-            summaries = await asyncio.to_thread(_compute)
-        except Exception:
-            summaries = []
-
-        try:
-            print(f"[broadcast] scheduling summary_update -> summaries_count={len(summaries)}")
-        except Exception:
-            pass
-
-        payload = {'summaries': summaries}
-
-        try:
-            await socketio.emit('summary_update', payload, namespace='/', broadcast=True)
-        except TypeError:
-            try:
-                await socketio.emit('summary_update', payload, namespace='/')
-            except Exception as e:
-                try:
-                    print(f"[broadcast] failed to emit summary_update: {e}")
-                except Exception:
-                    pass
-        except Exception as e:
-            try:
-                print(f"[broadcast] failed to emit summary_update: {e}")
-            except Exception:
-                pass
-
-    # Schedule on the running event loop if available, otherwise submit
-    # to the main loop so calls from threads or synchronous endpoints
-    # are handled safely.
+    # Enqueue a work item so the worker thread computes summaries and
+    # schedules the summary emit on the main asyncio loop when ready.
     try:
-        loop = asyncio.get_running_loop()
-        # We're on the event loop — create a task
-        loop.create_task(_compute_and_emit(affected_student_ids))
-        return
-    except RuntimeError:
-        pass
-
-    # If we're called from another thread, prefer the stored main event
-    # loop (set by `setup_db_mtime_handler`) rather than relying on
-    # thread-local get_event_loop which raises in non-loop threads.
-    global _main_event_loop
-    if _main_event_loop is not None:
-        try:
-            asyncio.run_coroutine_threadsafe(_compute_and_emit(affected_student_ids), _main_event_loop)
-            return
-        except Exception:
-            pass
-
-    try:
-        main_loop = asyncio.get_event_loop()
-        try:
-            asyncio.run_coroutine_threadsafe(_compute_and_emit(affected_student_ids), main_loop)
-            return
-        except Exception:
-            pass
+        _work_queue.put({'action': 'recalculate_and_broadcast', 'affected_ids': affected_student_ids})
     except Exception:
-        pass
-
-    try:
-        # If we reach here, scheduling failed — log once for diagnostics.
-        print('[broadcast] failed to schedule summary_update task')
-    except Exception:
-        pass
+        try:
+            print('[broadcast] failed to enqueue summary_update task')
+        except Exception:
+            pass
 
 
 def compute_static_filters_from_db() -> Dict[str, List[str]]:
@@ -2516,14 +2418,117 @@ from .api_endpoints import register_endpoints
 # An async processor consumes the queue, performs `recalculate_school_days`
 # off-thread and then publishes updates to connected clients from the
 # event loop (so Async Socket.IO emits run in the proper loop).
-_db_event_queue: "asyncio.Queue[bool]" = asyncio.Queue()
-_db_event_processor_task: Optional[asyncio.Task] = None
-# Store the main event loop reference so thread callbacks can schedule
-# work safely without calling asyncio.get_event_loop() from non-loop threads.
+# Thread-based work queue for update/recalc tasks (worker thread consumes)
+_work_queue: "queue.Queue[dict]" = queue.Queue()
+_worker_thread: Optional[threading.Thread] = None
+
+# Store the main asyncio event loop so worker threads can schedule emits
+# via `call_soon_threadsafe` without depending on thread-local loops.
 _main_event_loop: Optional[asyncio.AbstractEventLoop] = None
-# Queue for serializing `data_changed` broadcasts so they don't race or loop
-_broadcast_event_queue: "asyncio.Queue[dict]" = asyncio.Queue()
-_broadcast_event_processor_task: Optional[asyncio.Task] = None
+
+
+def _worker_loop() -> None:
+    """Worker thread: consume work items and schedule emits on the main loop.
+
+    Work item shape (dict):
+      - action: 'recalculate_and_broadcast' | 'emit_data_changed'
+      - affected_ids: Optional[list[int]]  (for recalc)
+      - payload: dict (for emit_data_changed)
+    """
+    while True:
+        try:
+            task = _work_queue.get()
+        except Exception:
+            break
+        try:
+            if task is None:
+                break
+            action = task.get('action')
+            if action == 'recalculate_and_broadcast':
+                affected = task.get('affected_ids')
+                try:
+                    # Perform authoritative recalculation (blocking)
+                    recalculate_school_days()
+                except Exception:
+                    pass
+
+                # Compute summaries (blocking) using existing helpers
+                try:
+                    summaries = []
+                    students = get_all_students_with_history()
+                    if affected is None:
+                        for student in students:
+                            summary = get_attendance_summary(student, students)
+                            summaries.append({
+                                'studentId': student['id'],
+                                'name': student['name'],
+                                'grade': student['grade'],
+                                'className': student['className'],
+                                'summary': summary
+                            })
+                    else:
+                        id_map = {s['id']: s for s in students}
+                        for sid in affected:
+                            student = id_map.get(sid)
+                            if not student:
+                                continue
+                            summary = get_attendance_summary(student, students)
+                            summaries.append({
+                                'studentId': student['id'],
+                                'name': student['name'],
+                                'grade': student['grade'],
+                                'className': student['className'],
+                                'summary': summary
+                            })
+                except Exception:
+                    summaries = []
+
+                data_payload = {'type': 'attendance_db_changed', 'data': {}}
+                summary_payload = {'summaries': summaries}
+
+                # Schedule emits on the main asyncio loop
+                loop = _main_event_loop
+                if loop is None:
+                    try:
+                        print('[worker] main event loop not set; cannot emit')
+                    except Exception:
+                        pass
+                else:
+                    def _schedule():
+                        try:
+                            asyncio.create_task(socketio.emit('data_changed', data_payload, namespace='/', broadcast=True))
+                            asyncio.create_task(socketio.emit('summary_update', summary_payload, namespace='/', broadcast=True))
+                        except Exception:
+                            pass
+                    try:
+                        loop.call_soon_threadsafe(_schedule)
+                    except Exception:
+                        pass
+
+            elif action == 'emit_data_changed':
+                payload = task.get('payload', {'type': 'custom', 'data': {}})
+                loop = _main_event_loop
+                if loop is None:
+                    try:
+                        print('[worker] main event loop not set; cannot emit data_changed')
+                    except Exception:
+                        pass
+                else:
+                    def _schedule_emit():
+                        try:
+                            asyncio.create_task(socketio.emit('data_changed', payload, namespace='/', broadcast=True))
+                        except Exception:
+                            pass
+                    try:
+                        loop.call_soon_threadsafe(_schedule_emit)
+                    except Exception:
+                        pass
+
+        finally:
+            try:
+                _work_queue.task_done()
+            except Exception:
+                pass
 
 
 def _db_watcher_thread_callback() -> None:
@@ -2544,91 +2549,40 @@ def _db_watcher_thread_callback() -> None:
             except Exception:
                 return
     try:
-        loop.call_soon_threadsafe(_db_event_queue.put_nowait, True)
+        # Enqueue a work item for the worker thread to perform the
+        # authoritative recalculation and broadcasting. Keep this
+        # callback tiny and thread-safe.
+        _work_queue.put({'action': 'recalculate_and_broadcast', 'affected_ids': None})
     except Exception:
         pass
 
 
-async def _db_event_processor():
-    while True:
-        try:
-            await _db_event_queue.get()
-            # Perform recalculation in a thread to avoid blocking the event loop
-            try:
-                await asyncio.to_thread(recalculate_school_days)
-            except Exception:
-                pass
+# NOTE: The DB watcher now enqueues work to the thread-based `_work_queue`
+# and the worker thread performs recalculation and schedules emits on
+# the main asyncio loop. The previous async processors were removed.
 
-            # Enqueue a concise db-changed event to the broadcast queue
-            try:
-                broadcast_data_change('attendance_db_changed', {})
-            except Exception:
-                try:
-                    print('[broadcast] failed to enqueue attendance_db_changed from _db_event_processor')
-                except Exception:
-                    pass
-
-            # Also publish summary update (existing helper will schedule its work)
-            try:
-                broadcast_summary_update(None)
-            except Exception:
-                pass
-        except asyncio.CancelledError:
-            break
-        except Exception:
-            await asyncio.sleep(0.5)
-
-
-async def _broadcast_event_processor():
-    """Consume the broadcast queue and emit `data_changed` events sequentially.
-
-    Serializing emits through a single async task prevents races and
-    avoids scheduling work from background threads directly on the
-    socketio server.
-    """
-    while True:
-        try:
-            payload = await _broadcast_event_queue.get()
-            try:
-                await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
-            except Exception as e:
-                try:
-                    print(f"[broadcast] failed to emit data_changed: {e}")
-                except Exception:
-                    pass
-        except asyncio.CancelledError:
-            break
-        except Exception:
-            await asyncio.sleep(0.5)
 
 
 def setup_db_mtime_handler(loop: Optional[asyncio.AbstractEventLoop] = None):
     """Initialize DB mtime handling: start the watcher and ensure the
     async processor is running on the given `loop` (or current loop).
     """
-    global _db_event_processor_task
-    global _main_event_loop
+    global _main_event_loop, _worker_thread
     if loop is None:
         try:
             loop = asyncio.get_event_loop()
         except Exception:
             return
-    # Remember this loop so thread callbacks can safely post work to it
+    # Remember this loop so worker threads can post emits to it
     try:
         _main_event_loop = loop
     except Exception:
         pass
-    # Ensure the processor task is running in the provided loop
+    # Ensure the background worker thread is running
     try:
-        if _db_event_processor_task is None or _db_event_processor_task.done():
-            _db_event_processor_task = loop.create_task(_db_event_processor())
-    except Exception:
-        pass
-    # Ensure broadcast processor is running on the same loop
-    global _broadcast_event_processor_task
-    try:
-        if _broadcast_event_processor_task is None or _broadcast_event_processor_task.done():
-            _broadcast_event_processor_task = loop.create_task(_broadcast_event_processor())
+        if _worker_thread is None or not _worker_thread.is_alive():
+            _worker_thread = threading.Thread(target=_worker_loop, name='summary-worker', daemon=True)
+            _worker_thread.start()
     except Exception:
         pass
 
@@ -2704,14 +2658,10 @@ if __name__ == '__main__':
                     if last_mtime is None:
                         last_mtime = mtime
                     elif mtime is not None and mtime != last_mtime:
-                        # File changed externally: recalc school days and broadcast updates
+                        # File changed externally: enqueue a worker task to
+                        # perform recalculation and broadcasting.
                         try:
-                            recalculate_school_days()
-                        except Exception:
-                            pass
-                        try:
-                            broadcast_data_change('attendance_db_changed', {})
-                            broadcast_summary_update(None)
+                            _work_queue.put({'action': 'recalculate_and_broadcast', 'affected_ids': None})
                         except Exception:
                             pass
                         last_mtime = mtime

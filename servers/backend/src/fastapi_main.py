@@ -158,9 +158,14 @@ async def _startup_watchers():
     try:
         import asyncio
         try:
-            flask_app.setup_db_mtime_handler(asyncio.get_event_loop())
+            # Use the running ASGI event loop so the backend stores the
+            # correct loop for thread -> asyncio callbacks.
+            flask_app.setup_db_mtime_handler(asyncio.get_running_loop())
         except Exception:
-            pass
+            try:
+                flask_app.setup_db_mtime_handler(asyncio.get_event_loop())
+            except Exception:
+                pass
     except Exception:
         pass
 
