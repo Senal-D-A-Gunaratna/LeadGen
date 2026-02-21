@@ -539,6 +539,22 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const [studentMonthlyHistory, setStudentMonthlyHistory] = useState<any[] | null>(null);
   const monthlyHistoryFetchRef = useRef<number | null>(null);
 
+  // If the server provides embedded attendanceHistory on the `student` prop,
+  // prefer that as the immediate source for calendar modifiers so the
+  // calendar shows statuses (absent/late/on time) without waiting for an
+  // additional HTTP round-trip. This will be superseded by the HTTP fetch
+  // shortly after but provides an immediate, accurate view when available.
+  useEffect(() => {
+    if (!student) {
+      setStudentMonthlyHistory(null);
+      return;
+    }
+    const embedded = (student as any).attendanceHistory || (student as any).attendance_history;
+    if (Array.isArray(embedded) && embedded.length > 0) {
+      setStudentMonthlyHistory(embedded);
+    }
+  }, [student]);
+
   // Always refresh authoritative student data when opening the profile.
   useEffect(() => {
     if (!open || !student) return;
