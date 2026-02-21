@@ -277,6 +277,14 @@ export function ManualAttendanceTab() {
           if (Number.isNaN(id)) return;
           const status = changeObj?.status;
           if (!status || status === 'null') return;
+
+          const statusLower = String(status).toLowerCase();
+          // For 'absent' we never send a time — only status + date.
+          if (statusLower === 'absent') {
+            changesToSave[id] = status;
+            return;
+          }
+
           if (changeObj.checkInTime && selectedDateStr) {
             const timePart = changeObj.checkInTime;
             const iso = `${selectedDateStr}T${timePart}:00`;

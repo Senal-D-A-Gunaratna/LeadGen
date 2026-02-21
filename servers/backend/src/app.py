@@ -1694,8 +1694,14 @@ async def handle_save_attendance(sid, data):
                 await socketio.emit('save_attendance_response', {'success': False, 'message': 'Weekend attendance cannot be marked, Please select a weekday (Monday-Friday)'}, to=sid)
                 return
             
-            supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
-            check_in_time = supplied_check_in if supplied_check_in else datetime.now().isoformat()
+            # Normalize status and ensure absent records never carry a time.
+            status_val = (record.get('status') or '').strip().lower()
+            if status_val == 'absent':
+                check_in_time = None
+            else:
+                supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
+                check_in_time = supplied_check_in if supplied_check_in else datetime.now().isoformat()
+
             inserts.append((
                 student_id,
                 parsed_date.isoformat(),
@@ -1760,8 +1766,14 @@ def api_save_attendance():
             if parsed_date.weekday() >= 5:
                 return jsonify({'success': False, 'message': 'Weekend attendance cannot be marked. Please select a weekday (Monday-Friday).'}), 400
 
-            supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
-            check_in_time = supplied_check_in if supplied_check_in else datetime.now(timezone.utc).isoformat()
+            # Normalize status and ensure absent records never carry a time.
+            status_val = (record.get('status') or '').strip().lower()
+            if status_val == 'absent':
+                check_in_time = None
+            else:
+                supplied_check_in = record.get('checkInTime') or record.get('check_in_time')
+                check_in_time = supplied_check_in if supplied_check_in else datetime.now(timezone.utc).isoformat()
+
             inserts.append((
                 student_id,
                 parsed_date.isoformat(),

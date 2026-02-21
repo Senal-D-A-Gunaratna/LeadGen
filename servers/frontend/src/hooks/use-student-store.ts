@@ -319,6 +319,11 @@ export const useStudentStore = create<StudentStore>()(
                   checkInTime = (change as any).checkInTime;
                 }
 
+                // Ensure absent records do not keep a checkInTime even if provided
+                if (typeof newStatus === 'string' && String(newStatus).toLowerCase() === 'absent') {
+                  checkInTime = undefined;
+                }
+
                 if (recordIndex !== -1) {
                   history[recordIndex] = { ...history[recordIndex], status: newStatus };
                   if (checkInTime !== undefined) {
