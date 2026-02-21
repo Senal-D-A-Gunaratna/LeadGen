@@ -320,6 +320,14 @@ export function AttendanceHistoryTab() {
       base = [];
     }
 
+    // Ensure grades render from smallest (top) to largest (bottom).
+    // Extract numeric portion from labels like "Grade 1" and sort ascending.
+    const extractNum = (g: string) => {
+      const m = String(g).match(/(\d+)/);
+      return m ? Number(m[1]) : Number.MAX_SAFE_INTEGER;
+    };
+    base.sort((a, b) => extractNum(a.grade) - extractNum(b.grade));
+
     // When a specific status filter is active, hide grades with zero count for that status
     const sf = (statusFilter || 'all').toLowerCase();
     if (sf === 'all') return base;
