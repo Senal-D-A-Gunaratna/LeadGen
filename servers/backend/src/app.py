@@ -206,39 +206,27 @@ def broadcast_data_change(event_type: str, data: Optional[dict] = None):
     except Exception:
         pass
     payload = {'type': event_type, 'data': data or {}}
-    async def _emit(payload):
-        try:
-            await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
-        except Exception as e:
-            try:
-                print(f"[broadcast] failed to emit data_changed: {e}")
-            except Exception:
-                pass
-
-    # Prefer the stored main loop for thread-safe scheduling when available
-    global _main_event_loop
-    if _main_event_loop is not None:
-        try:
-            asyncio.run_coroutine_threadsafe(_emit(payload), _main_event_loop)
-            return
-        except Exception:
-            pass
-
+    # Enqueue the payload to the broadcast queue so a dedicated async
+    # processor publishes `data_changed` events sequentially. This
+    # prevents races and avoid scheduling emits directly from threads.
+    global _main_event_loop, _broadcast_event_queue
     try:
-        main_loop = asyncio.get_event_loop()
-        try:
-            asyncio.run_coroutine_threadsafe(_emit(payload), main_loop)
+        if _main_event_loop is not None:
+            _main_event_loop.call_soon_threadsafe(_broadcast_event_queue.put_nowait, payload)
             return
-        except Exception as e:
-            try:
-                print(f"[broadcast] failed to schedule data_changed task: {e}")
-            except Exception:
-                pass
-    except Exception:
+        # Try obtaining a loop from the policy as a fallback
         try:
-            print('[broadcast] failed to schedule data_changed task: no event loop available')
+            loop = asyncio.get_event_loop_policy().get_event_loop()
+            loop.call_soon_threadsafe(_broadcast_event_queue.put_nowait, payload)
+            return
         except Exception:
             pass
+    except Exception:
+        pass
+    try:
+        print('[broadcast] failed to enqueue data_changed: no event loop available')
+    except Exception:
+        pass
 
 def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     """Broadcast updated attendance summaries for affected students or all if None.
@@ -2533,6 +2521,9 @@ _db_event_processor_task: Optional[asyncio.Task] = None
 # Store the main event loop reference so thread callbacks can schedule
 # work safely without calling asyncio.get_event_loop() from non-loop threads.
 _main_event_loop: Optional[asyncio.AbstractEventLoop] = None
+# Queue for serializing `data_changed` broadcasts so they don't race or loop
+_broadcast_event_queue: "asyncio.Queue[dict]" = asyncio.Queue()
+_broadcast_event_processor_task: Optional[asyncio.Task] = None
 
 
 def _db_watcher_thread_callback() -> None:
@@ -2568,13 +2559,12 @@ async def _db_event_processor():
             except Exception:
                 pass
 
-            # Publish a concise db-changed event to clients
-            payload = {'type': 'attendance_db_changed', 'data': {}}
+            # Enqueue a concise db-changed event to the broadcast queue
             try:
-                await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
+                broadcast_data_change('attendance_db_changed', {})
             except Exception:
                 try:
-                    print(f"[broadcast] failed to emit data_changed from _db_event_processor")
+                    print('[broadcast] failed to enqueue attendance_db_changed from _db_event_processor')
                 except Exception:
                     pass
 
@@ -2583,6 +2573,29 @@ async def _db_event_processor():
                 broadcast_summary_update(None)
             except Exception:
                 pass
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            await asyncio.sleep(0.5)
+
+
+async def _broadcast_event_processor():
+    """Consume the broadcast queue and emit `data_changed` events sequentially.
+
+    Serializing emits through a single async task prevents races and
+    avoids scheduling work from background threads directly on the
+    socketio server.
+    """
+    while True:
+        try:
+            payload = await _broadcast_event_queue.get()
+            try:
+                await socketio.emit('data_changed', payload, namespace='/', broadcast=True)
+            except Exception as e:
+                try:
+                    print(f"[broadcast] failed to emit data_changed: {e}")
+                except Exception:
+                    pass
         except asyncio.CancelledError:
             break
         except Exception:
@@ -2609,6 +2622,13 @@ def setup_db_mtime_handler(loop: Optional[asyncio.AbstractEventLoop] = None):
     try:
         if _db_event_processor_task is None or _db_event_processor_task.done():
             _db_event_processor_task = loop.create_task(_db_event_processor())
+    except Exception:
+        pass
+    # Ensure broadcast processor is running on the same loop
+    global _broadcast_event_processor_task
+    try:
+        if _broadcast_event_processor_task is None or _broadcast_event_processor_task.done():
+            _broadcast_event_processor_task = loop.create_task(_broadcast_event_processor())
     except Exception:
         pass
 
