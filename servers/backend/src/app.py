@@ -312,6 +312,17 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     except RuntimeError:
         pass
 
+    # If we're called from another thread, prefer the stored main event
+    # loop (set by `setup_db_mtime_handler`) rather than relying on
+    # thread-local get_event_loop which raises in non-loop threads.
+    global _main_event_loop
+    if _main_event_loop is not None:
+        try:
+            asyncio.run_coroutine_threadsafe(_compute_and_emit(affected_student_ids), _main_event_loop)
+            return
+        except Exception:
+            pass
+
     try:
         main_loop = asyncio.get_event_loop()
         try:
@@ -2514,6 +2525,9 @@ from .api_endpoints import register_endpoints
 # event loop (so Async Socket.IO emits run in the proper loop).
 _db_event_queue: "asyncio.Queue[bool]" = asyncio.Queue()
 _db_event_processor_task: Optional[asyncio.Task] = None
+# Store the main event loop reference so thread callbacks can schedule
+# work safely without calling asyncio.get_event_loop() from non-loop threads.
+_main_event_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 def _db_watcher_thread_callback() -> None:
@@ -2522,14 +2536,17 @@ def _db_watcher_thread_callback() -> None:
     This should be very small and must not block: it schedules a put into
     the main event loop's queue using `call_soon_threadsafe`.
     """
-    try:
-        loop = asyncio.get_event_loop()
-    except Exception:
-        # No loop in this thread — try to find a running loop via the default policy
+    global _main_event_loop
+    loop = _main_event_loop
+    if loop is None:
+        # Try a safe, non-raising attempt to obtain a loop from the policy
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_event_loop_policy().get_event_loop()
         except Exception:
-            return
+            try:
+                loop = asyncio.get_event_loop()
+            except Exception:
+                return
     try:
         loop.call_soon_threadsafe(_db_event_queue.put_nowait, True)
     except Exception:
@@ -2573,11 +2590,17 @@ def setup_db_mtime_handler(loop: Optional[asyncio.AbstractEventLoop] = None):
     async processor is running on the given `loop` (or current loop).
     """
     global _db_event_processor_task
+    global _main_event_loop
     if loop is None:
         try:
             loop = asyncio.get_event_loop()
         except Exception:
             return
+    # Remember this loop so thread callbacks can safely post work to it
+    try:
+        _main_event_loop = loop
+    except Exception:
+        pass
     # Ensure the processor task is running in the provided loop
     try:
         if _db_event_processor_task is None or _db_event_processor_task.done():
