@@ -15,15 +15,20 @@ class SyncClient {
   }
 
   emit(event: string, payload?: any) {
+    try { console.debug('sync-client.emit', event, payload); } catch (e) {}
     this.listeners.forEach((l) => {
       try { l(event, payload); } catch (e) { console.error('sync-client listener error', e); }
     });
   }
 
   start() {
-    try { wsClient.on('data_changed', this.handleDataChanged); } catch (e) {}
-    try { wsClient.on('summary_update', this.handleSummaryUpdate); } catch (e) {}
-    try { wsClient.on('attendance_trend', this.handleAttendanceTrend); } catch (e) {}
+    try {
+      // Ensure wsClient starts connecting (no-op if already connected)
+      try { (wsClient as any).connect && (wsClient as any).connect(); } catch (err) {}
+      wsClient.on('data_changed', this.handleDataChanged);
+    } catch (e) { console.debug('sync-client.start bind data_changed failed', e); }
+    try { wsClient.on('summary_update', this.handleSummaryUpdate); } catch (e) { console.debug('sync-client.start bind summary_update failed', e); }
+    try { wsClient.on('attendance_trend', this.handleAttendanceTrend); } catch (e) { console.debug('sync-client.start bind attendance_trend failed', e); }
   }
 
   stop() {
@@ -119,7 +124,9 @@ class SyncClient {
 }
 
 export const syncClient = new SyncClient();
-// Auto-start
-syncClient.start();
+// Auto-start only in browser to avoid SSR side-effects
+if (typeof window !== 'undefined') {
+  try { syncClient.start(); } catch (e) { console.debug('sync-client auto-start failed', e); }
+}
 
 export default syncClient;
