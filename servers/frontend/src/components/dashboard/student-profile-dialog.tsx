@@ -1158,7 +1158,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     try { syncClient.on(syncListener); } catch (e) {}
 
     return () => { cancelled = true; try { syncClient.off(syncListener); } catch (e) {} };
-  }, [student, studentSummaries, updateStudentSummaries]);
+  }, [student, updateStudentSummaries]);
 
   
 
