@@ -400,6 +400,26 @@ export async function getAttendanceAggregate(opts: { month?: string; start?: str
   return result;
 }
 
+export async function getAttendanceHasData(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string }) {
+  const params = new URLSearchParams();
+  if (opts.month) params.set('month', opts.month);
+  if (opts.start) params.set('start', opts.start);
+  if (opts.end) params.set('end', opts.end);
+  if (opts.grade) params.set('grade', opts.grade ?? 'all');
+  if (opts.classFilter) params.set('classFilter', opts.classFilter);
+  if (opts.roleFilter) params.set('roleFilter', opts.roleFilter);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  try {
+    const result = await fetchAPI(`/api/attendance/has_data${qs}`);
+    // Backend returns { success: true, hasData: bool }
+    if (typeof result.hasData !== 'undefined') return !!result.hasData;
+    return null;
+  } catch (err) {
+    // propagate error to caller to allow caller to set fallbacks
+    throw err;
+  }
+}
+
 // Static filters (grades/classes/roles) - authoritative HTTP endpoint on FastAPI
 export async function getStaticFilters() {
   const result = await fetchAPI('/api/static-filters');

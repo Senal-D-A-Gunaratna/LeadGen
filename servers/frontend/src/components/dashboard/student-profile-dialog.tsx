@@ -45,7 +45,7 @@ import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
 import { parseDate } from "@/lib/utils";
 import { format } from "date-fns";
-import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend, getAttendanceAggregate, getStaticFilters } from "@/lib/api-client";
+import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend, getAttendanceAggregate, getAttendanceHasData, getStaticFilters } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
 import { downloadStudentAttendanceSummaryAsCsvAction, downloadStudentAttendanceSummaryAsPdfAction } from "@/app/actions";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
@@ -726,10 +726,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         setFetchError(false);
         try {
           const monthStr = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
-          const resp = await getAttendanceAggregate({ month: monthStr, grade: 'all' });
-          const points = (resp && resp.points) ? resp.points : [];
-          const has = computeMonthHasDataFromPoints(points, month);
-          setMonthHasData(has);
+          // Use authoritative boolean endpoint to determine if month has any attendance data
+          const has = await getAttendanceHasData({ month: monthStr, grade: 'all' });
+          // If endpoint couldn't determine (null) treat conservatively as "has data" so calendar remains usable
+          setMonthHasData(has === null ? true : has);
           setFetchError(false);
         } catch (err) {
           console.warn('attendance aggregate fetch failed', err);
