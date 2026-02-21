@@ -393,7 +393,7 @@ def init_database():
         )
     ''')
     # Table to record which dates are considered school days.
-    # A date becomes a school day when at least one student has an 'on time' or 'late' record.
+    # A date becomes a school day if it appears in `attendance_records` (any status).
     cursor_attendance.execute('''
         CREATE TABLE IF NOT EXISTS school_days (
             date TEXT PRIMARY KEY,
@@ -498,12 +498,12 @@ def init_database():
     
     conn_attendance.commit()
     conn_attendance.close()
-    # Populate initial school_days from any existing attendance_records where status is on-time or late
+    # Populate initial school_days from any existing attendance_records (all statuses)
     try:
         conn_att = get_db_connection('attendance')
         cur = conn_att.cursor()
         # Normalize status comparison to avoid missing rows due to casing/whitespace
-        cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE TRIM(LOWER(status)) IN ('on time','late') GROUP BY date")
+        cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records GROUP BY date")
         conn_att.commit()
         conn_att.close()
     except Exception:
@@ -642,8 +642,8 @@ def save_checkin_utc(student_id: int, date_str: str, incoming_utc_iso: str):
 def recalculate_school_days():
     """Rebuild the `school_days` table from attendance_records.
 
-    A date is considered a school day if at least one student has status
-    'on time' or 'late' for that date.
+    A date is considered a school day if it appears in the
+    `attendance_records` table for that date (regardless of status).
     """
     # Signal recalculation in progress to any waiters and update last mtime
     global _recalc_lock, _recalc_done_event, _last_recalc_mtime
@@ -664,10 +664,10 @@ def recalculate_school_days():
             try:
                 # Replace contents atomically using a transaction
                 cur.execute('BEGIN IMMEDIATE')
-                # Clear table then insert distinct dates that have on time/late records
+                # Clear table then insert distinct dates present in attendance_records
                 cur.execute('DELETE FROM school_days')
                 # Normalize status comparison to avoid missing rows due to casing/whitespace
-                cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records WHERE TRIM(LOWER(status)) IN ('on time','late') GROUP BY date")
+                cur.execute("INSERT OR IGNORE INTO school_days (date, created_at) SELECT date, MIN(created_at) FROM attendance_records GROUP BY date")
                 conn.commit()
             except Exception:
                 try:
