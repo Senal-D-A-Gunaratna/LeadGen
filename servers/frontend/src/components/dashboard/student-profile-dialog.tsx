@@ -759,8 +759,8 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       }
     };
 
-    try { syncClient.on(handler); } catch (e) {}
-    return () => { try { syncClient.off(handler); } catch (e) {} };
+    // handler now handled by unified sync listener (registered below)
+    return () => { /* cleanup handled by unified listener */ };
   }, [student, displayedMonth]);
   const fetchMonthAggregate = async (month: Date) => {
     if (fetchTimerRef.current) window.clearTimeout(fetchTimerRef.current);
@@ -835,12 +835,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       }
     };
 
-    try { syncClient.on(syncListener); } catch (e) {}
-
-    return () => {
-      mounted = false;
-      try { syncClient.off(syncListener); } catch (e) {}
-    };
+    // monthly-aggregate updates handled by unified sync listener
+    mounted = false;
+    return () => { /* cleanup handled by unified listener */ };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayedMonth]);
 
@@ -919,8 +916,8 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       }
     };
     const trendSyncHandler = (event: string, payload?: any) => { if (event === 'attendance_trend') onPush(payload); };
-    try { syncClient.on(trendSyncHandler); } catch (e) {}
-    return () => { try { syncClient.off(trendSyncHandler); } catch (e) {} };
+    // attendance_trend push handled by unified sync listener
+    return () => { /* cleanup handled by unified listener */ };
   }, [student, displayedMonth]);
 
   useEffect(() => {
@@ -1211,9 +1208,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       } catch (e) {}
     };
 
-    try { syncClient.on(syncListener); } catch (e) {}
-
-    return () => { cancelled = true; try { syncClient.off(syncListener); } catch (e) {} };
+    // summary/trend refreshes handled by unified sync listener
+    cancelled = true;
+    return () => { /* cleanup handled by unified listener */ };
   }, [student, updateStudentSummaries]);
 
   
@@ -1243,9 +1240,135 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     };
 
     const summarySyncHandler = (event: string, payload?: any) => { if (event === 'summary_update') handler(payload); };
-    try { syncClient.on(summarySyncHandler); } catch (e) {}
-    return () => { try { syncClient.off(summarySyncHandler); } catch (e) {} };
+    // summary_update handled by unified sync listener
+    return () => { /* cleanup handled by unified listener */ };
   }, [student]);
+
+  // Consolidated sync listener: handle all relevant sync events in one place
+  useEffect(() => {
+    if (!student) return;
+
+    const fetchAndApplySummary = async () => {
+      try {
+        const res = await getStudentSummary(student.id);
+        const s = res?.summary;
+        if (s) {
+          updateStudentSummaries([{
+            studentId: student.id,
+            summary: {
+              totalSchoolDays: s.totalSchoolDays,
+              presentDays: s.presentDays,
+              absentDays: s.absentDays,
+              onTimeDays: s.onTimeDays,
+              lateDays: s.lateDays,
+              presencePercentage: s.presencePercentage,
+              absencePercentage: s.absencePercentage,
+              onTimePercentage: s.onTimePercentage,
+              latePercentage: s.latePercentage,
+            }
+          }]);
+          setAttendanceStats({
+            onTimeCount: s.onTimeDays,
+            lateCount: s.lateDays,
+            absentCount: s.absentDays,
+            onTimePercentage: s.onTimePercentage,
+            latePercentage: s.latePercentage,
+            absentPercentage: s.absencePercentage,
+            overallPercentage: s.presencePercentage,
+            totalSchoolDays: s.totalSchoolDays,
+          });
+        }
+      } catch (e) {
+        console.warn('Unified sync: failed to fetch student summary', e);
+      }
+    };
+
+    const unifiedHandler = async (event: string, payload?: any) => {
+      try {
+        if (!student) return;
+
+        // attendance_trend: invalidate cache and refetch if viewing same student/month
+        if (event === 'attendance_trend') {
+          const data = payload || {};
+          const { studentId, year, month } = data;
+          const key = `${studentId}-${year}-${month}`;
+          attendanceTrendCache.current.delete(key);
+          if (studentId === student.id && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth() + 1)) {
+            await fetchAttendanceTrendForMonth(studentId, year, displayedMonth.getMonth());
+          }
+          return;
+        }
+
+        // summary_update / all_summaries / students_refreshed -> refresh month aggregate
+        if (event === 'summary_update' || event === 'all_summaries' || event === 'students_refreshed') {
+          try { await fetchMonthAggregate(displayedMonth); } catch (e) {}
+          // If payload contains per-student summaries targeting this student, apply them
+          if (event === 'summary_update' && payload?.summaries && Array.isArray(payload.summaries)) {
+            const found = payload.summaries.find((s: any) => s.studentId === student.id);
+            if (found && found.summary) {
+              const s = found.summary;
+              setAttendanceStats({
+                onTimeCount: s.onTimeDays,
+                lateCount: s.lateDays,
+                absentCount: s.absentDays,
+                onTimePercentage: s.onTimePercentage,
+                latePercentage: s.latePercentage,
+                absentPercentage: s.absencePercentage,
+                overallPercentage: s.presencePercentage,
+                totalSchoolDays: s.totalSchoolDays,
+              });
+            }
+          }
+          return;
+        }
+
+        // student_summary -> if for this student, refresh via HTTP
+        if (event === 'student_summary' && payload?.studentId === student.id) {
+          await fetchAndApplySummary();
+          return;
+        }
+
+        // attendance_updated -> if affectedIds empty (generic) or contains this student, refresh
+        if (event === 'attendance_updated') {
+          const ids: number[] = payload?.affectedIds || payload?.data?.affectedIds || [];
+          if (ids.length === 0 || ids.includes(student.id)) {
+            const year = displayedMonth.getFullYear();
+            const monthZero = displayedMonth.getMonth();
+            await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            await fetchAndApplySummary();
+          }
+          return;
+        }
+
+        // data_changed: check type or affectedIds
+        if (event === 'data_changed') {
+          const type = payload?.type || payload?.data?.type || null;
+          const ids: number[] = payload?.data?.affectedIds || payload?.affectedIds || [];
+          const relevantTypes = ['attendance_db_changed', 'attendance_updated', 'student_updated', 'student_added', 'student_removed'];
+          if (type && relevantTypes.includes(type)) {
+            try { await fetchMonthAggregate(displayedMonth); } catch (e) {}
+            const year = displayedMonth.getFullYear();
+            const monthZero = displayedMonth.getMonth();
+            await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            await fetchAndApplySummary();
+            return;
+          }
+          if (Array.isArray(ids) && ids.includes(student.id)) {
+            const year = displayedMonth.getFullYear();
+            const monthZero = displayedMonth.getMonth();
+            await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            await fetchAndApplySummary();
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('Unified sync handler error', e);
+      }
+    };
+
+    try { syncClient.on(unifiedHandler); } catch (e) { console.error('Failed to register unified sync handler', e); }
+    return () => { try { syncClient.off(unifiedHandler); } catch (e) {} };
+  }, [student, displayedMonth, updateStudentSummaries]);
 
   const handleDownload = async (format: 'csv' | 'pdf') => {
     if (!student) return;
