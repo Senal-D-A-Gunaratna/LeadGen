@@ -9,6 +9,28 @@ function minutesToHHMM(mins: number) {
   return `${hh}:${mm}`;
 }
 
+function formatCheckInToHHMM(input?: string | null) {
+  if (!input) return null;
+  // If already in HH:MM or H:MM format, normalize to HH:MM
+  const hhmmMatch = input.match(/^(\d{1,2}):(\d{2})/);
+  if (hhmmMatch) {
+    const hh = hhmmMatch[1].padStart(2, '0');
+    const mm = hhmmMatch[2];
+    return `${hh}:${mm}`;
+  }
+
+  // Attempt to parse ISO timestamp or other parsable date string
+  const maybeTs = Date.parse(input);
+  if (!isNaN(maybeTs)) {
+    const d = new Date(maybeTs);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
+  }
+
+  return null;
+}
+
 export default function MiniTrendChart({ points, statusColors }: { points: Point[]; statusColors: Record<string,string> }) {
   // Sort by date - only school days with attendance records are included
   const sorted = [...(points || [])].sort((a,b) => a.date.localeCompare(b.date));
@@ -72,17 +94,12 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
                 else if (statusKey.includes('late')) statusColor = statusColors['late'] || '#eab308';
                 else if (statusKey.includes('absent')) statusColor = statusColors['absent'] || '#ef4444';
 
-                // Strictly prefer API-provided arrival fields. Use `arrival_minutes` (number)
-                // or `arrival_local` (pre-formatted) or `checkInTime` variants.
+                // Derive a single raw arrival string from API fields and strictly
+                // format it to HH:MM. If formatting fails, do not show arrival.
                 let arrivalTime: string | null = null;
-                if (typeof data.arrival_minutes === 'number' && !isNaN(data.arrival_minutes)) {
-                  arrivalTime = minutesToHHMM(data.arrival_minutes);
-                } else if (data.arrival_local) {
-                  arrivalTime = String(data.arrival_local);
-                } else if (data.checkInTime) {
-                  arrivalTime = String(data.checkInTime);
-                } else if (data.check_in_time) {
-                  arrivalTime = String(data.check_in_time);
+                const arrivalTimeRaw = (data.checkInTime || data.check_in_time || data.arrival_local) ? String((data.checkInTime || data.check_in_time || data.arrival_local)) : null;
+                if (arrivalTimeRaw) {
+                  arrivalTime = formatCheckInToHHMM(arrivalTimeRaw);
                 }
 
                 return (
