@@ -921,10 +921,108 @@ async def api_get_student_attendance(student_id: int, month: Optional[str] = Que
         student = flask_app.get_student_by_id(student_id)
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
-        hist = student.get('attendanceHistory', [])
-        if month:
-            hist = [r for r in hist if isinstance(r.get('date'), str) and r.get('date').startswith(month)]
-        return JSONResponse({"success": True, "attendanceHistory": hist})
+
+        # If no month filter provided, return precomputed attendanceHistory
+        if not month:
+            hist = student.get('attendanceHistory', [])
+            return JSONResponse({"success": True, "attendanceHistory": hist})
+
+        # Validate month and compute range
+        try:
+            from datetime import timedelta
+            start_date = date.fromisoformat(f"{month}-01")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid month format (expected YYYY-MM)")
+
+        if start_date.month == 12:
+            next_month = date(start_date.year + 1, 1, 1)
+        else:
+            next_month = date(start_date.year, start_date.month + 1, 1)
+        end_date = next_month - timedelta(days=1)
+
+        # Query attendance DB for student's records in range
+        try:
+            from .database import get_db_connection
+            conn_att = get_db_connection('attendance')
+            cur = conn_att.cursor()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        cur.execute("PRAGMA table_info(attendance_records)")
+        cols = [r['name'] for r in cur.fetchall()]
+        if 'check_in_time' in cols:
+            cur.execute('''
+                SELECT date, status, check_in_time
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                ORDER BY date ASC
+            ''', (student_id, start_date.isoformat(), end_date.isoformat()))
+        else:
+            cur.execute('''
+                SELECT date, status, NULL as check_in_time
+                FROM attendance_records
+                WHERE student_id = ? AND date BETWEEN ? AND ?
+                ORDER BY date ASC
+            ''', (student_id, start_date.isoformat(), end_date.isoformat()))
+        rows = cur.fetchall()
+
+        def _normalize_status(s):
+            if not s:
+                return ''
+            sl = str(s).strip().lower()
+            if 'late' in sl:
+                return 'late'
+            if 'on' in sl and 'time' in sl:
+                return 'on_time'
+            if 'ontime' in sl or 'on_time' in sl or 'on-time' in sl:
+                return 'on_time'
+            if 'abs' in sl:
+                return 'absent'
+            return sl.replace(' ', '_')
+
+        records_by_date = {}
+        for r in rows:
+            d = r['date']
+            status = _normalize_status(r['status'])
+            chk = r['check_in_time']
+            if d not in records_by_date:
+                records_by_date[d] = {'date': d, 'status': status, 'checkInTime': chk}
+            else:
+                existing = records_by_date[d]
+                if existing.get('checkInTime') is None and chk is not None:
+                    records_by_date[d] = {'date': d, 'status': status, 'checkInTime': chk}
+                elif existing.get('checkInTime') is not None and chk is not None:
+                    try:
+                        if str(chk) < str(existing.get('checkInTime')):
+                            records_by_date[d] = {'date': d, 'status': status, 'checkInTime': chk}
+                    except Exception:
+                        pass
+
+        # Get canonical school days for the month
+        try:
+            cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+            sd_rows = cur.fetchall()
+            school_days = [r['date'] for r in sd_rows]
+        except Exception:
+            from calendar import monthrange as _mr
+            ld = _mr(start_date.year, start_date.month)[1]
+            school_days = []
+            for day_num in range(1, ld + 1):
+                d = date(start_date.year, start_date.month, day_num)
+                if d.weekday() >= 5:
+                    continue
+                school_days.append(d.isoformat())
+
+        attendance_history = []
+        for d in school_days:
+            rec = records_by_date.get(d)
+            if rec and rec.get('status') in ('on_time', 'late'):
+                attendance_history.append({'date': d, 'status': rec.get('status'), 'checkInTime': rec.get('checkInTime')})
+            else:
+                attendance_history.append({'date': d, 'status': 'absent', 'checkInTime': None})
+
+        conn_att.close()
+        return JSONResponse({"success": True, "attendanceHistory": attendance_history})
     except HTTPException:
         raise
     except Exception as e:

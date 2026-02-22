@@ -1334,7 +1334,8 @@ def http_get_student_attendance_month(student_id):
 
         conn_att = get_db_connection('attendance')
         cur = conn_att.cursor()
-        # Detect check_in_time presence and keep response shape stable
+
+        # Fetch attendance records for the student in range (include check_in_time if present)
         cur.execute("PRAGMA table_info(attendance_records)")
         cols = [r['name'] for r in cur.fetchall()]
         if 'check_in_time' in cols:
@@ -1344,8 +1345,6 @@ def http_get_student_attendance_month(student_id):
                 WHERE student_id = ? AND date BETWEEN ? AND ?
                 ORDER BY date ASC
             ''', (student_id, start_date.isoformat(), end_date.isoformat()))
-            rows = cur.fetchall()
-            attendance = [{'date': r['date'], 'status': r['status'], 'checkInTime': r['check_in_time']} for r in rows]
         else:
             cur.execute('''
                 SELECT date, status, NULL as check_in_time
@@ -1353,18 +1352,49 @@ def http_get_student_attendance_month(student_id):
                 WHERE student_id = ? AND date BETWEEN ? AND ?
                 ORDER BY date ASC
             ''', (student_id, start_date.isoformat(), end_date.isoformat()))
-            rows = cur.fetchall()
-            attendance = [{'date': r['date'], 'status': r['status'], 'checkInTime': None} for r in rows]
+        rows = cur.fetchall()
 
-        # Also return school days for the requested month so clients
-        # can distinguish weekdays which were not school days from
-        # actual absences. If `school_days` table is unavailable or
-        # empty for the range, fall back to weekdays.
+        # Normalize statuses and pick earliest check-in per date when multiple records exist
+        def _normalize_status(s):
+            if not s:
+                return ''
+            sl = str(s).strip().lower()
+            if 'late' in sl:
+                return 'late'
+            if 'on' in sl and 'time' in sl:
+                return 'on_time'
+            if 'ontime' in sl or 'on_time' in sl or 'on-time' in sl:
+                return 'on_time'
+            if 'abs' in sl:
+                return 'absent'
+            return sl.replace(' ', '_')
+
+        records_by_date = {}
+        for r in rows:
+            d = r['date']
+            status = _normalize_status(r['status'])
+            chk = r['check_in_time']
+            # prefer earliest non-null check-in time for the date
+            if d not in records_by_date:
+                records_by_date[d] = {'date': d, 'status': status, 'checkInTime': chk}
+            else:
+                existing = records_by_date[d]
+                # if existing has no checkInTime but this one does, take this
+                if existing.get('checkInTime') is None and chk is not None:
+                    records_by_date[d] = {'date': d, 'status': status, 'checkInTime': chk}
+                # if both have times, choose the earlier (ISO strings compare lexicographically)
+                elif existing.get('checkInTime') is not None and chk is not None:
+                    try:
+                        if str(chk) < str(existing.get('checkInTime')):
+                            records_by_date[d] = {'date': d, 'status': status, 'checkInTime': chk}
+                    except Exception:
+                        pass
+
+        # Build canonical attendanceHistory: iterate canonical school_days and mark absent when no on_time/late
         try:
             cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
             sd_rows = cur.fetchall()
             school_days = [r['date'] for r in sd_rows]
-            # If table exists but has no rows for the month, return empty list
         except Exception:
             # Fallback: compute weekdays in the month
             from calendar import monthrange as _mr
@@ -1376,8 +1406,16 @@ def http_get_student_attendance_month(student_id):
                     continue
                 school_days.append(d.isoformat())
 
+        attendance_history = []
+        for d in school_days:
+            rec = records_by_date.get(d)
+            if rec and rec.get('status') in ('on_time', 'late'):
+                attendance_history.append({'date': d, 'status': rec.get('status'), 'checkInTime': rec.get('checkInTime')})
+            else:
+                attendance_history.append({'date': d, 'status': 'absent', 'checkInTime': None})
+
         conn_att.close()
-        return jsonify({'success': True, 'attendanceHistory': attendance, 'schoolDays': school_days})
+        return jsonify({'success': True, 'attendanceHistory': attendance_history})
     except Exception as e:
         return jsonify({'success': False, 'message': 'Error fetching attendance', 'error': str(e)}), 500
 
