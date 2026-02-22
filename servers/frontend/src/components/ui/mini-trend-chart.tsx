@@ -24,10 +24,24 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
   const minVal = numericValues.length ? Math.min(...numericValues) : 480; // default 08:00
   const maxVal = numericValues.length ? Math.max(...numericValues) : 540; // default 09:00
 
+  // If there are records without arrival minutes (e.g. absent), assign
+  // them a sentinel plotting value slightly earlier than the earliest
+  // arrival so they are visible on the chart as markers.
+  const absentMarker = Math.max(0, minVal - 45);
+
+  const plotted = dayLabels.map(p => {
+    const hasArrival = typeof p.arrival_minutes === 'number' && !isNaN(p.arrival_minutes as any);
+    const isAbsent = !!p.absent;
+    return {
+      ...p,
+      plot_minutes: hasArrival ? p.arrival_minutes : (isAbsent ? absentMarker : NaN),
+    };
+  });
+
   return (
     <div className="w-full h-full" style={{ color: 'var(--muted-foreground-high)', paddingLeft: 0, marginLeft: 0, overflow: 'visible' }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={dayLabels} margin={{ top: 5, right: 5, left: -15, bottom: -5 }}>
+        <LineChart data={plotted} margin={{ top: 5, right: 5, left: -15, bottom: -5 }}>
           <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.08} stroke="var(--border)" />
           <XAxis
             dataKey="day"
@@ -36,7 +50,7 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
             tick={{ fill: 'currentColor', fontSize: 12 }}
           />
           <YAxis
-            domain={[Math.max(0, minVal - 15), maxVal + 15]}
+            domain={[Math.max(0, minVal - 60), maxVal + 15]}
             allowDecimals={false}
             tickLine={false}
             axisLine={false}
@@ -77,7 +91,7 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
               return null;
             }}
           />
-          <Line type="monotone" dataKey="arrival_minutes" stroke={statusColors['on time'] || '#22c55e'} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={true} />
+          <Line type="monotone" dataKey="plot_minutes" stroke={statusColors['on time'] || '#22c55e'} strokeWidth={2} dot={{ r: 3 }} connectNulls={false} isAnimationActive={true} />
 
         </LineChart>
       </ResponsiveContainer>
