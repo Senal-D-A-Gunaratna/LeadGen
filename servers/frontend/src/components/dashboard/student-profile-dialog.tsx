@@ -1400,7 +1400,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
                   {student.name}
               </DialogTitle>
               <DialogDescription>
-                Grade {student.grade} - Class {student.className} | ID: {student.id}
+                Grade {student.grade} - Class {student.className}
+                {user?.role === 'dev' && (
+                  <> | ID: {student.id}</>
+                )}
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2">
