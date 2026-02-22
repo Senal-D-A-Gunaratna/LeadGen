@@ -5,29 +5,44 @@ from fastapi.middleware.cors import CORSMiddleware
 # Prefer the fully-qualified package import so static checkers (mypy)
 # can resolve the module; fall back to relative import for different
 # run contexts.
-app.mount("/", flask_app_module.asgi_app)
-                if s.get('role'):
-                    return False
-            else:
-                if s.get('role') != roleFilter:
-                    return False
-        return True
+try:
+    from servers.backend import app as flask_app_module
+except Exception:
+    from . import app as flask_app_module
 
-    filtered_students = [s for s in all_students if student_matches(s)]
-    student_count = len(filtered_students)
 
-    # Build points
-    points = []
-    for iso in school_dates:
-        present_count = 0
-        for s in filtered_students:
-            found = next((r for r in s.get('attendanceHistory', []) if r.get('date') == iso), None)
-            if found and found.get('status') != 'absent':
-                present_count += 1
-        percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
-        points.append({ 'date': iso, 'present': present_count, 'percent': percent })
+app = FastAPI(title="LeadGen Backend (FastAPI wrapper)")
 
-    return { 'success': True, 'points': points }
+# Allow the frontend to connect during development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# Mount the existing ASGI application (Socket.IO + Flask) at root.
+# This preserves all existing HTTP endpoints and WebSocket behavior while
+# allowing the process to be started via `uvicorn backend.fastapi_app:app`.
+from asgiref.wsgi import WsgiToAsgi
+
+# Mount the existing Flask/Socket.IO app. If the Flask module exposes an
+# `asgi_app` (python-socketio AsyncServer wrapped ASGI app) use it; otherwise
+# wrap the Flask WSGI app with `WsgiToAsgi` so it can be mounted under
+# FastAPI/Starlette for development convenience.
+flask_asgi = getattr(flask_app_module, 'asgi_app', None)
+if flask_asgi is not None:
+    app.mount("/", flask_asgi)
+else:
+    # Expect the Flask `app` object to be available as `flask_app_module.app`
+    wsgi_app = getattr(flask_app_module, 'app', None)
+    if wsgi_app is not None:
+        app.mount("/", WsgiToAsgi(wsgi_app))
+    else:
+        # Last resort: mount nothing (requests to root will 404)
+        pass
 
 
 @app.get("/api/health")

@@ -28,6 +28,22 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
 CORS(app, resources={r"/*": {"origins": "*"}})
 
+# Initialize Socket.IO support. Prefer Flask-SocketIO when available
+# because it provides `run()` for the synchronous fallback. If it's
+# unavailable, fall back to python-socketio AsyncServer wrapped as ASGI.
+asgi_app = None
+try:
+    from flask_socketio import SocketIO
+    socketio = SocketIO(app, async_mode='threading')
+except Exception:
+    try:
+        # python-socketio AsyncServer path
+        socketio = socketio_module.AsyncServer(async_mode='asgi')
+        asgi_app = socketio_module.ASGIApp(socketio, app.wsgi_app)
+    except Exception:
+        socketio = None
+        asgi_app = None
+
 # Configure logging: write DEBUG to `backend.log` and send INFO+ to console.
 # Capture warnings and route most library logs into the root logger so
 # `backend.log` contains nearly everything useful for debugging.
@@ -35,18 +51,6 @@ _log_dir = Path(__file__).resolve().parents[1]
 _debug_log = _log_dir / 'backend.log'
 _log_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        pass
-
-    try:
-        accept = request.headers.get('Accept', '')
-        if (request.path and request.path.startswith('/api')) or ('application/json' in accept) or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return jsonify({'success': False, 'message': 'Internal server error', 'error': str(e)}), 500
-    except Exception:
-        pass
-
-    # Fallback: return a concise JSON error to avoid HTML responses
-    return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 # Password file path
 PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'database' / 'passwords.json'
