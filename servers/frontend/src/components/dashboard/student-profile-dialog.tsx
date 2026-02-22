@@ -1026,7 +1026,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       if (!label.startsWith(prefix)) continue;
       const status = (r?.status || '').toString().trim().toLowerCase();
       const point: any = { date: label };
-      if (status === 'on time' || status === 'ontime' || status === 'on_time') point.on_time = 1;
+      if (status === 'on_time') point.on_time = 1;
       else if (status === 'late') point.late = 1;
       else if (status === 'absent') point.absent = 1;
 
