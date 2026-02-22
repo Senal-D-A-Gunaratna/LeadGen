@@ -33,14 +33,20 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # unavailable, fall back to python-socketio AsyncServer wrapped as ASGI.
 asgi_app: Any = None
 socketio: Any = None
+# Prefer a python-socketio AsyncServer + ASGIApp so the app can be
+# served directly by an ASGI server (uvicorn) and handle websocket
+# transport at /socket.io. Fall back to Flask-SocketIO if the
+# AsyncServer/ASGI adapter cannot be created.
 try:
-    from flask_socketio import SocketIO
-    socketio = SocketIO(app, async_mode='threading')
+    # python-socketio AsyncServer (ASGI) - works with uvicorn/ASGI
+    socketio = socketio_module.AsyncServer(async_mode='asgi')
+    asgi_app = socketio_module.ASGIApp(socketio, app.wsgi_app)
 except Exception:
     try:
-        # python-socketio AsyncServer path
-        socketio = socketio_module.AsyncServer(async_mode='asgi')
-        asgi_app = socketio_module.ASGIApp(socketio, app.wsgi_app)
+        from flask_socketio import SocketIO
+        # Fallback: Flask-SocketIO (may require eventlet/gevent for real websocket support)
+        socketio = SocketIO(app, async_mode='threading')
+        asgi_app = None
     except Exception:
         socketio = None
         asgi_app = None

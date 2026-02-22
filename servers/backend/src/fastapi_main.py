@@ -1108,4 +1108,21 @@ class CombinedApp:
 
 
 # Export ASGI application expected by uvicorn
-app = CombinedApp(fastapi_app, flask_app.asgi_app)
+try:
+    from starlette.middleware.wsgi import WSGIMiddleware
+except Exception:
+    WSGIMiddleware = None
+
+# Prefer the Flask-side ASGI adapter if provided; otherwise wrap the
+# legacy Flask WSGI app with Starlette's WSGI middleware so the combined
+# ASGI app still serves the legacy routes (note: websocket support
+# requires the Flask-side ASGI adapter / python-socketio AsyncServer).
+legacy_app = getattr(flask_app, 'asgi_app', None)
+if legacy_app is None:
+    if WSGIMiddleware is not None:
+        legacy_app = WSGIMiddleware(flask_app.app)
+    else:
+        # Last-resort: try to use the Flask app's WSGI callable directly
+        legacy_app = flask_app.app
+
+app = CombinedApp(fastapi_app, legacy_app)
