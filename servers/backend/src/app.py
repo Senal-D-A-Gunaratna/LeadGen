@@ -35,98 +35,7 @@ _log_dir = Path(__file__).resolve().parents[1]
 _debug_log = _log_dir / 'backend.log'
 _log_dir.mkdir(parents=True, exist_ok=True)
 
-root_logger = logging.getLogger()
-if not root_logger.handlers:
-    root_logger.setLevel(logging.DEBUG)
-    logging.captureWarnings(True)
-
-    # File handler for debug-level logs (most details)
-    debug_handler = RotatingFileHandler(str(_debug_log), maxBytes=10 * 1024 * 1024, backupCount=5)
-    debug_handler.setLevel(logging.DEBUG)
-    debug_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(pathname)s:%(lineno)d %(message)s')
-    debug_handler.setFormatter(debug_fmt)
-
-    # Console handler for info+ to keep terminal output readable
-    console = logging.StreamHandler()
-    console.setLevel(logging.INFO)
-    info_fmt = logging.Formatter('%(asctime)s %(levelname)s [%(name)s] %(message)s')
-    console.setFormatter(info_fmt)
-
-    root_logger.addHandler(debug_handler)
-    root_logger.addHandler(console)
-
-    # Ensure common libraries produce DEBUG output and propagate to root logger
-    for name in ('werkzeug', 'socketio', 'engineio', 'asyncio', 'uvicorn', 'uvicorn.error', 'uvicorn.access', 'aiohttp.access'):
-        try:
-            lg = logging.getLogger(name)
-            lg.setLevel(logging.DEBUG)
-            lg.propagate = True
-        except Exception:
-            pass
-
-    # Make sure third-party modules that add their own handlers still propagate
-    logging.getLogger().setLevel(logging.DEBUG)
-
-# SSL Configuration for HTTPS
-# Prefer project-local certs stored in servers/backend/certificates (localhost.pem/localhost-key.pem).
-from pathlib import Path as _Path
-# Adapter to convert Flask (WSGI) app to ASGI for uvicorn
-from typing import Optional, Tuple
-
-# Adapter type for converting Flask (WSGI) app to ASGI; default to None.
-WsgiToAsgi: Optional[type] = None
-try:
-    from asgiref.wsgi import WsgiToAsgi as _WsgiToAsgi
-    WsgiToAsgi = _WsgiToAsgi
-except Exception:
-    WsgiToAsgi = None
-_repo_root = _Path(__file__).resolve().parents[1]
-_cert_dir = _repo_root / 'certificates'
-_cert_file = _cert_dir / 'localhost.pem'
-_key_file = _cert_dir / 'localhost-key.pem'
-if _cert_file.exists() and _key_file.exists():
-    ssl_context: Optional[Tuple[str, str]] = (str(_cert_file), str(_key_file))
-else:
-    # Fall back to no SSL if certs are not available (dev only).
-    ssl_context = None
-    print('SSL certificates not found in servers/backend/certificates. Starting without TLS (HTTP).')
-
-# Create an Async Socket.IO server and wrap the Flask WSGI app in an ASGI app.
-# We create the AsyncServer via the python-socketio package and then build
-# an ASGI application so we can run the whole app with an ASGI server
-# (uvicorn). Let python-socketio auto-detect the best async implementation
-# instead of forcing `async_mode='asyncio'`, which may raise `Invalid async_mode`
-# in environments lacking the required async driver.
-# Create AsyncServer and ASGI app. Pass the Flask `app` positionally for
-# compatibility with different python-socketio versions.
-# Create AsyncServer. Wrap the Flask WSGI app with WsgiToAsgi when available
-# so the ASGIApp receives a proper ASGI callable for HTTP requests.
-sio = socketio_module.AsyncServer(async_mode='asgi', cors_allowed_origins="*")
-if WsgiToAsgi is not None:
-    asgi_flask_app = WsgiToAsgi(app)
-    # Pass the ASGI-wrapped Flask app as the second positional argument
-    # to maintain compatibility with different python-socketio versions.
-    asgi_app = socketio_module.ASGIApp(sio, asgi_flask_app)
-else:
-    # Fallback: pass the WSGI app directly (older python-socketio may handle it),
-    # but this can trigger Flask.__call__ signature errors under ASGI servers.
-    asgi_app = socketio_module.ASGIApp(sio, app)
-# Keep the historical name `socketio` for in-file references (handlers,
-# emit helpers) by pointing it at the AsyncServer instance.
-socketio = sio
-
-
-@app.errorhandler(Exception)
-def handle_uncaught_exception(e):
-    """Global exception handler: log traceback and return JSON for API clients.
-
-    This prevents Flask's default HTML 500 page from being returned to
-    API consumers (frontend), avoiding large HTML blobs reaching the UI.
-    """
-    tb = traceback.format_exc()
     try:
-        print(f"[error] Uncaught exception:\n{tb}")
-    except Exception:
         pass
 
     try:
@@ -685,6 +594,121 @@ def api_attendance_history():
     return jsonify({'success': True, 'data': series})
 
 
+@app.route('/api/attendance/trend', methods=['GET'])
+def api_attendance_trend():
+    """Compute per-day attendance points for a month or date range.
+
+    Query params: month=YYYY-MM or start=YYYY-MM-DD&end=YYYY-MM-DD, grade, classFilter, roleFilter, status
+    Returns JSON: { success: True, points: [{date, present, percent}, ...] }
+    """
+    try:
+        month = request.args.get('month')
+        start = request.args.get('start')
+        end = request.args.get('end')
+        grade = request.args.get('grade', 'all')
+        classFilter = request.args.get('classFilter')
+        roleFilter = request.args.get('roleFilter')
+
+        from datetime import timedelta
+        # Determine date range
+        if month:
+            try:
+                sd = date.fromisoformat(f"{month}-01")
+            except Exception:
+                return jsonify({'success': False, 'message': 'Invalid month format (expected YYYY-MM)'}), 400
+            start_date = sd
+            if sd.month == 12:
+                next_mon = date(sd.year + 1, 1, 1)
+            else:
+                next_mon = date(sd.year, sd.month + 1, 1)
+            end_date = next_mon - timedelta(days=1)
+        else:
+            try:
+                start_date = date.fromisoformat(start) if start else None
+                end_date = date.fromisoformat(end) if end else None
+            except Exception:
+                return jsonify({'success': False, 'message': 'Invalid date format for start/end'}), 400
+
+        # If start/end still None, derive from attendance_records range
+        conn_att = get_db_connection('attendance')
+        cur_att = conn_att.cursor()
+        if start_date is None or end_date is None:
+            cur_att.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
+            row = cur_att.fetchone()
+            if row and row['min_date'] and row['max_date']:
+                if start_date is None:
+                    start_date = date.fromisoformat(row['min_date'])
+                if end_date is None:
+                    end_date = date.fromisoformat(row['max_date'])
+            else:
+                end_date = date.today()
+                start_date = end_date - timedelta(days=29)
+        if conn_att:
+            try:
+                cur_att.connection.close()
+            except Exception:
+                pass
+
+        if start_date > end_date:
+            start_date, end_date = end_date, start_date
+
+        # Build authoritative school dates for range
+        try:
+            cur_sd = get_db_connection('attendance').cursor()
+            cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+            sd_rows = cur_sd.fetchall()
+            school_dates = [r['date'] for r in sd_rows]
+            try:
+                cur_sd.connection.close()
+            except Exception:
+                pass
+        except Exception:
+            # Fallback to weekdays in range
+            school_dates = []
+            day = start_date
+            while day <= end_date:
+                if day.weekday() < 5:
+                    school_dates.append(day.isoformat())
+                day = day + timedelta(days=1)
+
+        # Load all students and filter by client-provided filters
+        all_students = get_all_students_with_history()
+        def student_matches_local(s: dict) -> bool:
+            if grade and grade != 'all':
+                try:
+                    if int(s.get('grade') or -999) != int(grade):
+                        return False
+                except Exception:
+                    return False
+            if classFilter and classFilter != 'all':
+                if s.get('className') != classFilter:
+                    return False
+            if roleFilter and roleFilter != 'all':
+                if roleFilter == 'none':
+                    if s.get('role'):
+                        return False
+                else:
+                    if s.get('role') != roleFilter:
+                        return False
+            return True
+
+        filtered_students = [s for s in all_students if student_matches_local(s)]
+        student_count = len(filtered_students)
+
+        points = []
+        for iso in school_dates:
+            present_count = 0
+            for s in filtered_students:
+                found = next((r for r in s.get('attendanceHistory', []) if r.get('date') == iso), None)
+                if found and found.get('status') != 'absent':
+                    present_count += 1
+            percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
+            points.append({ 'date': iso, 'present': present_count, 'percent': percent })
+
+        return jsonify({'success': True, 'points': points})
+    except Exception as e:
+        return jsonify({'success': False, 'message': 'Error computing attendance trend', 'error': str(e)}), 500
+
 @app.route('/api/attendance/aggregate', methods=['GET'])
 def api_attendance_aggregate():
     """Return computed aggregate data for attendance history tab.
@@ -698,6 +722,96 @@ def api_attendance_aggregate():
     Returns JSON with: pie, gradeBars, students, points
     """
     try:
+        # New endpoint moved here: compute per-day attendance trend for a month/range
+        # Query params: month (YYYY-MM), start, end, grade, classFilter, roleFilter, status
+        # This helper returns points [{date, present, percent}, ...]
+        def compute_trend_points(month: str | None = None, start: str | None = None, end: str | None = None, grade: str = 'all', classFilter: str | None = None, roleFilter: str | None = None):
+            from datetime import timedelta
+            # Parse date range
+            try:
+                if month:
+                    sd = date.fromisoformat(f"{month}-01")
+                    start_date = sd
+                    if sd.month == 12:
+                        next_mon = date(sd.year + 1, 1, 1)
+                    else:
+                        next_mon = date(sd.year, sd.month + 1, 1)
+                    end_date = next_mon - timedelta(days=1)
+                else:
+                    start_date = date.fromisoformat(start) if start else None
+                    end_date = date.fromisoformat(end) if end else None
+            except Exception:
+                return None, 'Invalid date(s) provided'
+
+            # If not provided, derive sensible defaults (last ~30 days)
+            if start_date is None or end_date is None:
+                try:
+                    cur = get_db_connection('attendance').cursor()
+                    cur.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
+                    row = cur.fetchone()
+                    if row and row.get('min_date') and row.get('max_date'):
+                        if start_date is None:
+                            start_date = date.fromisoformat(row['min_date'])
+                        if end_date is None:
+                            end_date = date.fromisoformat(row['max_date'])
+                    else:
+                        end_date = date.today()
+                        start_date = end_date - timedelta(days=29)
+                except Exception:
+                    end_date = date.today()
+                    start_date = end_date - timedelta(days=29)
+
+            if start_date > end_date:
+                start_date, end_date = end_date, start_date
+
+            # Build school_dates (use school_days table if available)
+            try:
+                cur_sd = get_db_connection('attendance').cursor()
+                cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+                sd_rows = cur_sd.fetchall()
+                school_dates = [r['date'] for r in sd_rows]
+            except Exception:
+                school_dates = []
+                d = start_date
+                while d <= end_date:
+                    if d.weekday() < 5:
+                        school_dates.append(d.isoformat())
+                    d = d + timedelta(days=1)
+
+            # Load all students and apply filters
+            all_students = get_all_students_with_history()
+            def student_matches_local(s: dict) -> bool:
+                if grade and grade != 'all':
+                    try:
+                        if int(s.get('grade') or -999) != int(grade):
+                            return False
+                    except Exception:
+                        return False
+                if classFilter and classFilter != 'all':
+                    if s.get('className') != classFilter:
+                        return False
+                if roleFilter and roleFilter != 'all':
+                    if roleFilter == 'none':
+                        if s.get('role'):
+                            return False
+                    else:
+                        if s.get('role') != roleFilter:
+                            return False
+                return True
+
+            filtered_students = [s for s in all_students if student_matches_local(s)]
+            student_count = len(filtered_students)
+
+            points = []
+            for iso in school_dates:
+                present_count = 0
+                for s in filtered_students:
+                    found = next((r for r in s.get('attendanceHistory', []) if r.get('date') == iso), None)
+                    if found and found.get('status') != 'absent':
+                        present_count += 1
+                percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
+                points.append({'date': iso, 'present': present_count, 'percent': percent})
+            return points, None
         month = request.args.get('month')
         start = request.args.get('start')
         end = request.args.get('end')

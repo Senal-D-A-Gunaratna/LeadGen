@@ -646,7 +646,7 @@ export function AttendanceHistoryTab() {
                   <RechartsLineChart
                     data={(monthPoints || []).map((p: any) => {
                       const label = p.label || p.date || p[0] || '';
-                      const studentCount = Number(p.studentCount ?? p.student_count ?? ((p.on_time||0)+(p.late||0)+(p.absent||0)) || 0);
+                      const studentCount = Number((p.studentCount ?? p.student_count ?? ((p.on_time||0)+(p.late||0)+(p.absent||0))) || 0);
                       const onTimePct = studentCount > 0 ? ((Number(p.on_time||0) / studentCount) * 100) : (typeof p.on_time_percent === 'number' ? p.on_time_percent : (p.percent || 0));
                       const latePct = studentCount > 0 ? ((Number(p.late||0) / studentCount) * 100) : (typeof p.late_percent === 'number' ? p.late_percent : 0);
                       const absentPct = studentCount > 0 ? ((Number(p.absent||0) / studentCount) * 100) : (typeof p.absent_percent === 'number' ? p.absent_percent : 0);
