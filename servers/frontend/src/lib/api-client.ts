@@ -400,6 +400,20 @@ export async function getAttendanceAggregate(opts: { month?: string; start?: str
   return result;
 }
 
+export async function getAttendanceTrend(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string; status?: string }) {
+  const params = new URLSearchParams();
+  if (opts.month) params.set('month', opts.month);
+  if (opts.start) params.set('start', opts.start);
+  if (opts.end) params.set('end', opts.end);
+  if (opts.grade) params.set('grade', opts.grade);
+  if (opts.classFilter) params.set('classFilter', opts.classFilter);
+  if (opts.roleFilter) params.set('roleFilter', opts.roleFilter);
+  if (opts.status) params.set('status', opts.status);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const result = await fetchAPI(`/api/attendance/trend${qs}`);
+  return result;
+}
+
 export async function getAttendanceHasData(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string }) {
   const params = new URLSearchParams();
   if (opts.month) params.set('month', opts.month);

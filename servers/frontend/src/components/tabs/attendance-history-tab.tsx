@@ -32,7 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
 import { wsClient } from "@/lib/websocket-client";
-import { getAttendanceAggregate } from "@/lib/api-client";
+import { getAttendanceAggregate, getAttendanceTrend } from "@/lib/api-client";
 import { syncClient } from "@/lib/sync-client";
 import { cn, parseDate } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -485,8 +485,8 @@ export function AttendanceHistoryTab() {
               // use to toggle the UI immediately, but we still perform
               // the authoritative aggregate fetch for accuracy.
 
-              // Otherwise fetch full aggregate
-              const resp = await getAttendanceAggregate({ month: monthStr, grade: grade || 'all', status: mapStatusToApi(statusFilter) });
+              // Otherwise fetch full aggregate/trend from the backend
+              const resp = await getAttendanceTrend({ month: monthStr, grade: grade || 'all', classFilter: classFilter || undefined, roleFilter: roleFilter || undefined, status: mapStatusToApi(statusFilter) });
               const normalizedPoints = resp?.points ?? resp?.data ?? [];
               setMonthPoints(normalizedPoints);
               setMonthAggregate(resp ?? null);
