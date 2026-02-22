@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
-import { Pie, PieChart, Cell, ResponsiveContainer, Sector, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from "recharts";
+import { Pie, PieChart, Cell, ResponsiveContainer, Sector, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, LineChart as RechartsLineChart, Line } from "recharts";
 // framer-motion removed for chart wrappers to rely on Recharts animations only
 import { Search, X, Calendar as CalendarIcon, ChevronLeft, ChevronRight, FilterX, LineChart } from "lucide-react";
 import { format } from "date-fns";
@@ -197,6 +197,8 @@ export function AttendanceHistoryTab() {
 
   const activeTab = useUIStateStore(state => state.activeTab);
   const { setActiveTab } = useUIStateStore();
+  // Local toggle to show inline line-graph instead of pie+bar
+  const [showLineGraph, setShowLineGraph] = useState(false);
   // Visibility and websocket-driven refreshes are handled centrally in `page.tsx`.
 
   // Animate on data changes (filters) for smooth transitions
@@ -632,6 +634,40 @@ export function AttendanceHistoryTab() {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {showLineGraph ? (
+          <Card className="glassmorphic glowing-border col-span-1 lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="font-headline text-primary">Attendance Trend</CardTitle>
+              <CardDescription>Daily attendance percentages for the selected month</CardDescription>
+            </CardHeader>
+            <CardContent className="h-[420px] w-full">
+              <div className="h-full">
+                <ResponsiveContainer>
+                  <RechartsLineChart
+                    data={(monthPoints || []).map((p: any) => {
+                      const label = p.label || p.date || p[0] || '';
+                      const studentCount = Number(p.studentCount ?? p.student_count ?? ((p.on_time||0)+(p.late||0)+(p.absent||0)) || 0);
+                      const onTimePct = studentCount > 0 ? ((Number(p.on_time||0) / studentCount) * 100) : (typeof p.on_time_percent === 'number' ? p.on_time_percent : (p.percent || 0));
+                      const latePct = studentCount > 0 ? ((Number(p.late||0) / studentCount) * 100) : (typeof p.late_percent === 'number' ? p.late_percent : 0);
+                      const absentPct = studentCount > 0 ? ((Number(p.absent||0) / studentCount) * 100) : (typeof p.absent_percent === 'number' ? p.absent_percent : 0);
+                      return { date: label, onTimePct: Number(onTimePct), latePct: Number(latePct), absentPct: Number(absentPct) };
+                    })}
+                    margin={{ left: 12, right: 24, top: 20, bottom: 20 }}
+                  >
+                    <XAxis dataKey="date" tickFormatter={(d) => String(d).slice(5)} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                    <YAxis domain={[0, 100]} tickFormatter={(v) => `${Math.round(Number(v))}%`} stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                    <Tooltip formatter={(v: any) => `${Number(v).toFixed(1)}%`} />
+                    <Legend />
+                    <Line type="monotone" dataKey="onTimePct" name="On Time" stroke={COLORS['on time']} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="latePct" name="Late" stroke={COLORS.late} strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="absentPct" name="Absent" stroke={COLORS.absent} strokeWidth={2} dot={false} />
+                  </RechartsLineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
         <Card className="glassmorphic glowing-border">
           <CardHeader className="pb-2">
             <CardTitle className="font-headline text-primary">Attendance Breakdown</CardTitle>
@@ -700,6 +736,8 @@ export function AttendanceHistoryTab() {
               </div>
             </CardContent>
           </Card>
+          </>
+        )}
       </div>
 
         <Card className="glassmorphic glowing-border" ref={studentListRef}>
@@ -713,8 +751,8 @@ export function AttendanceHistoryTab() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setActiveTab('line-graph')}
-                  aria-label="Open line graph"
+                  onClick={() => setShowLineGraph((s) => !s)}
+                  aria-label="Toggle line graph"
                   className="absolute right-3 top-3 z-20"
                 >
                   <LineChart className="h-5 w-5 text-muted-foreground" />
