@@ -1042,10 +1042,19 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           point.arrival_minutes = null;
           point.arrival_local = null;
         }
+      } else if (r.checkInTime || r.check_in_time || r.arrival_local) {
+        // Some API responses provide a pre-formatted checkInTime or arrival_local
+        // string instead of numeric minutes. Preserve those so tooltip can use them.
+        point.arrival_minutes = null;
+        point.arrival_local = (r.arrival_local || r.checkInTime || r.check_in_time) || null;
       } else {
         point.arrival_minutes = null;
         point.arrival_local = null;
       }
+
+      // Preserve API check-in field names so downstream tooltip logic can
+      // prefer original API-provided values.
+      point.checkInTime = r.checkInTime || r.check_in_time || null;
 
       pts.push(point);
     }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, LabelList } from 'recharts';
 
-interface Point { date: string; on_time?: number; late?: number; absent?: number; arrival_minutes?: number | null; arrival_local?: string | null }
+interface Point { date: string; status?: string; on_time?: number; late?: number; absent?: number; arrival_minutes?: number | null; arrival_local?: string | null; checkInTime?: string | null; check_in_time?: string | null }
 
 function minutesToHHMM(mins: number) {
   const hh = Math.floor(mins / 60).toString().padStart(2, '0');
@@ -62,21 +62,28 @@ export default function MiniTrendChart({ points, statusColors }: { points: Point
             content={({ active, payload }) => {
               if (active && payload && payload.length > 0) {
                 const data = payload[0].payload as Point & { day: number };
-                let status = 'Unknown';
+                // Prefer the API-provided `status` string when available; otherwise
+                // fall back to flag fields.
+                const rawStatus = (data.status && String(data.status)) || (data.on_time ? 'On Time' : data.late ? 'Late' : data.absent ? 'Absent' : 'Unknown');
+                const status = String(rawStatus);
+                const statusKey = status.toLowerCase();
                 let statusColor = '#666';
-                
-                if (data.on_time) {
-                  status = 'On Time';
-                  statusColor = statusColors['on time'] || '#22c55e';
-                } else if (data.late) {
-                  status = 'Late';
-                  statusColor = statusColors['late'] || '#eab308';
-                } else if (data.absent) {
-                  status = 'Absent';
-                  statusColor = statusColors['absent'] || '#ef4444';
+                if (statusKey.includes('on')) statusColor = statusColors['on time'] || '#22c55e';
+                else if (statusKey.includes('late')) statusColor = statusColors['late'] || '#eab308';
+                else if (statusKey.includes('absent')) statusColor = statusColors['absent'] || '#ef4444';
+
+                // Strictly prefer API-provided arrival fields. Use `arrival_minutes` (number)
+                // or `arrival_local` (pre-formatted) or `checkInTime` variants.
+                let arrivalTime: string | null = null;
+                if (typeof data.arrival_minutes === 'number' && !isNaN(data.arrival_minutes)) {
+                  arrivalTime = minutesToHHMM(data.arrival_minutes);
+                } else if (data.arrival_local) {
+                  arrivalTime = String(data.arrival_local);
+                } else if (data.checkInTime) {
+                  arrivalTime = String(data.checkInTime);
+                } else if (data.check_in_time) {
+                  arrivalTime = String(data.check_in_time);
                 }
-                
-                const arrivalTime = typeof data.arrival_minutes === 'number' ? minutesToHHMM(data.arrival_minutes) : null;
 
                 return (
                   <div className="p-2 space-y-1 text-sm">
