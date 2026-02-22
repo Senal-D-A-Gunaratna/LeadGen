@@ -540,19 +540,15 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const monthlyHistoryFetchRef = useRef<number | null>(null);
 
   // If the server provides embedded attendanceHistory on the `student` prop,
-  // prefer that as the immediate source for calendar modifiers so the
-  // calendar shows statuses (absent/late/on time) without waiting for an
-  // additional HTTP round-trip. This will be superseded by the HTTP fetch
-  // shortly after but provides an immediate, accurate view when available.
+  // Do NOT use embedded attendanceHistory from the `student` prop.
+  // Always rely on authoritative API responses for per-student attendance
+  // records so the calendar/trend reflect only server-provided statuses.
   useEffect(() => {
     if (!student) {
       setStudentMonthlyHistory(null);
       return;
     }
-    const embedded = (student as any).attendanceHistory || (student as any).attendance_history;
-    if (Array.isArray(embedded) && embedded.length > 0) {
-      setStudentMonthlyHistory(embedded);
-    }
+    setStudentMonthlyHistory(null);
   }, [student]);
 
   // Always refresh authoritative student data when opening the profile.
@@ -571,23 +567,8 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
           const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
           const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
-
-          // If server returns empty for this month but the `student` prop
-          // included embedded attendanceHistory entries for the displayed
-          // month, prefer the embedded entries so the calendar doesn't
-          // briefly show then clear modifiers.
-          const embedded = (student as any).attendanceHistory || (student as any).attendance_history || [];
-          const prefix = format(displayedMonth, 'yyyy-MM');
-          const embeddedForMonth = Array.isArray(embedded) ? embedded.filter((r: any) => {
-            const label = r?.date || r?.label;
-            return typeof label === 'string' && label.startsWith(prefix);
-          }) : [];
-
-          if ((!hist || hist.length === 0) && embeddedForMonth.length > 0) {
-            setStudentMonthlyHistory(embeddedForMonth);
-          } else {
-            setStudentMonthlyHistory(hist);
-          }
+          // Strict mode: use ONLY the server-provided attendanceHistory.
+          setStudentMonthlyHistory(hist);
         } catch (e) {
           console.warn('Failed to fetch student monthly attendance on open', e);
           setStudentMonthlyHistory(null);
@@ -664,18 +645,8 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
           const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
 
-          const embedded = (student as any).attendanceHistory || (student as any).attendance_history || [];
-          const prefix = format(displayedMonth, 'yyyy-MM');
-          const embeddedForMonth = Array.isArray(embedded) ? embedded.filter((r: any) => {
-            const label = r?.date || r?.label;
-            return typeof label === 'string' && label.startsWith(prefix);
-          }) : [];
-
-          if ((!hist || hist.length === 0) && embeddedForMonth.length > 0) {
-            setStudentMonthlyHistory(embeddedForMonth);
-          } else {
-            setStudentMonthlyHistory(hist);
-          }
+          // Strict mode: use ONLY the server-provided attendanceHistory.
+          setStudentMonthlyHistory(hist);
         } catch (e) {
           console.warn('sync refresh: failed to fetch monthly attendance', e);
         }
@@ -948,19 +919,8 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
         const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
         const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
-        // Prefer embedded data for the displayed month if server returns empty
-        const embedded = (student as any).attendanceHistory || (student as any).attendance_history || [];
-        const prefix = format(displayedMonth, 'yyyy-MM');
-        const embeddedForMonth = Array.isArray(embedded) ? embedded.filter((r: any) => {
-          const label = r?.date || r?.label;
-          return typeof label === 'string' && label.startsWith(prefix);
-        }) : [];
-
-        if ((!hist || hist.length === 0) && embeddedForMonth.length > 0) {
-          setStudentMonthlyHistory(embeddedForMonth);
-        } else {
-          setStudentMonthlyHistory(hist);
-        }
+        // Strict mode: use ONLY the server-provided attendanceHistory.
+        setStudentMonthlyHistory(hist);
       } catch (e) {
         console.warn('Failed to fetch student monthly attendance', e);
         setStudentMonthlyHistory(null);
