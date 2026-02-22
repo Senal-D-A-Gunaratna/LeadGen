@@ -33,18 +33,36 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # unavailable, fall back to python-socketio AsyncServer wrapped as ASGI.
 asgi_app: Any = None
 socketio: Any = None
-# Prefer a python-socketio AsyncServer + ASGIApp so the app can be
-# served directly by an ASGI server (uvicorn) and handle websocket
-# transport at /socket.io. Fall back to Flask-SocketIO if the
-# AsyncServer/ASGI adapter cannot be created.
+# Prefer Flask-SocketIO with eventlet/gevent for small-scale LAN production
+# because it's a simple, reliable option for websocket transport. If
+# neither eventlet/gevent nor Flask-SocketIO are available, fall back to
+# python-socketio AsyncServer + ASGIApp so uvicorn can be used.
 try:
-    # python-socketio AsyncServer (ASGI) - works with uvicorn/ASGI
-    socketio = socketio_module.AsyncServer(async_mode='asgi')
-    asgi_app = socketio_module.ASGIApp(socketio, app.wsgi_app)
+    have_eventlet = False
+    have_gevent = False
+    try:
+        import eventlet  # type: ignore
+        have_eventlet = True
+    except Exception:
+        pass
+    try:
+        import gevent  # type: ignore
+        have_gevent = True
+    except Exception:
+        pass
+
+    if have_eventlet or have_gevent:
+        from flask_socketio import SocketIO
+        async_mode = 'eventlet' if have_eventlet else 'gevent'
+        socketio = SocketIO(app, async_mode=async_mode)
+        asgi_app = None
+    else:
+        # Use python-socketio AsyncServer (ASGI) for uvicorn compatibility
+        socketio = socketio_module.AsyncServer(async_mode='asgi')
+        asgi_app = socketio_module.ASGIApp(socketio, app.wsgi_app)
 except Exception:
     try:
         from flask_socketio import SocketIO
-        # Fallback: Flask-SocketIO (may require eventlet/gevent for real websocket support)
         socketio = SocketIO(app, async_mode='threading')
         asgi_app = None
     except Exception:
