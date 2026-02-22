@@ -5,3 +5,5 @@ reportlab
 uvicorn
 asgiref
 fastapi
+eventlet
+gevent
