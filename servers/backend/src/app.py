@@ -12,7 +12,7 @@ from pathlib import Path
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, cast
 from .database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count, register_post_mtime_change_callback, start_attendance_watcher
 import asyncio
 import threading
@@ -31,7 +31,8 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # Initialize Socket.IO support. Prefer Flask-SocketIO when available
 # because it provides `run()` for the synchronous fallback. If it's
 # unavailable, fall back to python-socketio AsyncServer wrapped as ASGI.
-asgi_app = None
+asgi_app: Any = None
+socketio: Any = None
 try:
     from flask_socketio import SocketIO
     socketio = SocketIO(app, async_mode='threading')
@@ -731,6 +732,8 @@ def api_attendance_aggregate():
         # This helper returns points [{date, present, percent}, ...]
         def compute_trend_points(month: str | None = None, start: str | None = None, end: str | None = None, grade: str = 'all', classFilter: str | None = None, roleFilter: str | None = None):
             from datetime import timedelta
+            start_date: Optional[date] = None
+            end_date: Optional[date] = None
             # Parse date range
             try:
                 if month:
@@ -2844,7 +2847,7 @@ if __name__ == '__main__':
             else:
                 # asgi_app may be None if WsgiToAsgi wrapping failed earlier
                 print('ASGI app unavailable; falling back to socketio.run')
-                socketio.run(app, host='0.0.0.0', port=5000)
+                cast(Any, socketio).run(app, host='0.0.0.0', port=5000)
         except Exception as uv_err:
             # If uvicorn import or run fails, fallback to socketio.run which
             # will start the embedded Socket.IO server and enable broadcasts.
@@ -2853,7 +2856,7 @@ if __name__ == '__main__':
             except Exception:
                 pass
             try:
-                socketio.run(app, host='0.0.0.0', port=5000)
+                cast(Any, socketio).run(app, host='0.0.0.0', port=5000)
             except Exception as sock_err:
                 try:
                     print(f'Socket.IO fallback failed: {sock_err}; exiting')
