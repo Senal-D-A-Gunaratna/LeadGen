@@ -13,6 +13,7 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 from typing import Dict, List, Optional, Any, cast
+from functools import wraps
 from .database import get_db_connection, init_database, migrate_json_to_sqlite, DatabaseContext, save_checkin_utc, get_earliest_checkin, recalculate_school_days, ATTENDANCE_DB_PATH, get_student_attendance_summary, get_school_days_count, register_post_mtime_change_callback, start_attendance_watcher
 import asyncio
 import threading
@@ -89,6 +90,33 @@ def emit_maybe_async(event: str, payload: dict, namespace: str = '/') -> None:
                 pass
     except Exception:
         pass
+
+
+def ensure_ws_args(fn):
+    """Decorator to normalize Socket.IO handler args across Flask-SocketIO
+    and python-socketio AsyncServer. Ensures handlers receive (sid, data).
+    """
+    @wraps(fn)
+    async def wrapper(*args, **kwargs):
+        sid = None
+        data = None
+        # Normalize positional args coming from different server implementations.
+        if len(args) == 0:
+            sid = request.sid
+        elif len(args) == 1:
+            # Single argument may be either `sid` (AsyncServer) or `data` (Flask-SocketIO)
+            if isinstance(args[0], dict):
+                data = args[0]
+                sid = request.sid
+            else:
+                sid = args[0]
+        else:
+            sid = args[0]
+            data = args[1]
+
+        return await fn(sid, data)
+
+    return wrapper
 
 # Configure logging: write DEBUG to `backend.log` and send INFO+ to console.
 # Capture warnings and route most library logs into the root logger so
@@ -1135,6 +1163,7 @@ def log_not_found(e):
 # ==================== WEBSOCKET HANDLERS ====================
 
 @socketio.on('connect')
+@ensure_ws_args
 def handle_connect(*args, **kwargs):
     """Handle WebSocket connection from either Flask-SocketIO or python-socketio.
 
@@ -1176,6 +1205,7 @@ def handle_connect(*args, **kwargs):
 
 
 @socketio.on('disconnect')
+@ensure_ws_args
 def handle_disconnect(*args, **kwargs):
     """Handle WebSocket disconnection for multiple socket implementations."""
     sid = None
@@ -1218,6 +1248,7 @@ def handle_disconnect(*args, **kwargs):
         pass
 
 @socketio.on('authenticate')
+@ensure_ws_args
 async def handle_authentication(sid, data):
     """Handle authentication via WebSocket."""
     print(f"Authentication attempt: role={data.get('role')}, password_provided={bool(data.get('password'))}, sid={sid}")
@@ -1257,6 +1288,7 @@ async def handle_authentication(sid, data):
         await socketio.emit('auth_response', {'success': False, 'message': 'Invalid credentials'}, to=sid)
 
 @socketio.on('scan_student')
+@ensure_ws_args
 async def handle_scan(sid, data):
     """Handle student scan via WebSocket.
 
@@ -1383,6 +1415,7 @@ async def handle_scan(sid, data):
     broadcast_data_change('scan', {'studentId': student_id})
 
 @socketio.on('get_filtered_students')
+@ensure_ws_args
 async def handle_get_filtered_students(sid, data):
     """Deprecated WebSocket RPC for filtered students.
 
@@ -1760,6 +1793,7 @@ def http_get_student_attendance_trend(student_id):
 
 
 @socketio.on('get_static_filters')
+@ensure_ws_args
 async def handle_get_static_filters(sid):
     """Respond with server-side computed static filters via WebSocket."""
     try:
@@ -1779,6 +1813,7 @@ async def handle_get_static_filters(sid):
         await socketio.emit('get_static_filters_response', {'success': False, 'message': 'Error computing filters', 'error': str(e)}, to=sid)
 
 @socketio.on('get_student_by_id')
+@ensure_ws_args
 async def handle_get_student_by_id(sid, data):
     """Deprecated WebSocket RPC for fetching a student by ID.
 
@@ -1814,6 +1849,7 @@ def http_get_student_summary(student_id):
         return jsonify({'success': False, 'message': 'Error computing summary', 'error': str(e)}), 500
 
 @socketio.on('save_attendance')
+@ensure_ws_args
 async def handle_save_attendance(sid, data):
     """Save attendance records for students via WebSocket. Strictly forbids weekend dates."""
     if sid not in authenticated_sessions:
@@ -1956,6 +1992,7 @@ def api_save_attendance():
     return jsonify({'success': True})
 
 @socketio.on('add_student')
+@ensure_ws_args
 async def handle_add_student(sid, data):
     """Add a new student via WebSocket."""
     if sid not in authenticated_sessions:
@@ -2017,6 +2054,7 @@ async def handle_add_student(sid, data):
     await socketio.emit('add_student_response', {'success': True, 'student': student}, to=sid)
 
 @socketio.on('remove_student')
+@ensure_ws_args
 async def handle_remove_student(sid, data):
     """Remove a student via WebSocket."""
     if sid not in authenticated_sessions:
@@ -2048,6 +2086,7 @@ async def handle_remove_student(sid, data):
     await socketio.emit('remove_student_response', {'success': True}, to=sid)
 
 @socketio.on('update_student')
+@ensure_ws_args
 async def handle_update_student(sid, data):
     """Update a student's information via WebSocket."""
     if sid not in authenticated_sessions:
@@ -2147,6 +2186,7 @@ async def handle_update_student(sid, data):
     await socketio.emit('update_student_response', {'success': True, 'student': student}, to=sid)
 
 @socketio.on('validate_password')
+@ensure_ws_args
 async def handle_validate_password(sid, data):
     """Validate a password for a role via WebSocket."""
     role = data.get('role')
@@ -2164,6 +2204,7 @@ async def handle_validate_password(sid, data):
         await socketio.emit('validate_password_response', {'valid': False}, to=sid)
 
 @socketio.on('update_passwords')
+@ensure_ws_args
 async def handle_update_passwords(sid, data):
     """Update passwords for roles via WebSocket."""
     if sid not in authenticated_sessions:
@@ -2191,6 +2232,7 @@ async def handle_update_passwords(sid, data):
     await socketio.emit('update_passwords_response', {'success': True}, to=sid)
 
 @socketio.on('get_current_time')
+@ensure_ws_args
 async def handle_get_current_time(sid):
     """Get current server time via WebSocket."""
     # Allow unauthenticated access
@@ -2198,6 +2240,7 @@ async def handle_get_current_time(sid):
 
 
 @socketio.on('request_attendance_aggregate')
+@ensure_ws_args
 async def handle_request_attendance_aggregate(sid, data):
     """Compute attendance aggregates for Day/Week/Month/Year and emit response.
 
@@ -2240,6 +2283,7 @@ async def handle_request_attendance_aggregate(sid, data):
 
 
 @socketio.on('request_attendance_trend')
+@ensure_ws_args
 async def handle_request_attendance_trend(sid, data):
     """Compute per-day attendance counts for a single student for a given month.
 
