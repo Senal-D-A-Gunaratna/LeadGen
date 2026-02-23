@@ -54,16 +54,16 @@ try:
     if have_eventlet or have_gevent:
         from flask_socketio import SocketIO
         async_mode = 'eventlet' if have_eventlet else 'gevent'
-        socketio = SocketIO(app, async_mode=async_mode)
+        socketio = SocketIO(app, async_mode=async_mode, cors_allowed_origins='*')
         asgi_app = None
     else:
         # Use python-socketio AsyncServer (ASGI) for uvicorn compatibility
-        socketio = socketio_module.AsyncServer(async_mode='asgi')
+        socketio = socketio_module.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
         asgi_app = socketio_module.ASGIApp(socketio, app.wsgi_app)
 except Exception:
     try:
         from flask_socketio import SocketIO
-        socketio = SocketIO(app, async_mode='threading')
+        socketio = SocketIO(app, async_mode='threading', cors_allowed_origins='*')
         asgi_app = None
     except Exception:
         socketio = None
