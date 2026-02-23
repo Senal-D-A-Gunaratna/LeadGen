@@ -69,6 +69,27 @@ except Exception:
         socketio = None
         asgi_app = None
 
+# Helper to emit events regardless of whether `socketio.emit` is sync or async.
+import inspect
+
+def emit_maybe_async(event: str, payload: dict, namespace: str = '/') -> None:
+    """Call `socketio.emit` and schedule coroutine results if necessary.
+
+    This allows handlers to remain synchronous for Flask-SocketIO while
+    still supporting the AsyncServer `emit` which returns an awaitable.
+    """
+    try:
+        if socketio is None:
+            return
+        res = socketio.emit(event, payload, namespace=namespace)
+        if inspect.isawaitable(res):
+            try:
+                asyncio.ensure_future(res)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
 # Configure logging: write DEBUG to `backend.log` and send INFO+ to console.
 # Capture warnings and route most library logs into the root logger so
 # `backend.log` contains nearly everything useful for debugging.
@@ -1114,48 +1135,85 @@ def log_not_found(e):
 # ==================== WEBSOCKET HANDLERS ====================
 
 @socketio.on('connect')
-async def handle_connect(sid, environ):
-    """Handle WebSocket connection."""
+def handle_connect(*args, **kwargs):
+    """Handle WebSocket connection from either Flask-SocketIO or python-socketio.
+
+    Accepts variable arguments because different server implementations
+    invoke the handler with different signatures (e.g., `(sid, environ)`
+    for python-socketio and `(auth)` or `()` for Flask-SocketIO).
+    """
+    sid = None
+    # Try to obtain sid from arguments (async server style)
     try:
-        connected_sids.add(sid)
+        if len(args) >= 1 and isinstance(args[0], str):
+            sid = args[0]
+        # If Flask request context is present, try to read request.sid
+        if sid is None:
+            try:
+                from flask import request as _flask_request
+                sid = getattr(_flask_request, 'sid', None)
+            except Exception:
+                sid = sid
     except Exception:
-        pass
-    print(f'Client connected: {sid}')
-    # Emit current connection counts to all clients
+        sid = None
+
     try:
-        await socketio.emit('connection_count', {
-            'total': len(connected_sids),
-            'authenticated': len(authenticated_sessions)
-        }, namespace='/')
+        if sid is not None:
+            connected_sids.add(sid)
     except Exception:
         pass
 
-@socketio.on('disconnect')
-async def handle_disconnect(sid):
-    """Handle WebSocket disconnection."""
     try:
-        # Use pop to avoid KeyError if session not present
-        try:
-            authenticated_sessions.pop(sid, None)
-        except Exception:
-            pass
+        print(f'Client connected: {sid}')
     except Exception:
-        # Defensive: ignore any errors during disconnect handling
         pass
+
+    # Emit current connection counts to all clients
+    emit_maybe_async('connection_count', {
+        'total': len(connected_sids),
+        'authenticated': len(authenticated_sessions)
+    }, namespace='/')
+
+
+@socketio.on('disconnect')
+def handle_disconnect(*args, **kwargs):
+    """Handle WebSocket disconnection for multiple socket implementations."""
+    sid = None
     try:
-        # Remove from connected set and emit updated counts
+        if len(args) >= 1 and isinstance(args[0], str):
+            sid = args[0]
+        if sid is None:
+            try:
+                from flask import request as _flask_request
+                sid = getattr(_flask_request, 'sid', None)
+            except Exception:
+                sid = sid
+    except Exception:
+        sid = None
+
+    try:
+        if sid is not None:
+            try:
+                authenticated_sessions.pop(sid, None)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    try:
         try:
-            connected_sids.discard(sid)
+            if sid is not None:
+                connected_sids.discard(sid)
         except Exception:
             pass
-        print(f'Client disconnected: {sid}')
         try:
-            await socketio.emit('connection_count', {
-                'total': len(connected_sids),
-                'authenticated': len(authenticated_sessions)
-            }, namespace='/')
+            print(f'Client disconnected: {sid}')
         except Exception:
             pass
+        emit_maybe_async('connection_count', {
+            'total': len(connected_sids),
+            'authenticated': len(authenticated_sessions)
+        }, namespace='/')
     except Exception:
         pass
 
