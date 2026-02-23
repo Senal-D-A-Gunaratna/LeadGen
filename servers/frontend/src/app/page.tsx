@@ -26,9 +26,6 @@ import { shrinkStudentForList } from '@/lib/utils';
 const AttendanceHistoryTab = dynamic(() => import('@/components/tabs/attendance-history-tab').then(mod => mod.AttendanceHistoryTab), {
   loading: () => null,
 });
-const LineGraphTab = dynamic(() => import('@/components/tabs/line-graph-tab').then(mod => mod.LineGraphTab), {
-  loading: () => <Skeleton className="h-[400px] w-full" />,
-});
 const ManualAttendanceTab = dynamic(() => import('@/components/tabs/manual-attendance-tab').then(mod => mod.ManualAttendanceTab), {
   loading: () => <Skeleton className="h-[400px] w-full" />,
 });
@@ -196,7 +193,6 @@ export default function Home() {
           <TabsList>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="attendance-history">Attendance History</TabsTrigger>
-            <TabsTrigger value="line-graph">Line Graph</TabsTrigger>
             {(isAdmin || isDev) && <TabsTrigger value="manual-attendance">Manual Attendance Marking</TabsTrigger>}
             {(isAdmin || isModerator || isDev) && <TabsTrigger value="manage-prefects">Manage Students</TabsTrigger>}
             {isAdmin && <TabsTrigger value="admin-settings">Admin</TabsTrigger>}
@@ -219,9 +215,6 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="attendance-history">
             <AttendanceHistoryTab />
-          </TabsContent>
-          <TabsContent value="line-graph">
-            <LineGraphTab />
           </TabsContent>
           {(isAdmin || isDev) && (
             <TabsContent value="manual-attendance">
