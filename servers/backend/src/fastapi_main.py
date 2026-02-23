@@ -1108,10 +1108,14 @@ class CombinedApp:
 
 
 # Export ASGI application expected by uvicorn
+from typing import Optional, Type
+WSGIMiddleware: Optional[Type] = None
 try:
-    from starlette.middleware.wsgi import WSGIMiddleware
+    from starlette.middleware.wsgi import WSGIMiddleware as _WSGIMiddleware
+    WSGIMiddleware = _WSGIMiddleware
 except Exception:
-    WSGIMiddleware = None
+    # Leave WSGIMiddleware as None when import fails
+    pass
 
 # Prefer the Flask-side ASGI adapter if provided; otherwise wrap the
 # legacy Flask WSGI app with Starlette's WSGI middleware so the combined

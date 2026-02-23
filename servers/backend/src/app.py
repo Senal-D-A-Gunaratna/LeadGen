@@ -53,7 +53,7 @@ try:
 
     if have_eventlet or have_gevent:
         from flask_socketio import SocketIO
-        async_mode = 'eventlet' if have_eventlet else 'gevent'
+        async_mode: Any = 'eventlet' if have_eventlet else 'gevent'
         socketio = SocketIO(app, async_mode=async_mode, cors_allowed_origins='*')
         asgi_app = None
     else:
