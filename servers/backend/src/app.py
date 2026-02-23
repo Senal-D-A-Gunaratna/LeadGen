@@ -114,7 +114,10 @@ def ensure_ws_args(fn):
             sid = args[0]
             data = args[1]
 
-        return await fn(sid, data)
+        if inspect.iscoroutinefunction(fn):
+            return await fn(sid, data)
+        else:
+            return fn(sid, data)
 
     return wrapper
 
