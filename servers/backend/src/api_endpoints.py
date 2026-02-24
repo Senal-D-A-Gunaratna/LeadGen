@@ -132,22 +132,13 @@ def register_endpoints(app, socketio, helpers):
     
     # ------------------- HTTP Auth endpoints (Flask) -------------------
 
-    # Helper: write a timestamped message to backend.log and frontend.log
+    # Helper: write a timestamped message to backend.log
     DEBUG_LOG_PATH = Path(__file__).resolve().parents[1] / 'backend.log'
-    FRONTEND_LOG_PATH = Path(__file__).resolve().parents[1] / 'frontend.log'
 
     def _write_backend_log(msg: str):
         try:
             ts = datetime.utcnow().isoformat() + 'Z'
             with open(DEBUG_LOG_PATH, 'a') as f:
-                f.write(f"[{ts}] {msg}\n")
-        except Exception:
-            pass
-
-    def _write_frontend_log(msg: str):
-        try:
-            ts = datetime.utcnow().isoformat() + 'Z'
-            with open(FRONTEND_LOG_PATH, 'a') as f:
                 f.write(f"[{ts}] {msg}\n")
         except Exception:
             pass
@@ -302,7 +293,7 @@ def register_endpoints(app, socketio, helpers):
         level = data.get('level') or 'info'
         remote = request.remote_addr or ''
         try:
-            _write_frontend_log(f"{level} from {remote}: {msg}")
+            _write_backend_log(f"frontend {level} from {remote}: {msg}")
             return jsonify({'success': True})
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
