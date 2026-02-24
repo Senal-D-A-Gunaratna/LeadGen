@@ -263,6 +263,13 @@ export async function validatePassword(role: string, password: string) {
       method: 'POST',
       body: JSON.stringify({ role, password }),
     });
+    // Log attempt to backend frontend.log for debugging
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `validatePassword attempt role=${role} valid=${!!res.valid}` }),
+      });
+    } catch (e) {}
     return !!res.valid;
   } catch (e) {
     return false;
@@ -277,8 +284,20 @@ export async function login(role: string, password: string) {
       method: 'POST',
       body: JSON.stringify({ role, password }),
     });
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `login attempt role=${role} success=${!!res.success}` }),
+      });
+    } catch (e) {}
     return res;
   } catch (e: any) {
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `login error role=${role} error=${e?.message || String(e)}` }),
+      });
+    } catch (ee) {}
     return { success: false, message: e?.message || String(e) };
   }
 }
@@ -290,6 +309,12 @@ export async function validateAuthToken(token: string) {
       method: 'POST',
       body: JSON.stringify({ token }),
     });
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `validateAuthToken token_present=${!!token} valid=${!!res.valid}` }),
+      });
+    } catch (e) {}
     return !!res.valid;
   } catch (e) {
     return false;

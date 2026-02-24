@@ -2458,6 +2458,24 @@ async def handle_request_attendance_trend(sid, data):
 # Import additional endpoints
 from .api_endpoints import register_endpoints
 
+# Register additional endpoints now so Flask routes exist on startup.
+try:
+    register_endpoints(app, socketio, {
+        'get_all_students_with_history': globals().get('get_all_students_with_history'),
+        'get_student_by_id': globals().get('get_student_by_id'),
+        'get_attendance_summary': globals().get('get_attendance_summary'),
+        'broadcast_data_change': globals().get('broadcast_data_change'),
+        'broadcast_summary_update': globals().get('broadcast_summary_update'),
+        'request_recalc': globals().get('request_recalc'),
+        'emit': getattr(socketio, 'emit', None),
+        'authenticated_sessions': globals().get('authenticated_sessions')
+    })
+except Exception as e:
+    try:
+        print('register_endpoints failed at startup:', e)
+    except Exception:
+        pass
+
 
 # === DB MTIME -> application wiring ===
 # We register a lightweight thread callback (invoked by the watcher thread)
