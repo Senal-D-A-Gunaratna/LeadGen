@@ -259,8 +259,13 @@ export const useStudentStore = create<StudentStore>()(
             }
             // Always fetch the full, fresh data for the selected student
             try {
-                const fullStudentProfile = await getStudentByIdAction(student.student_id);
-                set({ selectedStudent: fullStudentProfile });
+                  const sid = getEntityId(student) as number | undefined;
+                  if (sid !== undefined) {
+                    const fullStudentProfile = await getStudentByIdAction(sid);
+                    set({ selectedStudent: fullStudentProfile });
+                  } else {
+                    set({ selectedStudent: student });
+                  }
             } catch (error) {
                 console.error("Failed to fetch student profile:", error);
                 // Fallback to the potentially stale student object if the fetch fails
@@ -308,7 +313,8 @@ export const useStudentStore = create<StudentStore>()(
             // changes may map studentId -> AttendanceStatus OR -> { status, checkInTime }
             const studentsToUpdate = await getFilteredStudentsAction({ date: dateString });
             const updatedStudents = studentsToUpdate.map(student => {
-              const change = changes[student.student_id] || changes[getEntityId(student)];
+              const sid = getEntityId(student) as number | undefined;
+              const change = (sid !== undefined ? changes[sid] : undefined) || changes[getEntityId(student) as any];
               if (change) {
                 const history = [...student.attendanceHistory];
                 const recordIndex = history.findIndex(h => h.date === dateString);

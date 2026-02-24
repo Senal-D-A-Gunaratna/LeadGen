@@ -448,7 +448,15 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
     students: List[Dict] = []
     for row in students_data:
         student = dict(row)
-        student_id = student.get('student_id') or student.get('student_id') or get('student_id') or get('id')
+        student_id_val = student.get('student_id') or student.get('id')
+        try:
+            student_id = int(student_id_val) if student_id_val is not None else None
+        except Exception:
+            # Skip malformed student entries
+            continue
+        if student_id is None:
+            # No usable id present; skip this row
+            continue
         
         # Build attendance history aligned to authoritative `school_days`
         from .database import get_school_days
@@ -514,7 +522,7 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
     back to legacy in-memory logic.
     """
     try:
-        sid_val = student.get('student_id') or get('student_id') or get('id')
+        sid_val = student.get('student_id') or student.get('id')
         if isinstance(sid_val, (int, str)):
             sid = int(sid_val)
         else:

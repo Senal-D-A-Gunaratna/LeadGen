@@ -20,7 +20,7 @@ import { format } from 'date-fns';
 import { wsClient } from '@/lib/websocket-client';
 import { syncClient } from '@/lib/sync-client';
 import { getStudentByIdAction } from '@/app/actions';
-import { shrinkStudentForList } from '@/lib/utils';
+import { shrinkStudentForList, getStudentId } from '@/lib/utils';
 
 // Dynamically import heavy tab components
 const AttendanceHistoryTab = dynamic(() => import('@/components/tabs/attendance-history-tab').then(mod => mod.AttendanceHistoryTab), {
@@ -93,7 +93,8 @@ export default function Home() {
           try {
             const student = await getStudentByIdAction(data.studentId);
             if (student) {
-              actions.applyRealtimeUpdate!({ op: 'upsert', id: student.student_id, fields: shrinkStudentForList(student), server_ts: Date.now() });
+              const sid = getStudentId(student);
+              actions.applyRealtimeUpdate!({ op: 'upsert', id: sid, fields: shrinkStudentForList(student), server_ts: Date.now() });
             }
             return;
           } catch (e) {
