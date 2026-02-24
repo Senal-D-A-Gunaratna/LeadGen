@@ -130,6 +130,137 @@ def register_endpoints(app, socketio, helpers):
         except Exception:
             return False
     
+        # ------------------- HTTP Auth endpoints (Flask) -------------------
+        @app.route('/api/auth/login', methods=['POST'])
+        def flask_api_auth_login():
+            data = request.get_json() or {}
+            role = data.get('role')
+            password = data.get('password')
+            if not role or not password:
+                return jsonify({'success': False, 'message': 'Missing role or password'}), 400
+            try:
+                if flask_app.validate_password(role, password):
+                    token = flask_app.create_http_session(role)
+                    return jsonify({'success': True, 'token': token, 'role': role})
+                else:
+                    return jsonify({'success': False, 'message': 'Invalid credentials'}), 401
+            except Exception as e:
+                return jsonify({'success': False, 'message': str(e)}), 500
+
+        @app.route('/api/auth/validate', methods=['POST'])
+        def flask_api_auth_validate():
+            data = request.get_json() or {}
+            token = data.get('token')
+            if token:
+                try:
+                    role = flask_app.validate_http_token(token)
+                    return jsonify({'success': True, 'valid': bool(role), 'role': role})
+                except Exception as e:
+                    return jsonify({'success': False, 'message': str(e)}), 500
+            role = data.get('role')
+            password = data.get('password')
+            if role and password:
+                try:
+                    valid = validate_password(role, password)
+                    return jsonify({'success': True, 'valid': bool(valid)})
+                except Exception as e:
+                    return jsonify({'success': False, 'message': str(e)}), 500
+            return jsonify({'success': False, 'message': 'Missing token or role/password'}), 400
+
+        @app.route('/api/attendance/has_data', methods=['GET'])
+        def flask_api_attendance_has_data():
+            month = request.args.get('month')
+            start = request.args.get('start')
+            end = request.args.get('end')
+            grade = request.args.get('grade', 'all')
+            classFilter = request.args.get('classFilter')
+            roleFilter = request.args.get('roleFilter')
+            try:
+                from datetime import date, timedelta
+                start_date = None
+                end_date = None
+                if month:
+                    try:
+                        sd = date.fromisoformat(f"{month}-01")
+                    except Exception:
+                        return jsonify({'success': False, 'error': 'Invalid month format (expected YYYY-MM)'}), 400
+                    start_date = sd
+                    if sd.month == 12:
+                        next_mon = date(sd.year + 1, 1, 1)
+                    else:
+                        next_mon = date(sd.year, sd.month + 1, 1)
+                    end_date = next_mon - timedelta(days=1)
+                else:
+                    try:
+                        start_date = date.fromisoformat(start) if start else None
+                        end_date = date.fromisoformat(end) if end else None
+                    except Exception:
+                        return jsonify({'success': False, 'error': 'Invalid date format for start/end'}), 400
+
+                if start_date is None or end_date is None:
+                    conn_att = get_db_connection('attendance')
+                    cur_att = conn_att.cursor()
+                    cur_att.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
+                    row = cur_att.fetchone()
+                    try:
+                        cur_att.connection.close()
+                    except Exception:
+                        pass
+                    if row and row['min_date'] and row['max_date']:
+                        if start_date is None:
+                            start_date = date.fromisoformat(row['min_date'])
+                        if end_date is None:
+                            end_date = date.fromisoformat(row['max_date'])
+                    else:
+                        return jsonify({'success': True, 'hasData': False})
+
+                assert start_date is not None and end_date is not None
+                if start_date > end_date:
+                    start_date, end_date = end_date, start_date
+
+                params = [start_date.isoformat(), end_date.isoformat()]
+                join_students = False
+                where_clauses = ['ar.date BETWEEN ? AND ?']
+                if grade and grade != 'all':
+                    join_students = True
+                    where_clauses.append('s.grade = ?')
+                    params.append(int(grade))
+                if classFilter and classFilter != 'all':
+                    join_students = True
+                    where_clauses.append('s.className = ?')
+                    params.append(classFilter)
+                if roleFilter and roleFilter != 'all':
+                    join_students = True
+                    if roleFilter == 'none':
+                        where_clauses.append('(s.role IS NULL OR s.role = "")')
+                    else:
+                        where_clauses.append('s.role = ?')
+                        params.append(roleFilter)
+
+                if join_students:
+                    sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE {' AND '.join(where_clauses)}"
+                else:
+                    sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar WHERE {' AND '.join(where_clauses)}"
+
+                conn = get_db_connection('attendance')
+                cur = conn.cursor()
+                cur.execute(sql, tuple(params))
+                row = cur.fetchone()
+                try:
+                    cur.connection.close()
+                except Exception:
+                    pass
+
+                has = False
+                if row and ('cnt' in row.keys()):
+                    try:
+                        has = bool(row['cnt'] > 0)
+                    except Exception:
+                        has = False
+                return jsonify({'success': True, 'hasData': has})
+            except Exception as e:
+                return jsonify({'success': False, 'error': str(e)}), 500
+
     # ==================== WEBSOCKET HANDLERS ====================
     
     @socketio.on('list_backups')
