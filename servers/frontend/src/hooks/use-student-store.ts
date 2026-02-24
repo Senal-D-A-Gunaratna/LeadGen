@@ -22,6 +22,9 @@ import { shrinkStudentForList } from '@/lib/utils';
 // Enable Immer MapSet plugin
 enableMapSet();
 
+// Helper to get the canonical id for a student-like object (supports legacy `id`)
+const getEntityId = (s: any) => (s && (s.student_id ?? s.id)) ?? undefined;
+
 const getCurrentTime = async (get: () => StudentStore): Promise<Date> => {
     const store = get();
     if (store.fakeDate) {
@@ -54,12 +57,12 @@ export const useStudentStore = create<StudentStore>()(
         try {
           set(produce((state: StudentStore) => {
             const op = payload.op || 'upsert';
-            const id = payload.id;
+            const id = payload.id ?? payload.student_id;
             if (!id) return;
 
             if (op === 'delete') {
-              state.students = state.students.filter((s: any) => s.id !== id);
-              state.fullRoster = state.fullRoster.filter((s: any) => s.id !== id);
+              state.students = state.students.filter((s: any) => getEntityId(s) !== id);
+              state.fullRoster = state.fullRoster.filter((s: any) => getEntityId(s) !== id);
               state.studentSummaries.delete(id);
               return;
             }
@@ -70,9 +73,9 @@ export const useStudentStore = create<StudentStore>()(
             const serverTs = payload.server_ts || payload.server_ts_ms || null;
 
             const mergeInto = (arr: any[]) => {
-              const idx = arr.findIndex((s: any) => s.id === id);
+              const idx = arr.findIndex((s: any) => getEntityId(s) === id);
               if (idx === -1) {
-                const base = { id, ...changes };
+                const base = { student_id: id, ...changes };
                 arr.push(shrinkStudentForList(base as any));
               } else {
                 const existing = arr[idx];
@@ -186,19 +189,19 @@ export const useStudentStore = create<StudentStore>()(
 
                 // Optimistically update the UI with lightweight list entries
                 set(produce((state: StudentStore) => {
-                  const studentIndex = state.students.findIndex(s => s.id === studentWithTime.id);
-                  if (studentIndex !== -1) {
-                    state.students[studentIndex] = shrinkStudentForList(studentWithTime);
+                  const studentIdx = state.students.findIndex(s => getEntityId(s) === getEntityId(studentWithTime));
+                  if (studentIdx !== -1) {
+                    state.students[studentIdx] = shrinkStudentForList(studentWithTime);
                   }
-                  const fullRosterIndex = state.fullRoster.findIndex(s => s.id === studentWithTime.id);
+                  const fullRosterIndex = state.fullRoster.findIndex(s => getEntityId(s) === getEntityId(studentWithTime));
                   if (fullRosterIndex !== -1) {
                     state.fullRoster[fullRosterIndex] = shrinkStudentForList(studentWithTime);
                   }
 
                   // Keep scannedStudent as a transient full-profile for display
                   state.scannedStudent = studentWithTime;
-                  state.recentScans = [shrinkStudentForList(studentWithTime), ...state.recentScans.filter(s => s.id !== studentWithTime.id)].slice(0, 5);
-                  if (state.selectedStudent?.id === studentWithTime.id) {
+                  state.recentScans = [shrinkStudentForList(studentWithTime), ...state.recentScans.filter(s => getEntityId(s) !== getEntityId(studentWithTime))].slice(0, 5);
+                  if (getEntityId(state.selectedStudent) === getEntityId(studentWithTime)) {
                     state.selectedStudent = studentWithTime;
                   }
                 }));
@@ -216,7 +219,7 @@ export const useStudentStore = create<StudentStore>()(
                 const refreshedStudent = { ...studentToUpdate, lastScanTime: scanTime.getTime() };
                 set({
                   scannedStudent: refreshedStudent,
-                  recentScans: [refreshedStudent, ...recentScans.filter(s => s.id !== refreshedStudent.id)].slice(0, 5),
+                  recentScans: [refreshedStudent, ...recentScans.filter(s => getEntityId(s) !== getEntityId(refreshedStudent))].slice(0, 5),
                 });
                 setTimeout(() => set({ scannedStudent: null }), 3000);
               }
@@ -282,7 +285,7 @@ export const useStudentStore = create<StudentStore>()(
           removeStudent: async (studentId) => {
             const { user } = useAuthStore.getState();
             const role = user?.role || 'user';
-            const studentName = get().students.find(s => s.id === studentId)?.name || 'Unknown';
+            const studentName = get().students.find(s => getEntityId(s) === studentId)?.name || 'Unknown';
             useActionLogStore.getState().addActionLog(`[${role}] Removed student: ${studentName} (ID: ${studentId}).`);
 
             const now = await get().actions.getCurrentAppTime();
@@ -295,9 +298,9 @@ export const useStudentStore = create<StudentStore>()(
             get().actions.fetchAndSetStudents(); // Refetch
             // Also update selected student if it's the one being edited
             const { selectedStudent } = get();
-            if (selectedStudent && selectedStudent.id === studentId) {
-                const fullStudentProfile = await getStudentByIdAction(studentId);
-                set({ selectedStudent: fullStudentProfile });
+            if (selectedStudent && getEntityId(selectedStudent) === studentId) {
+              const fullStudentProfile = await getStudentByIdAction(studentId);
+              set({ selectedStudent: fullStudentProfile });
             }
           },
           updateBulkAttendance: async (date, changes) => {
@@ -305,7 +308,7 @@ export const useStudentStore = create<StudentStore>()(
             // changes may map studentId -> AttendanceStatus OR -> { status, checkInTime }
             const studentsToUpdate = await getFilteredStudentsAction({ date: dateString });
             const updatedStudents = studentsToUpdate.map(student => {
-              const change = changes[student.student_id];
+              const change = changes[student.student_id] || changes[getEntityId(student)];
               if (change) {
                 const history = [...student.attendanceHistory];
                 const recordIndex = history.findIndex(h => h.date === dateString);
@@ -338,7 +341,7 @@ export const useStudentStore = create<StudentStore>()(
                 return { ...student, attendanceHistory: history };
               }
               return student;
-            }).filter(s => changes[s.id]); // Only save students that were changed
+            }).filter(s => changes[getEntityId(s)]); // Only save students that were changed
 
             await saveAttendanceAction(updatedStudents);
             get().actions.fetchAndSetStudents(); // Refetch to show updated data
@@ -425,7 +428,7 @@ export const useStudentStore = create<StudentStore>()(
             const allStudents = await getFilteredStudentsAction({ date: today });
             const changes: Record<number, AttendanceStatus> = {};
             allStudents.forEach(s => {
-              changes[s.id] = 'absent';
+              changes[getEntityId(s) as number] = 'absent';
             });
             await get().actions.updateBulkAttendance(now, changes);
             set({ recentScans: [] });
