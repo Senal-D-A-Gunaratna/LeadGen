@@ -41,6 +41,60 @@ async def health():
     return {"status": "ok"}
 
 
+@fastapi_app.post('/api/auth/login')
+async def api_auth_login(request: Request):
+    """Authenticate using role+password and return a server-side session token."""
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Invalid JSON'}, status_code=400)
+    role = data.get('role')
+    password = data.get('password')
+    if not role or not password:
+        return JSONResponse({'success': False, 'message': 'Missing role or password'}, status_code=400)
+    try:
+        # Reuse Flask app's validate_password and create_http_session
+        if flask_app.validate_password(role, password):
+            token = flask_app.create_http_session(role)
+            return JSONResponse({'success': True, 'token': token, 'role': role})
+        else:
+            return JSONResponse({'success': False, 'message': 'Invalid credentials'}, status_code=401)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+
+
+@fastapi_app.post('/api/auth/validate')
+async def api_auth_validate(request: Request):
+    """Validate either a role+password or an existing token.
+
+    JSON body may include `{ "role": "admin", "password": "..." }` or
+    `{ "token": "..." }`. Returns `{ valid: true }` on success.
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Invalid JSON'}, status_code=400)
+    token = data.get('token')
+    if token:
+        try:
+            role = flask_app.validate_http_token(token)
+            return JSONResponse({'success': True, 'valid': bool(role), 'role': role})
+        except Exception as e:
+            traceback.print_exc()
+            return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+    role = data.get('role')
+    password = data.get('password')
+    if role and password:
+        try:
+            valid = flask_app.validate_password(role, password)
+            return JSONResponse({'success': True, 'valid': bool(valid)})
+        except Exception as e:
+            traceback.print_exc()
+            return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+    return JSONResponse({'success': False, 'message': 'Missing token or role/password'}, status_code=400)
+
+
 @fastapi_app.get('/api/attendance/has_data')
 async def api_attendance_has_data(month: Optional[str] = Query(None), start: Optional[str] = Query(None), end: Optional[str] = Query(None), grade: Optional[str] = Query('all'), classFilter: Optional[str] = Query(None), roleFilter: Optional[str] = Query(None)):
     """Return whether any attendance records exist for a given month or date range.

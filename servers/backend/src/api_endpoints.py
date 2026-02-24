@@ -21,6 +21,9 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
+# Import flask app helpers for HTTP token validation
+from . import app as flask_app
+
 # Password file path
 PASSWORDS_JSON_PATH = Path(__file__).resolve().parents[1] / 'database' / 'passwords.json'
 
@@ -67,6 +70,32 @@ def register_endpoints(app, socketio, helpers):
     request_recalc = helpers.get('request_recalc')
     emit = helpers['emit']
     authenticated_sessions = helpers['authenticated_sessions']
+    # Helper to allow alternate auth via HTTP tokens or authorizer role/password
+    def _is_authorized(sid, data=None):
+        try:
+            if sid in authenticated_sessions:  # type: ignore
+                return True
+        except Exception:
+            pass
+        # Allow token-based auth provided in payload
+        try:
+            if isinstance(data, dict):
+                token = data.get('authorizerToken') or data.get('token') or data.get('authToken')
+                if token:
+                    try:
+                        role = flask_app.validate_http_token(token)
+                        if role:
+                            return True
+                    except Exception:
+                        pass
+                # Allow authorizerRole/authorizerPassword in payload
+                ar = data.get('authorizerRole') or data.get('role')
+                ap = data.get('authorizerPassword') or data.get('password')
+                if ar and ap and validate_password(ar, ap):
+                    return True
+        except Exception:
+            pass
+        return False
     # Allow forcing insecure HTTP for development (set to '1' to bypass HTTPS checks)
     FORCE_ALLOW_INSECURE_HTTP = os.environ.get('FORCE_ALLOW_INSECURE_HTTP') == '1'
     # Helper to determine whether the incoming request is from a local/LAN address
@@ -106,7 +135,7 @@ def register_endpoints(app, socketio, helpers):
     @socketio.on('list_backups')
     async def handle_list_backups(sid):
         """List all available backups via WebSocket."""
-        if sid not in authenticated_sessions:  # type: ignore
+        if not _is_authorized(sid):
             await emit('list_backups_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
 
@@ -128,7 +157,7 @@ def register_endpoints(app, socketio, helpers):
     @socketio.on('restore_backup')
     async def handle_restore_backup(sid, data):
         """Restore a backup via WebSocket."""
-        if sid not in authenticated_sessions:  # type: ignore
+        if not _is_authorized(sid, data):
             await emit('restore_backup_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
 
@@ -194,7 +223,7 @@ def register_endpoints(app, socketio, helpers):
     @socketio.on('get_action_logs')
     async def handle_get_action_logs(sid):
         """Get action logs via WebSocket."""
-        if sid not in authenticated_sessions:  # type: ignore
+        if not _is_authorized(sid):
             await emit('get_action_logs_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
 
@@ -254,7 +283,7 @@ def register_endpoints(app, socketio, helpers):
     @socketio.on('append_action_log')
     async def handle_append_action_log(sid, data):
         """Append an action log entry via WebSocket."""
-        if sid not in authenticated_sessions:  # type: ignore
+        if not _is_authorized(sid, data):
             await emit('append_action_log_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
 
@@ -297,7 +326,7 @@ def register_endpoints(app, socketio, helpers):
     @socketio.on('clear_action_logs')
     async def handle_clear_action_logs(sid, data):
         """Clear all action logs via WebSocket."""
-        if sid not in authenticated_sessions:  # type: ignore
+        if not _is_authorized(sid, data):
             await emit('clear_action_logs_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
 
@@ -320,7 +349,7 @@ def register_endpoints(app, socketio, helpers):
     @socketio.on('get_auth_logs')
     async def handle_get_auth_logs(sid):
         """Get authentication logs via WebSocket."""
-        if sid not in authenticated_sessions:  # type: ignore
+        if not _is_authorized(sid):
             await emit('get_auth_logs_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
 

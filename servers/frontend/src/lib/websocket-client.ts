@@ -37,6 +37,7 @@ class WebSocketClient {
   private listeners: Map<string, Set<(data: any) => void>> = new Map();
   private authenticated: boolean = false;
   private currentRole: string | null = null;
+  private authToken: string | null = null;
   private connected: boolean = false;
   private connecting: boolean = false;
 
@@ -119,6 +120,11 @@ class WebSocketClient {
         pingTimeout: 60000,
         pingInterval: 25000,
       };
+
+      // If we have an HTTP auth token, include it in the socket auth payload
+      if (this.authToken) {
+        socketOptions.auth = { token: this.authToken };
+      }
 
       this.connecting = true;
       this.socket = io(backendUrl, socketOptions);
@@ -359,48 +365,35 @@ class WebSocketClient {
   authenticate(role: string, password: string): Promise<boolean> {
     console.log('Attempting to authenticate', role);
     return new Promise((resolve) => {
-      if (!this.socket || !this.socket.connected) {
-        console.log('Socket not connected, connecting...');
-        this.connect();
-        // Wait for the 'connect' event before proceeding to authenticate
-        const connectHandler = () => {
-          console.log('Socket connected, proceeding to authenticate');
-          this.socket?.off('connect', connectHandler);
-          // Now that connected, recursively call authenticate
-          this.authenticate(role, password).then(resolve);
-        };
-        this.socket?.on('connect', connectHandler);
-        // Timeout if connection takes too long
-        setTimeout(() => {
-          console.log('Connection timeout');
-          this.socket?.off('connect', connectHandler);
-          resolve(false);
-        }, 5000);
-        return;
-      }
-
-      console.log('Socket connected, sending authenticate event');
-      const handler = (data: { success: boolean; role?: string; message: string }) => {
-        console.log('Auth response received', data);
-        this.socket?.off('auth_response', handler);
-        if (data.success) {
-          this.authenticated = true;
-          this.currentRole = data.role || null;
-          resolve(true);
-        } else {
-          resolve(false);
+      // Perform HTTP-based login against FastAPI; socket auth via token
+      ensureBackendUrl().then(async (backendUrl) => {
+        try {
+          const res = await fetch(`${backendUrl}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role, password }),
+          });
+          const j = await res.json();
+          if (res.ok && j && j.success && j.token) {
+            this.authToken = j.token;
+            this.authenticated = true;
+            this.currentRole = j.role || role;
+            // Reconnect socket so `auth` is included on the connection handshake
+            try {
+              if (this.socket) {
+                this.socket.disconnect();
+                this.socket = null;
+              }
+            } catch (e) {}
+            this.connect();
+            resolve(true);
+            return;
+          }
+        } catch (e) {
+          console.error('Auth HTTP error', e);
         }
-      };
-
-      this.socket.on('auth_response', handler);
-      this.socket.emit('authenticate', { role, password });
-
-      // Timeout after 15 seconds
-      setTimeout(() => {
-        console.log('Auth response timeout');
-        this.socket?.off('auth_response', handler);
         resolve(false);
-      }, 15000);
+      }).catch((e) => { console.error('Failed to derive backend URL for auth', e); resolve(false); });
     });
   }
 
@@ -593,39 +586,22 @@ class WebSocketClient {
 
   validatePassword(role: string, password: string): Promise<boolean> {
     return new Promise((resolve) => {
-      if (!this.socket || !this.socket.connected) {
-        // Attempt to connect first, then validate once connected
-        this.connect();
-
-        const connectHandler = () => {
-          this.socket?.off('connect', connectHandler);
-          // After connected, call validatePassword again
-          this.validatePassword(role, password).then(resolve);
-        };
-
-        this.socket?.on('connect', connectHandler);
-
-        // Timeout if connection takes too long
-        setTimeout(() => {
-          this.socket?.off('connect', connectHandler);
-          resolve(false);
-        }, 5000);
-
-        return;
-      }
-
-      const handler = (data: { valid: boolean }) => {
-        this.socket?.off('validate_password_response', handler);
-        resolve(data.valid);
-      };
-
-      this.socket.on('validate_password_response', handler);
-      this.socket.emit('validate_password', { role, password });
-
-      setTimeout(() => {
-        this.socket?.off('validate_password_response', handler);
+      // Use HTTP auth validate endpoint
+      ensureBackendUrl().then(async (backendUrl) => {
+        try {
+          const res = await fetch(`${backendUrl}/api/auth/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role, password }),
+          });
+          const j = await res.json();
+          resolve(Boolean(j && j.valid));
+          return;
+        } catch (e) {
+          console.error('validatePassword HTTP error', e);
+        }
         resolve(false);
-      }, 15000);
+      }).catch((e) => { console.error('Failed to derive backend URL for validate', e); resolve(false); });
     });
   }
 

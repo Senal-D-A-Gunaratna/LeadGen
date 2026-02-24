@@ -172,7 +172,10 @@ def validate_password(role: str, password: str) -> bool:
 # Store authenticated WebSocket sessions
 from typing import Any, Dict
 
+# Store authenticated WebSocket sessions
 authenticated_sessions: Dict[str, Any] = {}
+# HTTP session tokens (token -> role)
+http_sessions: Dict[str, str] = {}
 # Track all connected socket session IDs (unauthenticated + authenticated)
 connected_sids = set()
 # Optional scanner token for unauthenticated scanner devices
@@ -189,6 +192,34 @@ if os.environ.get('DEV_FORCE_FULL_ACCESS') == '1':
     authenticated_sessions = DevSessions()
     print('WARNING: DEV_FORCE_FULL_ACCESS=1 -> bypassing WebSocket auth checks')
     print('WARNING: DEV_FORCE_FULL_ACCESS=1 -> bypassing WebSocket auth checks')
+
+
+def create_http_session(role: str) -> str:
+    """Create a simple server-side HTTP session token for `role`.
+
+    Returns a random token string. Tokens are stored in `http_sessions`.
+    """
+    try:
+        import uuid
+        token = uuid.uuid4().hex
+        http_sessions[token] = role
+        return token
+    except Exception:
+        return ''
+
+
+def validate_http_token(token: str) -> Optional[str]:
+    """Validate an HTTP session token and return the associated role, or None."""
+    if not token:
+        return None
+    return http_sessions.get(token)
+
+
+def invalidate_http_session(token: str):
+    try:
+        http_sessions.pop(token, None)
+    except Exception:
+        pass
 
 # Broadcast data changes to all connected clients
 def broadcast_data_change(event_type: str, data: Optional[dict] = None):
@@ -1200,6 +1231,29 @@ def handle_connect(*args, **kwargs):
     except Exception:
         pass
 
+    # If the client supplied an HTTP auth token during the WebSocket
+    # connection (query string `token` or `Authorization: Bearer <token>`),
+    # populate the `authenticated_sessions` mapping for this `sid` so
+    # existing socket handlers continue to see an authenticated session.
+    try:
+        from flask import request as _flask_request
+        token = None
+        try:
+            token = _flask_request.args.get('token') or _flask_request.headers.get('Authorization')
+        except Exception:
+            token = None
+        if token:
+            if isinstance(token, str) and token.startswith('Bearer '):
+                token = token.split(' ', 1)[1]
+            try:
+                role = validate_http_token(token)
+                if role:
+                    authenticated_sessions[sid] = role
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     # Emit current connection counts to all clients
     emit_maybe_async('connection_count', {
         'total': len(connected_sids),
@@ -1250,45 +1304,10 @@ def handle_disconnect(*args, **kwargs):
     except Exception:
         pass
 
-@socketio.on('authenticate')
-@ensure_ws_args
-async def handle_authentication(sid, data):
-    """Handle authentication via WebSocket."""
-    print(f"Authentication attempt: role={data.get('role')}, password_provided={bool(data.get('password'))}, sid={sid}")
-
-    role = data.get('role')
-    password = data.get('password')
-
-    if not role or not password:
-        print("Authentication failed: missing role or password")
-        await socketio.emit('auth_response', {'success': False, 'message': 'Missing role or password'}, to=sid)
-        return
-
-    if validate_password(role, password):
-        print("Password validated successfully")
-        authenticated_sessions[sid] = role
-        await socketio.emit('auth_response', {'success': True, 'role': role, 'message': 'Authentication successful'}, to=sid)
-
-        # Log authentication
-        conn_logs = get_db_connection('logs')
-        cursor_logs = conn_logs.cursor()
-        cursor_logs.execute('''
-            INSERT INTO auth_logs (timestamp, message)
-            VALUES (?, ?)
-        ''', (datetime.now().isoformat(), f'User signed in as: {role}'))
-        conn_logs.commit()
-        conn_logs.close()
-        # Emit updated connection counts (some connected clients now authenticated)
-        try:
-            await socketio.emit('connection_count', {
-                'total': len(connected_sids),
-                'authenticated': len(authenticated_sessions)
-            }, namespace='/')
-        except Exception:
-            pass
-    else:
-        print("Password validation failed")
-        await socketio.emit('auth_response', {'success': False, 'message': 'Invalid credentials'}, to=sid)
+# WebSocket-based `authenticate` handler removed.
+# Authentication is now handled over HTTP (FastAPI) using session tokens.
+# See `fastapi_main.py` for `/api/auth/*` endpoints and `create_http_session`
+# / `validate_http_token` helpers in this module.
 
 @socketio.on('scan_student')
 @ensure_ws_args
