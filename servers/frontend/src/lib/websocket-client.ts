@@ -365,19 +365,16 @@ class WebSocketClient {
   authenticate(role: string, password: string): Promise<boolean> {
     console.log('Attempting to authenticate', role);
     return new Promise((resolve) => {
-      // Perform HTTP-based login against FastAPI; socket auth via token
-      ensureBackendUrl().then(async (backendUrl) => {
+      // Delegate HTTP login to api-client to avoid duplicating auth logic and
+      // to prevent circular imports at module load time using dynamic import.
+      (async () => {
         try {
-          const res = await fetch(`${backendUrl}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role, password }),
-          });
-          const j = await res.json();
-          if (res.ok && j && j.success && j.token) {
-            this.authToken = j.token;
+          const api = await import('./api-client');
+          const res = await api.login(role, password);
+          if (res && res.success && res.token) {
+            this.authToken = res.token;
             this.authenticated = true;
-            this.currentRole = j.role || role;
+            this.currentRole = res.role || role;
             // Reconnect socket so `auth` is included on the connection handshake
             try {
               if (this.socket) {
@@ -393,7 +390,7 @@ class WebSocketClient {
           console.error('Auth HTTP error', e);
         }
         resolve(false);
-      }).catch((e) => { console.error('Failed to derive backend URL for auth', e); resolve(false); });
+      })();
     });
   }
 
@@ -586,22 +583,17 @@ class WebSocketClient {
 
   validatePassword(role: string, password: string): Promise<boolean> {
     return new Promise((resolve) => {
-      // Use HTTP auth validate endpoint
-      ensureBackendUrl().then(async (backendUrl) => {
+      (async () => {
         try {
-          const res = await fetch(`${backendUrl}/api/auth/validate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ role, password }),
-          });
-          const j = await res.json();
-          resolve(Boolean(j && j.valid));
+          const api = await import('./api-client');
+          const valid = await api.validatePassword(role, password);
+          resolve(!!valid);
           return;
         } catch (e) {
           console.error('validatePassword HTTP error', e);
         }
         resolve(false);
-      }).catch((e) => { console.error('Failed to derive backend URL for validate', e); resolve(false); });
+      })();
     });
   }
 

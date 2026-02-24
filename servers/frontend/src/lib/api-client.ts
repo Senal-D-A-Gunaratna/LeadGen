@@ -258,7 +258,42 @@ export async function updateStudent(studentId: number, data: any) {
 
 // Authentication
 export async function validatePassword(role: string, password: string) {
-  return wsClient.validatePassword(role, password);
+  try {
+    const res = await fetchAPI('/api/auth/validate', {
+      method: 'POST',
+      body: JSON.stringify({ role, password }),
+    });
+    return !!res.valid;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Perform login against FastAPI auth endpoint. Returns the parsed response
+// from the server (expected shape: { success: boolean, token?: string, role?: string }).
+export async function login(role: string, password: string) {
+  try {
+    const res = await fetchAPI('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ role, password }),
+    });
+    return res;
+  } catch (e: any) {
+    return { success: false, message: e?.message || String(e) };
+  }
+}
+
+// Validate an existing auth token with the server.
+export async function validateAuthToken(token: string) {
+  try {
+    const res = await fetchAPI('/api/auth/validate', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    return !!res.valid;
+  } catch (e) {
+    return false;
+  }
 }
 
 export async function updatePasswords(passwordsToUpdate: Record<string, string>, authorizerRole: string, authorizerPassword: string) {
