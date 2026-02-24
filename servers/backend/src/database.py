@@ -278,7 +278,7 @@ def init_database():
                 rows = cursor_students.fetchall()
                 for row in rows:
                     # Support both legacy `id` and new `student_id` during migration
-                    student_id = row.get('student_id') or get('id') or row.get('student_id')
+                    student_id = row.get('student_id') or get('student_id') or get('id') or row.get('student_id')
                     for position, col in enumerate(['fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4'], start=1):
                         value = row[col]
                         if value:
