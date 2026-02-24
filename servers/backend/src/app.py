@@ -298,7 +298,7 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
     cursor_students = conn_students.cursor()
     
     # Get core student record
-    cursor_students.execute('SELECT * FROM students WHERE id = ?', (student_id,))
+    cursor_students.execute('SELECT * FROM students WHERE student_id = ?', (student_id,))
     row = cursor_students.fetchone()
     if not row:
         conn_students.close()
@@ -448,7 +448,7 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
     students: List[Dict] = []
     for row in students_data:
         student = dict(row)
-        student_id = student['id']
+        student_id = student.get('student_id') or student.get('student_id') or get('id')
         
         # Build attendance history aligned to authoritative `school_days`
         from .database import get_school_days
@@ -514,7 +514,7 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
     back to legacy in-memory logic.
     """
     try:
-        sid_val = student.get('id')
+        sid_val = student.get('student_id') or get('id')
         if isinstance(sid_val, (int, str)):
             sid = int(sid_val)
         else:
@@ -599,7 +599,7 @@ def api_attendance_history():
             cursor_att.execute('''
                 SELECT MIN(ar.date) as min_date, MAX(ar.date) as max_date
                 FROM attendance_records ar
-                JOIN students s ON s.id = ar.student_id
+                JOIN students s ON s.student_id = ar.student_id
                 WHERE s.grade = ?
             ''', (int(grade),))
         else:
@@ -650,7 +650,7 @@ def api_attendance_history():
         cursor_att.execute('''
             SELECT ar.date as date, SUM(CASE WHEN ar.status != 'absent' THEN 1 ELSE 0 END) as present
             FROM attendance_records ar
-            JOIN students s ON s.id = ar.student_id
+            JOIN students s ON s.student_id = ar.student_id
             WHERE ar.date BETWEEN ? AND ? AND s.grade = ?
             GROUP BY ar.date
             ORDER BY ar.date ASC
@@ -1057,7 +1057,7 @@ def api_attendance_aggregate():
             total_late_days += late
             perc = round((present / total_school_days) * 100, 1) if total_school_days > 0 else 0
             students_out.append({
-                'id': s.get('id'),
+                'id': s.get('student_id') or get('id'),
                 'name': s.get('name'),
                 'grade': s.get('grade'),
                 'className': s.get('className'),
@@ -1360,7 +1360,7 @@ async def handle_scan(sid, data):
         return
     
     student = dict(row)
-    student_id = student['id']
+    student_id = student['student_id']
     today = date.today().isoformat()
     conn_students.close()
     
@@ -1536,7 +1536,7 @@ def http_get_student_by_id(student_id):
 
         # Build ordered student payload placing `summary` before `attendanceHistory`.
         ordered_student = {
-            'id': student.get('id'),
+            'id': student.get('student_id') or get('id'),
             'name': student.get('name'),
             'grade': student.get('grade'),
             'className': student.get('className'),
@@ -1883,7 +1883,7 @@ async def handle_save_attendance(sid, data):
     # Validate all record dates first: reject weekends or invalid dates before any DB writes
     inserts = []
     for student in students:
-        student_id = student.get('id')
+        student_id = student.get('student_id') or get('id')
         for record in student.get('attendanceHistory', []):
             date_str = record.get('date')
             if not date_str:
@@ -1934,7 +1934,7 @@ async def handle_save_attendance(sid, data):
         recalculate_school_days()
     except Exception:
         pass
-    affected_ids = [student.get('id') for student in students]
+    affected_ids = [student.get('student_id') or get('id') for student in students]
     broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
     broadcast_summary_update(affected_ids)
     await socketio.emit('save_attendance_response', {'success': True}, to=sid)
@@ -1958,7 +1958,7 @@ def api_save_attendance():
 
     inserts = []
     for student in students:
-        student_id = student.get('id')
+        student_id = student.get('student_id') or get('id')
         for record in student.get('attendanceHistory', []):
             date_str = record.get('date')
             if not date_str:
@@ -2007,7 +2007,7 @@ def api_save_attendance():
     except Exception:
         pass
 
-    affected_ids = [s.get('id') for s in students]
+    affected_ids = [s.get('student_id') or get('id') for s in students]
     broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
     broadcast_summary_update(affected_ids)
 
@@ -2029,14 +2029,14 @@ async def handle_add_student(sid, data):
     cursor_students = conn_students.cursor()
     
     # Get next ID
-    cursor_students.execute('SELECT MAX(id) FROM students')
+    cursor_students.execute('SELECT MAX(student_id) FROM students')
     max_id = cursor_students.fetchone()[0] or 0
     next_id = max_id + 1
     
     fingerprints = data.get('fingerprints', ['', '', '', ''])
     
     cursor_students.execute('''
-        INSERT INTO students (id, name, grade, className, role, email, phone,
+        INSERT INTO students (student_id, name, grade, className, role, email, phone,
                             whatsapp_no, fingerprint1, fingerprint2, fingerprint3, fingerprint4,
                             specialRoles, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2091,7 +2091,7 @@ async def handle_remove_student(sid, data):
     conn_students = get_db_connection('students')
     cursor_students = conn_students.cursor()
     
-    cursor_students.execute('DELETE FROM students WHERE id = ?', (student_id,))
+    cursor_students.execute('DELETE FROM students WHERE student_id = ?', (student_id,))
     conn_students.commit()
     conn_students.close()
     
@@ -2125,7 +2125,7 @@ async def handle_update_student(sid, data):
     cursor_students = conn_students.cursor()
     
     # Get existing student
-    cursor_students.execute('SELECT * FROM students WHERE id = ?', (student_id,))
+    cursor_students.execute('SELECT * FROM students WHERE student_id = ?', (student_id,))
     existing = cursor_students.fetchone()
     if not existing:
         conn_students.close()
@@ -2177,7 +2177,7 @@ async def handle_update_student(sid, data):
         SET name = ?, grade = ?, className = ?, role = ?, email = ?, phone = ?,
             whatsapp_no = ?, fingerprint1 = ?, fingerprint2 = ?, fingerprint3 = ?, fingerprint4 = ?,
             specialRoles = ?, notes = ?, updated_at = ?
-        WHERE id = ?
+        WHERE student_id = ?
     ''', (
         name, grade, className, role, email, phone,
         whatsapp_no,
@@ -2525,21 +2525,21 @@ def _worker_loop() -> None:
                         for student in students:
                             summary = get_attendance_summary(student, students)
                             summaries.append({
-                                'studentId': student['id'],
+                                'studentId': student['student_id'],
                                 'name': student['name'],
                                 'grade': student['grade'],
                                 'className': student['className'],
                                 'summary': summary
                             })
                     else:
-                        id_map = {s['id']: s for s in students}
+                        id_map = {s['student_id']: s for s in students}
                         for sid in affected:
                             srec = id_map.get(sid)
                             if not srec:
                                 continue
                             summary = get_attendance_summary(srec, students)
                             summaries.append({
-                                'studentId': srec['id'],
+                                'studentId': srec['student_id'],
                                 'name': srec['name'],
                                 'grade': srec['grade'],
                                 'className': srec['className'],

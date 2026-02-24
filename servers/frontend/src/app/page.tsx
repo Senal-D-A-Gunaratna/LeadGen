@@ -93,7 +93,7 @@ export default function Home() {
           try {
             const student = await getStudentByIdAction(data.studentId);
             if (student) {
-              actions.applyRealtimeUpdate!({ op: 'upsert', id: student.id, fields: shrinkStudentForList(student), server_ts: Date.now() });
+              actions.applyRealtimeUpdate!({ op: 'upsert', id: student.student_id, fields: shrinkStudentForList(student), server_ts: Date.now() });
             }
             return;
           } catch (e) {

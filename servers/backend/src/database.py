@@ -166,7 +166,7 @@ def init_database():
     
     cursor_students.execute('''
         CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             grade INTEGER NOT NULL,
             className TEXT NOT NULL,
@@ -277,7 +277,8 @@ def init_database():
                 cursor_students.execute('SELECT id, fingerprint1, fingerprint2, fingerprint3, fingerprint4 FROM students')
                 rows = cursor_students.fetchall()
                 for row in rows:
-                    student_id = row['id']
+                    # Support both legacy `id` and new `student_id` during migration
+                    student_id = row.get('student_id') or get('id') or row.get('student_id')
                     for position, col in enumerate(['fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4'], start=1):
                         value = row[col]
                         if value:
@@ -307,7 +308,7 @@ def init_database():
         cursor_students.execute("PRAGMA table_info(students)")
         cols = [r[1] for r in cursor_students.fetchall()]
         desired_order = [
-            'id', 'name', 'grade', 'className', 'role', 'phone', 'whatsapp_no', 'email',
+            'student_id', 'name', 'grade', 'className', 'role', 'phone', 'whatsapp_no', 'email',
             'batch',
             'specialRoles', 'notes', 'fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4',
             'created_at', 'updated_at'
@@ -329,7 +330,7 @@ def init_database():
                 cursor_students.execute('BEGIN')
                 cursor_students.execute('''
                     CREATE TABLE IF NOT EXISTS students_new (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        student_id INTEGER PRIMARY KEY AUTOINCREMENT,
                         name TEXT NOT NULL,
                         grade INTEGER NOT NULL,
                         className TEXT NOT NULL,
@@ -359,8 +360,10 @@ def init_database():
                     if col in src_cols:
                         select_expressions.append(col)
                     else:
-                        # Provide reasonable default for missing columns
-                        if col in ('id', 'grade'):
+                        # If `student_id` is missing but legacy `id` exists, copy it across
+                        if col == 'student_id' and 'id' in src_cols:
+                            select_expressions.append('id AS student_id')
+                        elif col in ('student_id', 'grade'):
                             select_expressions.append('0 AS ' + col)
                         else:
                             select_expressions.append("'' AS " + col)

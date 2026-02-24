@@ -178,7 +178,7 @@ async def api_attendance_has_data(month: Optional[str] = Query(None), start: Opt
                 params.append(roleFilter)
 
         if join_students:
-            sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE {' AND '.join(where_clauses)}"
+            sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar JOIN students s ON s.student_id = ar.student_id WHERE {' AND '.join(where_clauses)}"
         else:
             sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar WHERE {' AND '.join(where_clauses)}"
 
@@ -374,7 +374,7 @@ async def create_backup(request: Request):
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ''', (
                             backup_id,
-                            r['id'], r.get('name'), r.get('grade'), r.get('className'), r.get('role'),
+                            r['student_id'], r.get('name'), r.get('grade'), r.get('className'), r.get('role'),
                             r.get('phone', ''), r.get('whatsapp_no', ''), r.get('email', ''),
                             r.get('specialRoles', ''), r.get('notes', ''),
                             r.get('fingerprint1', ''), r.get('fingerprint2', ''), r.get('fingerprint3', ''), r.get('fingerprint4', '')
@@ -506,9 +506,9 @@ async def delete_backup(request: Request):
             cursor_students.execute('SELECT id FROM student_backup_sets WHERE filename = ?', (filename,))
             row = cursor_students.fetchone()
             if row:
-                backup_id = row['id']
+                backup_id = row['student_id']
                 cursor_students.execute('DELETE FROM student_backup_items WHERE backup_id = ?', (backup_id,))
-                cursor_students.execute('DELETE FROM student_backup_sets WHERE id = ?', (backup_id,))
+                cursor_students.execute('DELETE FROM student_backup_sets WHERE student_id = ?', (backup_id,))
                 conn_students.commit()
             conn_students.close()
         else:
@@ -517,9 +517,9 @@ async def delete_backup(request: Request):
             cursor_attendance.execute('SELECT id FROM attendance_backup_sets WHERE filename = ?', (filename,))
             row = cursor_attendance.fetchone()
             if row:
-                backup_id = row['id']
+                backup_id = row['student_id']
                 cursor_attendance.execute('DELETE FROM attendance_backup_items WHERE backup_id = ?', (backup_id,))
-                cursor_attendance.execute('DELETE FROM attendance_backup_sets WHERE id = ?', (backup_id,))
+                cursor_attendance.execute('DELETE FROM attendance_backup_sets WHERE student_id = ?', (backup_id,))
                 conn_attendance.commit()
             conn_attendance.close()
         try:
@@ -590,7 +590,7 @@ async def download_student_data_csv():
     for student in students:
         fingerprints = student.get('fingerprints', ['', '', '', ''])
         writer.writerow([
-            student['id'],
+            student['student_id'],
             student['name'],
             student['grade'],
             student['className'],
@@ -751,7 +751,7 @@ async def download_detailed_attendance_history_csv():
     writer.writerow(['Student ID', 'Name', 'Date', 'Status'])
     for student in students:
         for record in student.get('attendanceHistory', []):
-            writer.writerow([student['id'], student['name'], record['date'], record['status']])
+            writer.writerow([student['student_id'], student['name'], record['date'], record['status']])
     return StreamingResponse(io.BytesIO(output.getvalue().encode('utf-8')), media_type='text/csv', headers={'Content-Disposition': 'attachment; filename=attendance-history.csv'})
 
 
@@ -770,7 +770,7 @@ async def download_attendance_summary_csv():
     for student in students:
         summary = flask_app.get_attendance_summary(student, students)
         writer.writerow([
-            student['id'],
+            student['student_id'],
             student['name'],
             student['grade'],
             student['className'],
@@ -807,7 +807,7 @@ async def download_student_attendance_summary_csv(request: Request):
         'On_Time(%)', 'Late(%)', 'Present(%)', 'Absent(%)'
     ])
     writer.writerow([
-        student['id'],
+        student['student_id'],
         student['name'],
         student['grade'],
         student['className'],
@@ -836,7 +836,7 @@ async def download_student_data_pdf():
     elements.append(Spacer(1, 12))
     data = [['ID', 'Name', 'Grade', 'Class', 'Role', 'Phone', 'Email', 'Special Roles', 'Notes']]
     for student in students:
-        data.append([str(student['id']), student['name'], str(student['grade']), student['className'], student.get('role', 'N/A'), student['contact']['phone'], student['contact']['email'] or 'N/A', student.get('specialRoles', ''), student.get('notes', '')])
+        data.append([str(student['student_id']), student['name'], str(student['grade']), student['className'], student.get('role', 'N/A'), student['contact']['phone'], student['contact']['email'] or 'N/A', student.get('specialRoles', ''), student.get('notes', '')])
     table = Table(data)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3B82C4')),
@@ -861,7 +861,7 @@ async def download_attendance_summary_pdf():
     data = [['ID', 'Name', 'Grade', 'Class', 'Total Days', 'On Time', 'Late', 'Present', 'Absent', 'On Time %', 'Late %', 'Present %', 'Absent %']]
     for student in students:
         summary = flask_app.get_attendance_summary(student, students)
-        data.append([str(student['id']), student['name'], str(student['grade']), student['className'], str(summary['totalSchoolDays']), str(summary['onTimeDays']), str(summary['lateDays']), str(summary['presentDays']), str(summary['absentDays']), f"{summary['onTimePercentage']}%", f"{summary['latePercentage']}%", f"{summary['presencePercentage']}%", f"{summary['absencePercentage']}%"])
+        data.append([str(student['student_id']), student['name'], str(student['grade']), student['className'], str(summary['totalSchoolDays']), str(summary['onTimeDays']), str(summary['lateDays']), str(summary['presentDays']), str(summary['absentDays']), f"{summary['onTimePercentage']}%", f"{summary['latePercentage']}%", f"{summary['presencePercentage']}%", f"{summary['absencePercentage']}%"])
     table = Table(data)
     elements.append(table)
     doc.build(elements)
@@ -887,7 +887,7 @@ async def download_student_attendance_summary_pdf(request: Request):
     elements: List[Flowable] = []
     styles = getSampleStyleSheet()
     elements.append(Paragraph(student['name'], styles['Title']))
-    elements.append(Paragraph(f"ID: {student['id']} | Grade: {student['grade']} | Class: {student['className']}", styles['Normal']))
+    elements.append(Paragraph(f"ID: {student['student_id']} | Grade: {student['grade']} | Class: {student['className']}", styles['Normal']))
     elements.append(Spacer(1, 20))
     summary_data = [['Metric', 'Value']]
     summary_data.extend([

@@ -263,7 +263,7 @@ def register_endpoints(app, socketio, helpers):
                     params.append(roleFilter)
 
             if join_students:
-                sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar JOIN students s ON s.id = ar.student_id WHERE {' AND '.join(where_clauses)}"
+                sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar JOIN students s ON s.student_id = ar.student_id WHERE {' AND '.join(where_clauses)}"
             else:
                 sql = f"SELECT COUNT(1) as cnt FROM attendance_records ar WHERE {' AND '.join(where_clauses)}"
 
@@ -437,7 +437,7 @@ def register_endpoints(app, socketio, helpers):
             for student in students:
                 summary = get_attendance_summary(student, students)
                 summaries.append({
-                    'studentId': student['id'],
+                    'studentId': student['student_id'],
                     'name': student['name'],
                     'grade': student['grade'],
                     'className': student['className'],
@@ -596,7 +596,7 @@ def register_endpoints(app, socketio, helpers):
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ''', (
                         backup_id,
-                        row['id'], row['name'], row['grade'], row['className'], row['role'],
+                        row['student_id'], row['name'], row['grade'], row['className'], row['role'],
                         row.get('phone', ''), row.get('whatsapp_no', ''), row.get('email', ''),
                         row.get('specialRoles', ''), row.get('notes', ''),
                         row.get('fingerprint1', ''), row.get('fingerprint2', ''), row.get('fingerprint3', ''), row.get('fingerprint4', '')
@@ -759,9 +759,9 @@ def register_endpoints(app, socketio, helpers):
                 cursor_students.execute('SELECT id FROM student_backup_sets WHERE filename = ?', (filename,))
                 row = cursor_students.fetchone()
                 if row:
-                    backup_id = row['id']
+                    backup_id = row['student_id']
                     cursor_students.execute('DELETE FROM student_backup_items WHERE backup_id = ?', (backup_id,))
-                    cursor_students.execute('DELETE FROM student_backup_sets WHERE id = ?', (backup_id,))
+                    cursor_students.execute('DELETE FROM student_backup_sets WHERE student_id = ?', (backup_id,))
                     conn_students.commit()
                 conn_students.close()
             else:
@@ -770,9 +770,9 @@ def register_endpoints(app, socketio, helpers):
                 cursor_attendance.execute('SELECT id FROM attendance_backup_sets WHERE filename = ?', (filename,))
                 row = cursor_attendance.fetchone()
                 if row:
-                    backup_id = row['id']
+                    backup_id = row['student_id']
                     cursor_attendance.execute('DELETE FROM attendance_backup_items WHERE backup_id = ?', (backup_id,))
-                    cursor_attendance.execute('DELETE FROM attendance_backup_sets WHERE id = ?', (backup_id,))
+                    cursor_attendance.execute('DELETE FROM attendance_backup_sets WHERE student_id = ?', (backup_id,))
                     conn_attendance.commit()
                 conn_attendance.close()
 
@@ -874,7 +874,7 @@ def register_endpoints(app, socketio, helpers):
         for student in students:
             fingerprints = student.get('fingerprints', ['', '', '', ''])
             writer.writerow([
-                student['id'],
+                student['student_id'],
                 student['name'],
                 student['grade'],
                 student['className'],
@@ -937,7 +937,7 @@ def register_endpoints(app, socketio, helpers):
         for student in students:
             for record in student.get('attendanceHistory', []):
                 writer.writerow([
-                    student['id'],
+                    student['student_id'],
                     student['name'],
                     record['date'],
                     record['status']
@@ -969,7 +969,7 @@ def register_endpoints(app, socketio, helpers):
         for student in students:
             summary = get_attendance_summary(student, students)
             writer.writerow([
-                student['id'],
+                student['student_id'],
                 student['name'],
                 student['grade'],
                 student['className'],
@@ -1012,7 +1012,7 @@ def register_endpoints(app, socketio, helpers):
             'On_Time(%)', 'Late(%)', 'Present(%)', 'Absent(%)'
         ])
         writer.writerow([
-            student['id'],
+            student['student_id'],
             student['name'],
             student['grade'],
             student['className'],
@@ -1053,7 +1053,7 @@ def register_endpoints(app, socketio, helpers):
         data = [['ID', 'Name', 'Grade', 'Class', 'Role', 'Phone', 'Email', 'Special Roles', 'Notes']]
         for student in students:
             data.append([
-                str(student['id']),
+                str(student['student_id']),
                 student['name'],
                 str(student['grade']),
                 student['className'],
@@ -1110,7 +1110,7 @@ def register_endpoints(app, socketio, helpers):
         for student in students:
             summary = get_attendance_summary(student, students)
             data.append([
-                str(student['id']),
+                str(student['student_id']),
                 student['name'],
                 str(student['grade']),
                 student['className'],
@@ -1172,7 +1172,7 @@ def register_endpoints(app, socketio, helpers):
         
         styles = getSampleStyleSheet()
         elements.append(Paragraph(student['name'], styles['Title']))
-        elements.append(Paragraph(f"ID: {student['id']} | Grade: {student['grade']} | Class: {student['className']}", styles['Normal']))
+        elements.append(Paragraph(f"ID: {student['student_id']} | Grade: {student['grade']} | Class: {student['className']}", styles['Normal']))
         elements.append(Spacer(1, 20))
         
         # Summary table

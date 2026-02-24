@@ -431,7 +431,7 @@ export async function downloadStudentAttendanceSummaryAsCsv(student: any): Promi
   const response = await fetch(`${BACKEND_URL}/api/download-student-attendance-summary-csv`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ studentId: student.id }),
+    body: JSON.stringify({ studentId: student.student_id }),
   });
   return response.text();
 }
@@ -534,7 +534,7 @@ export async function downloadStudentAttendanceSummaryAsPdf(student: any): Promi
   const response = await fetch(`${BACKEND_URL}/api/download-student-attendance-summary-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ studentId: student.id }),
+    body: JSON.stringify({ studentId: student.student_id }),
   });
   const blob = await response.blob();
   return new Promise((resolve, reject) => {
