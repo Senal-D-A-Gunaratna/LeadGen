@@ -171,6 +171,7 @@ def init_database():
             grade INTEGER NOT NULL,
             className TEXT NOT NULL,
             role TEXT,
+            batch TEXT,
             phone TEXT NOT NULL,
             whatsapp_no TEXT DEFAULT '',
             email TEXT NOT NULL,
@@ -233,6 +234,7 @@ def init_database():
             grade INTEGER NOT NULL,
             className TEXT NOT NULL,
             role TEXT,
+            batch TEXT,
             phone TEXT NOT NULL,
             whatsapp_no TEXT,
             email TEXT NOT NULL,
@@ -306,6 +308,7 @@ def init_database():
         cols = [r[1] for r in cursor_students.fetchall()]
         desired_order = [
             'id', 'name', 'grade', 'className', 'role', 'phone', 'whatsapp_no', 'email',
+            'batch',
             'specialRoles', 'notes', 'fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4',
             'created_at', 'updated_at'
         ]
@@ -331,6 +334,7 @@ def init_database():
                         grade INTEGER NOT NULL,
                         className TEXT NOT NULL,
                         role TEXT,
+                        batch TEXT,
                         phone TEXT NOT NULL,
                         whatsapp_no TEXT DEFAULT '',
                         email TEXT NOT NULL,
