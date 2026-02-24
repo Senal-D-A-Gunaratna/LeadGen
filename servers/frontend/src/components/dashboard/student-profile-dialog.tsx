@@ -43,7 +43,7 @@ import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../ui/form";
 import { Input } from "../ui/input";
 import { Separator } from "../ui/separator";
-import { parseDate } from "@/lib/utils";
+import { parseDate, getStudentId } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStudentSummary, getStudentById, getStudentMonthlyAttendance, getStudentAttendanceTrend, getAttendanceAggregate, getAttendanceHasData, getStaticFilters } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
@@ -105,7 +105,9 @@ function RemoveStudentButton({ student, onDeleted, canDelete }: { student: Stude
     setIsAuthOpen(false); // Close password dialog
     setIsPending(true);
     try {
-        await actions.removeStudent(student.id);
+      const sid = getStudentId(student);
+      if (sid === undefined) throw new Error('Missing student id');
+      await actions.removeStudent(sid);
         toast({
             title: "Student Removed",
             description: `${student.name} has been removed from the roster.`,
@@ -170,6 +172,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
   const { addActionLog } = useActionLogStore();
   
   const isDev = user?.role === 'dev';
+  const sid = getStudentId(student) as number | undefined;
   const isAdmin = user?.role === 'admin';
 
   const form = useForm<z.infer<typeof editFormSchema>>({
@@ -236,7 +239,10 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
       }
 
       await actions.updateStudent(student.id, updatedDetails);
-      addActionLog(`[${user?.role}] Updated profile for ${values.name} (ID: ${student.id})`);
+      const sid = getStudentId(student);
+      if (sid === undefined) throw new Error('Missing student id');
+      await actions.updateStudent(sid, updatedDetails);
+      addActionLog(`[${user?.role}] Updated profile for ${values.name} (ID: ${sid})`);
       toast({
         title: "Profile Updated",
         description: `${values.name}'s profile has been updated.`,
@@ -558,14 +564,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       try {
         const year = displayedMonth.getFullYear();
         const monthZero = displayedMonth.getMonth();
-        const key = formatTrendKey(student.id, year, monthZero + 1);
+        const key = formatTrendKey(getStudentId(student) as number, year, monthZero + 1);
         attendanceTrendCache.current.delete(key);
-        await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+        await fetchAttendanceTrendForMonth(getStudentId(student) as number, year, monthZero);
 
         try {
           const mon = displayedMonth.getMonth() + 1;
           const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
-          const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
+          const resp = await getStudentMonthlyAttendance(getStudentId(student) as number, monthStr) as any;
           const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
           // Strict mode: use ONLY the server-provided attendanceHistory.
           setStudentMonthlyHistory(hist);
@@ -575,11 +581,12 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         }
 
         try {
-          console.debug('[StudentProfile] fetching summary for', student.id);
-          clientLog('debug', 'fetching summary for', { studentId: student.id });
-          const res = await getStudentSummary(student.id);
+          const sid = getStudentId(student) as number;
+          console.debug('[StudentProfile] fetching summary for', sid);
+          clientLog('debug', 'fetching summary for', { studentId: sid });
+          const res = await getStudentSummary(sid);
           console.debug('[StudentProfile] getStudentSummary response', res);
-          clientLog('debug', 'getStudentSummary response', { studentId: student.id, res });
+          clientLog('debug', 'getStudentSummary response', { studentId: sid, res });
           const s = res?.summary;
           if (s) {
             updateStudentSummaries([{
@@ -609,7 +616,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           }
         } catch (e) {
           console.error('Failed to fetch student summary on open', e);
-          clientLog('error', 'Failed to fetch student summary on open', { studentId: student?.id, error: String(e) });
+          clientLog('error', 'Failed to fetch student summary on open', { studentId: sid, error: String(e) });
         }
       } catch (e) {
         console.warn('Failed to refresh student profile data on open', e);
@@ -630,19 +637,20 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     if (!student) return;
 
     const tryRefetchForStudent = async (reason?: string, payload?: any) => {
+      if (!sid) return;
       try {
         const year = displayedMonth.getFullYear();
         const monthZero = displayedMonth.getMonth();
         // Refresh trend
-        const key = formatTrendKey(student.id, year, monthZero + 1);
+        const key = formatTrendKey(sid, year, monthZero + 1);
         attendanceTrendCache.current.delete(key);
-        await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+        await fetchAttendanceTrendForMonth(sid, year, monthZero);
 
         // Refresh monthly history
         try {
           const mon = displayedMonth.getMonth() + 1;
           const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
-          const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
+          const resp = await getStudentMonthlyAttendance(sid, monthStr) as any;
           const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
 
           // Strict mode: use ONLY the server-provided attendanceHistory.
@@ -653,12 +661,12 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
         // Refresh summary
         try {
-          const res = await getStudentSummary(student.id);
-          clientLog('debug', 'sync getStudentSummary response', { studentId: student.id, res });
+          const res = await getStudentSummary(sid);
+          clientLog('debug', 'sync getStudentSummary response', { studentId: sid, res });
           const s = res?.summary;
           if (s) {
             updateStudentSummaries([{
-              studentId: student.id,
+              studentId: sid,
               summary: {
                 totalSchoolDays: s.totalSchoolDays,
                 presentDays: s.presentDays,
@@ -1223,7 +1231,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         const s = res?.summary;
         if (s) {
           updateStudentSummaries([{
-            studentId: student.id,
+            studentId: sid,
             summary: {
               totalSchoolDays: s.totalSchoolDays,
               presentDays: s.presentDays,
