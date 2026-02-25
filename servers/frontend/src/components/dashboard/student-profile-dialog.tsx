@@ -729,7 +729,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         }
 
         if (event === 'students_refreshed') {
-          const ids: number[] = payload?.students?.map((s: any) => s.id) || [];
+          const ids: number[] = payload?.students?.map((s: any) => getStudentId(s)) || [];
           if (ids.includes(sid!)) tryRefetchForStudent('students_refreshed', payload);
         }
       } catch (e) {
@@ -909,7 +909,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       attendanceTrendCache.current.delete(key);
     }
     // Always fetch the server-provided attendance trend for the displayed month
-    // (calendar should rely only on authoritative server data keyed by student.id)
+    // (calendar should rely only on authoritative server data keyed by student_id = sid)
     fetchAttendanceTrendForMonth(sid!, year, month);
   }, [displayedMonth, student]);
 
@@ -1134,7 +1134,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         }
       } catch (e) {
         console.error('Failed to fetch student summary', e);
-        clientLog('error', 'Failed to fetch student summary', { studentId: student?.id, error: String(e) });
+        clientLog('error', 'Failed to fetch student summary', { studentId: getStudentId(student), error: String(e) });
         if (!cancelled) setAttendanceStats(null);
       }
     }

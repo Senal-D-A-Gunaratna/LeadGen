@@ -448,7 +448,7 @@ def get_all_students_with_history(target_date: Optional[str] = None) -> List[Dic
     students: List[Dict] = []
     for row in students_data:
         student = dict(row)
-        student_id_val = student.get('student_id') or student.get('id')
+        student_id_val = student.get('student_id')
         try:
             student_id = int(student_id_val) if student_id_val is not None else None
         except Exception:
@@ -522,7 +522,7 @@ def get_attendance_summary(student: Dict, all_students: List[Dict]) -> Dict:
     back to legacy in-memory logic.
     """
     try:
-        sid_val = student.get('student_id') or student.get('id')
+        sid_val = student.get('student_id')
         if isinstance(sid_val, (int, str)):
             sid = int(sid_val)
         else:
@@ -1065,7 +1065,7 @@ def api_attendance_aggregate():
             total_late_days += late
             perc = round((present / total_school_days) * 100, 1) if total_school_days > 0 else 0
             students_out.append({
-                'id': s.get('student_id') or get('student_id') or get('id'),
+                'id': s.get('student_id') or s.get('id'),
                 'name': s.get('name'),
                 'grade': s.get('grade'),
                 'className': s.get('className'),
@@ -1544,7 +1544,7 @@ def http_get_student_by_id(student_id):
 
         # Build ordered student payload placing `summary` before `attendanceHistory`.
         ordered_student = {
-            'id': student.get('student_id') or get('student_id') or get('id'),
+            'id': student.get('student_id'),
             'name': student.get('name'),
             'grade': student.get('grade'),
             'className': student.get('className'),
@@ -1891,7 +1891,7 @@ async def handle_save_attendance(sid, data):
     # Validate all record dates first: reject weekends or invalid dates before any DB writes
     inserts = []
     for student in students:
-        student_id = student.get('student_id') or get('student_id') or get('id')
+        student_id = student.get('student_id')
         for record in student.get('attendanceHistory', []):
             date_str = record.get('date')
             if not date_str:
@@ -1942,7 +1942,7 @@ async def handle_save_attendance(sid, data):
         recalculate_school_days()
     except Exception:
         pass
-    affected_ids = [student.get('student_id') or get('student_id') or get('id') for student in students]
+    affected_ids = [(student.get('student_id')) for student in students]
     broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
     broadcast_summary_update(affected_ids)
     await socketio.emit('save_attendance_response', {'success': True}, to=sid)
@@ -1966,7 +1966,7 @@ def api_save_attendance():
 
     inserts = []
     for student in students:
-        student_id = student.get('student_id') or get('student_id') or get('id')
+        student_id = student.get('student_id')
         for record in student.get('attendanceHistory', []):
             date_str = record.get('date')
             if not date_str:
