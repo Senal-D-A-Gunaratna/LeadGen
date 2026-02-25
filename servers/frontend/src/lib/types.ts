@@ -25,6 +25,7 @@ export type Student = {
   hasScannedToday: boolean;
   lastScanTime?: number;
   role?: PrefectRole;
+  bach?: string;
   specialRoles?: string;
   notes?: string;
   contact: {

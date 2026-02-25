@@ -1548,6 +1548,7 @@ def http_get_student_by_id(student_id):
             'name': student.get('name'),
             'grade': student.get('grade'),
             'className': student.get('className'),
+            'bach': student.get('bach'),
             'role': student.get('role'),
             'contact': student.get('contact'),
             'specialRoles': student.get('specialRoles'),

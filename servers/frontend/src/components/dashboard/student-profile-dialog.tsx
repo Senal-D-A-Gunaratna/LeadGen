@@ -1417,6 +1417,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
               </DialogTitle>
               <DialogDescription>
                 Grade {student.grade} - Class {student.className}
+                {student.bach ? (
+                  <div className="text-sm text-muted-foreground">Bach {student.bach}</div>
+                ) : null}
                 {user?.role === 'dev' && (
                   <> | ID: {sid ?? '—'}</>
                 )}
