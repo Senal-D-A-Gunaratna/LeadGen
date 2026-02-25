@@ -2,33 +2,34 @@
 "use client";
 
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Input } from "@/components/ui/input";
-import { Search, UserPlus, Upload, Loader2, Download, Database, FileText, History, Users, X, File as FileIcon, FilterX } from "lucide-react";
-import { useStudentStore } from "@/hooks/use-student-store";
-import type { Student } from "@/lib/types";
-import { Badge } from "../ui/badge";
-import { useState, useRef, useEffect } from "react";
-import { Button } from "../ui/button";
-import { AddStudentForm } from "../dashboard/add-student-form";
-import { useAuthStore } from "@/hooks/use-auth-store";
-import { Avatar, AvatarFallback } from "../ui/avatar";
-import { 
-  uploadStudentDataFromCsvAction, 
-  downloadStudentDataAsCsvAction,
+                  <TableBody>
+                      {filteredStudents.map((student, i) => {
+                      const sid = getStudentId(student);
+                      return (
+                        <TableRow key={sid ?? i} onClick={() => selectStudent(student as Student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-all duration-300 hover:scale-[1.01]">
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                                <Avatar className="h-10 w-10 border-2 border-primary/50">
+                                    <AvatarFallback>{student.name.charAt(0).toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                                <div className="font-medium">{student.name}</div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{student.grade} - {student.className}</TableCell>
+                          <TableCell>
+                              <div className="font-medium">{student.contact.phone || 'N/A'}</div>
+                          </TableCell>
+                          <TableCell>
+                            {student.role ? (
+                               <Badge variant="secondary">{student.role}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-xs">No role assigned</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                      })}
+                  </TableBody>
   uploadAttendanceHistoryFromCsvAction,
   downloadAttendanceSummaryAsCsvAction,
   downloadDetailedAttendanceHistoryAsCsvAction,
@@ -43,6 +44,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator } from "../ui/dropdown-menu";
 // Use reactive store lists (`useStudentStore`) instead of importing static arrays
 import { format } from "date-fns";
+import { getStudentId } from "@/lib/utils";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 import { UploadAuthDialog } from "../dashboard/upload-auth-dialog";
 
@@ -479,8 +481,10 @@ export function ManagePrefectsTab() {
                       </TableRow>
                   </TableHeader>
                   <TableBody>
-                      {filteredStudents.map((student) => (
-                      <TableRow key={student.id} onClick={() => selectStudent(student as Student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-all duration-300 hover:scale-[1.01]">
+                      {filteredStudents.map((student, i) => {
+                      const sid = getStudentId(student);
+                      return (
+                        <TableRow key={sid ?? i} onClick={() => selectStudent(student as Student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-all duration-300 hover:scale-[1.01]">
                           <TableCell>
                           <div className="flex items-center gap-3">
                               <Avatar className="h-10 w-10 border-2 border-primary/50">
@@ -500,7 +504,7 @@ export function ManagePrefectsTab() {
                               <span className="text-muted-foreground text-xs">No role assigned</span>
                             )}
                           </TableCell>
-                      </TableRow>
+                        </TableRow>
                       ))}
                   </TableBody>
               </Table>

@@ -29,10 +29,12 @@ export function RfidScanner() {
             <div className="flex h-full items-center justify-center">
               <p className="text-muted-foreground">Awaiting Scan</p>
             </div>
-          ) : (
-            recentScans.map((student, index) => (
-              <div 
-                  key={`${student.id}-${student.lastScanTime}`} 
+            ) : (
+            recentScans.map((student, index) => {
+              const sid = getStudentId(student);
+              return (
+                <div 
+                    key={`${sid ?? index}-${student.lastScanTime}`} 
                   className={cn(
                     "flex items-center gap-4 p-2 rounded-lg glassmorphic transition-all duration-200",
                     index === 0 && "animate-in fade-in-0 slide-in-from-top-8"
@@ -50,7 +52,8 @@ export function RfidScanner() {
                 </div>
                 <div className={cn("text-sm font-medium capitalize", statusColors[student.status])}>{student.status}</div>
               </div>
-            ))
+                );
+              })
           )}
         </div>
       </CardContent>

@@ -32,6 +32,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
 import { cn } from "@/lib/utils";
+import { getStudentId } from "@/lib/utils";
 import { Search, X, Calendar as CalendarIcon, Save, Loader2, RotateCcw, ChevronDown, FilterX } from "lucide-react";
 import {
   AlertDialog,
@@ -480,14 +481,16 @@ export function ManualAttendanceTab() {
                     // Check if any student has no attendance data for this date
                     const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
                     const hasAnyMissingData = students.some(student => {
-                      const fullStudent = fullStudents.find(s => s.id === student.id) as Student | undefined;
+                      const sid = getStudentId(student);
+                      const fullStudent = fullStudents.find(s => getStudentId(s) === sid) as Student | undefined;
                       const record = (fullStudent?.attendanceHistory || student.attendanceHistory).find(h => h.date === selectedDateStr);
                       return !record;
                     });
 
-                    return students.map((student) => {
+                    return students.map((student, i) => {
                     const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
-                    const fullStudent = fullStudents.find(s => s.id === student.id) as Student | undefined;
+                    const sid = getStudentId(student) as number | undefined;
+                    const fullStudent = fullStudents.find(s => getStudentId(s) === sid) as Student | undefined;
                     const record = (fullStudent?.attendanceHistory || student.attendanceHistory).find(h => h.date === selectedDateStr) as any | undefined;
 
                     // derive existing time string (HH:mm) from record.checkInTime if present
@@ -510,7 +513,7 @@ export function ManualAttendanceTab() {
                       return '';
                     })() : '';
 
-                    const pending = (pendingAttendanceChanges || {})[student.id];
+                    const pending = (pendingAttendanceChanges || {})[sid ?? ''];
                     const timeValue = pending?.checkInTime !== undefined ? (pending.checkInTime ?? '') : existingTime;
                     // Determine display status: prefer pending.status if present; otherwise derive from time (pending or existing) or fallback to record.status
                     const displayStatus: AttendanceStatus | 'null' = (pending && pending.status && pending.status !== 'null')
@@ -518,22 +521,22 @@ export function ManualAttendanceTab() {
                       : (pending && pending.checkInTime !== undefined ? timeToStatus(pending.checkInTime) : (existingTime ? timeToStatus(existingTime) : (record ? record.status : (hasAnyMissingData ? 'null' : 'absent'))));
 
                     return (
-                      <TableRow key={student.id} className="border-border/40 hover:bg-muted/60 transition-all duration-150 ease-out will-change-transform">
+                      <TableRow key={sid ?? i} className="border-border/40 hover:bg-muted/60 transition-all duration-150 ease-out will-change-transform">
                         <TableCell className="font-medium cursor-pointer" onClick={() => selectStudent(student)}>{student.name}</TableCell>
                         <TableCell>{student.grade}</TableCell>
                         <TableCell>{student.className}</TableCell>
                             <TableCell>
                               <TimeCombo
-                                studentId={student.id}
+                                studentId={sid}
                                 value={timeValue}
-                                onChange={(val) => handleTimeChange(student.id, val)}
+                                onChange={(val) => handleTimeChange(sid, val)}
                               />
                             </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Select 
                               value={displayStatus as unknown as string}
-                              onValueChange={(newStatus: AttendanceStatus | 'null') => handleStatusChange(student.id, newStatus)}
+                              onValueChange={(newStatus: AttendanceStatus | 'null') => handleStatusChange(sid, newStatus)}
                             >
                               <SelectTrigger className="w-[120px] glassmorphic">
                                 <SelectValue placeholder="Set status" />

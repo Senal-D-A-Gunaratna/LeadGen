@@ -24,6 +24,7 @@ import type { AttendanceStatus } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { useMemo } from "react";
 import { Button } from "../ui/button";
+import { getStudentId } from "@/lib/utils";
 
 const statusIcons: Record<AttendanceStatus, React.ReactNode> = {
   "on time": <UserCheck className="h-4 w-4 text-green-500" />,
@@ -144,8 +145,10 @@ export function AttendanceTable() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredStudents.map((student) => (
-                  <TableRow key={student.id} onClick={() => selectStudent(student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-transform duration-150 ease-out hover:scale-[1.01] will-change-transform">
+                {filteredStudents.map((student, i) => {
+                  const sid = getStudentId(student);
+                  return (
+                  <TableRow key={sid ?? i} onClick={() => selectStudent(student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-transform duration-150 ease-out hover:scale-[1.01] will-change-transform">
                     <TableCell>
                       <div className="font-medium">{student.name}</div>
                     </TableCell>
@@ -165,7 +168,8 @@ export function AttendanceTable() {
                       </Badge>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>

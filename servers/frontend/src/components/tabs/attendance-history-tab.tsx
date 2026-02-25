@@ -34,7 +34,7 @@ import { MonthYearSelector } from "../ui/month-year-selector";
 import { wsClient } from "@/lib/websocket-client";
 import { getAttendanceAggregate, getAttendanceTrend } from "@/lib/api-client";
 import { syncClient } from "@/lib/sync-client";
-import { cn, parseDate } from "@/lib/utils";
+import { cn, parseDate, getStudentId } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const COLORS: Record<AttendanceStatus, string> = {
@@ -936,15 +936,18 @@ export function AttendanceHistoryTab() {
                           </TableRow>
                       </TableHeader>
                       <TableBody>
-                          {filteredStudentsForTable.length > 0 ? (
-                              filteredStudentsForTable.map((student: Student) => (
-                                  <TableRow key={student.id} onClick={() => selectStudent(student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-all">
-                                      <TableCell className="font-medium">{student.name}</TableCell>
-                                      <TableCell>{student.grade}</TableCell>
-                                      <TableCell>{student.className}</TableCell>
-                                  </TableRow>
-                              ))
-                          ) : (
+                            {filteredStudentsForTable.length > 0 ? (
+                              filteredStudentsForTable.map((student: Student, i: number) => {
+                                const sid = getStudentId(student);
+                                return (
+                                <TableRow key={sid ?? i} onClick={() => selectStudent(student)} className="cursor-pointer border-border/40 hover:bg-muted/60 transition-all">
+                                  <TableCell className="font-medium">{student.name}</TableCell>
+                                  <TableCell>{student.grade}</TableCell>
+                                  <TableCell>{student.className}</TableCell>
+                                </TableRow>
+                                );
+                              })
+                            ) : (
                               <TableRow>
                                   <TableCell colSpan={3} className="text-center text-muted-foreground h-24">
                                       No matches found
