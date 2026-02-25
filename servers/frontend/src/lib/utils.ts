@@ -156,8 +156,8 @@ export function shrinkStudentForList(student: Student): Student {
 
 /**
  * Returns the canonical student id for a student-like object.
- * Prefers `student_id` (new schema) and falls back to legacy `id`.
+ * Uses the canonical `student_id` only (legacy `id` removed).
  */
 export function getStudentId(s?: any): number | undefined {
-  return s?.student_id ?? s?.id;
+  return s?.student_id;
 }

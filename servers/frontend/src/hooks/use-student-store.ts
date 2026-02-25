@@ -22,8 +22,8 @@ import { shrinkStudentForList } from '@/lib/utils';
 // Enable Immer MapSet plugin
 enableMapSet();
 
-// Helper to get the canonical id for a student-like object (supports legacy `id`)
-const getEntityId = (s: any) => (s && (s.student_id ?? s.id)) ?? undefined;
+// Helper to get the canonical id for a student-like object (use canonical `student_id` only)
+const getEntityId = (s: any) => s?.student_id ?? undefined;
 
 const getCurrentTime = async (get: () => StudentStore): Promise<Date> => {
     const store = get();
@@ -57,7 +57,7 @@ export const useStudentStore = create<StudentStore>()(
         try {
           set(produce((state: StudentStore) => {
             const op = payload.op || 'upsert';
-            const id = payload.id ?? payload.student_id;
+            const id = payload.student_id;
             if (!id) return;
 
             if (op === 'delete') {
