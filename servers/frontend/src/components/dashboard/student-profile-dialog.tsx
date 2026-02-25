@@ -237,8 +237,6 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
           values.fingerprint4 || '',
         ];
       }
-
-      await actions.updateStudent(student.id, updatedDetails);
       const sid = getStudentId(student);
       if (sid === undefined) throw new Error('Missing student id');
       await actions.updateStudent(sid, updatedDetails);
@@ -517,6 +515,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
   const { toast } = useToast();
   
   const isDev = user?.role === 'dev';
+  const sid = getStudentId(student) as number | undefined;
 
   useEffect(() => {
     if(open) {
@@ -589,8 +588,8 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           clientLog('debug', 'getStudentSummary response', { studentId: sid, res });
           const s = res?.summary;
           if (s) {
-            updateStudentSummaries([{
-              studentId: student.id,
+              updateStudentSummaries([{
+                studentId: sid!,
               summary: {
                 totalSchoolDays: s.totalSchoolDays,
                 presentDays: s.presentDays,
@@ -642,15 +641,15 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         const year = displayedMonth.getFullYear();
         const monthZero = displayedMonth.getMonth();
         // Refresh trend
-        const key = formatTrendKey(sid, year, monthZero + 1);
+        const key = formatTrendKey(sid!, year, monthZero + 1);
         attendanceTrendCache.current.delete(key);
-        await fetchAttendanceTrendForMonth(sid, year, monthZero);
+        await fetchAttendanceTrendForMonth(sid!, year, monthZero);
 
         // Refresh monthly history
         try {
           const mon = displayedMonth.getMonth() + 1;
           const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
-          const resp = await getStudentMonthlyAttendance(sid, monthStr) as any;
+          const resp = await getStudentMonthlyAttendance(sid!, monthStr) as any;
           const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
 
           // Strict mode: use ONLY the server-provided attendanceHistory.
@@ -661,12 +660,12 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
         // Refresh summary
         try {
-          const res = await getStudentSummary(sid);
+          const res = await getStudentSummary(sid!);
           clientLog('debug', 'sync getStudentSummary response', { studentId: sid, res });
           const s = res?.summary;
           if (s) {
             updateStudentSummaries([{
-              studentId: sid,
+              studentId: sid!,
               summary: {
                 totalSchoolDays: s.totalSchoolDays,
                 presentDays: s.presentDays,
@@ -692,7 +691,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           }
         } catch (err) {
           console.warn('sync refresh: failed to fetch student summary', err);
-          clientLog('error', 'sync refresh failed to fetch student summary', { studentId: student.id, error: String(err) });
+          clientLog('error', 'sync refresh failed to fetch student summary', { studentId: sid!, error: String(err) });
         }
       } catch (e) {
         console.error('sync refresh error', e);
@@ -703,14 +702,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       try {
         if (!student) return;
         // Events that may affect a student's profile
-        if (event === 'student_summary' && payload?.studentId === student.id) {
+        if (event === 'student_summary' && payload?.studentId === sid) {
           tryRefetchForStudent('student_summary', payload);
           return;
         }
 
         if (event === 'attendance_updated') {
           const ids: number[] = payload?.affectedIds || payload?.data?.affectedIds || [];
-          if (ids.length === 0 || ids.includes(student.id)) {
+          if (ids.length === 0 || ids.includes(sid!)) {
             tryRefetchForStudent('attendance_updated', payload);
           }
           return;
@@ -723,7 +722,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
             tryRefetchForStudent('data_changed', payload);
             return;
           }
-          if (Array.isArray(ids) && ids.includes(student.id)) {
+          if (Array.isArray(ids) && ids.includes(sid!)) {
             tryRefetchForStudent('data_changed', payload);
             return;
           }
@@ -731,7 +730,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
         if (event === 'students_refreshed') {
           const ids: number[] = payload?.students?.map((s: any) => s.id) || [];
-          if (ids.includes(student.id)) tryRefetchForStudent('students_refreshed', payload);
+          if (ids.includes(sid!)) tryRefetchForStudent('students_refreshed', payload);
         }
       } catch (e) {
         console.error('sync handler error', e);
@@ -826,7 +825,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
   const fetchAttendanceTrendForMonth = async (studentId: number, year: number, monthZeroBased: number) => {
     const monthOne = monthZeroBased + 1;
-    const key = formatTrendKey(studentId, year, monthOne);
+        const key = formatTrendKey(studentId, year, monthOne); // Fetch attendance trend for the specified month
     // Check cache
     const cached = attendanceTrendCache.current.get(key);
     if (cached) {
@@ -888,7 +887,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       const key = formatTrendKey(studentId, year, month);
       attendanceTrendCache.current.delete(key);
       // If the currently opened dialog is viewing this student/month, refetch via HTTP
-      if (student && student.id === studentId && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth() + 1)) {
+      if (student && sid === studentId && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth() + 1)) {
         // fetchAttendanceTrendForMonth will perform an HTTP fetch (and repopulate cache)
         // month param to fetchAttendanceTrendForMonth expects zero-based month index
         fetchAttendanceTrendForMonth(studentId, year, displayedMonth.getMonth());
@@ -904,14 +903,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     const year = displayedMonth.getFullYear();
     const month = displayedMonth.getMonth();
     const monthOne = month + 1;
-    const key = formatTrendKey(student.id, year, monthOne);
+    const key = formatTrendKey(sid!, year, monthOne);
     // If the dialog was just opened, force a fresh server fetch by clearing cache.
     if (open) {
       attendanceTrendCache.current.delete(key);
     }
     // Always fetch the server-provided attendance trend for the displayed month
     // (calendar should rely only on authoritative server data keyed by student.id)
-    fetchAttendanceTrendForMonth(student.id, year, month);
+    fetchAttendanceTrendForMonth(sid!, year, month);
   }, [displayedMonth, student]);
 
   // Fetch per-student monthly attendanceHistory (date,status) and cache briefly.
@@ -925,7 +924,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       try {
         const mon = displayedMonth.getMonth() + 1;
         const monthStr = `${displayedMonth.getFullYear()}-${String(mon).padStart(2, '0')}`;
-        const resp = await getStudentMonthlyAttendance(student.id, monthStr) as any;
+        const resp = await getStudentMonthlyAttendance(sid!, monthStr) as any;
         const hist = resp && Array.isArray(resp.attendanceHistory) ? resp.attendanceHistory : [];
         // Strict mode: use ONLY the server-provided attendanceHistory.
         setStudentMonthlyHistory(hist);
@@ -1111,27 +1110,27 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
       // Prefer embedded summary on student payload
       const embedded = (student as any).summary;
       if (embedded) {
-        applySummary(student.id, embedded);
+        applySummary(sid!, embedded);
         return;
       }
 
       // Check store cache
-      const cached = studentSummaries.get(student.id);
+      const cached = studentSummaries.get(sid!);
       if (cached) {
-        applySummary(student.id, cached);
+        applySummary(sid!, cached);
         return;
       }
 
       // Fallback: fetch from server
       try {
-        console.debug('[StudentProfile] fetchSummary() calling getStudentSummary for', student?.id);
-        clientLog('debug', 'fetchSummary calling getStudentSummary', { studentId: student?.id });
-        const res = await getStudentSummary(student.id);
+        console.debug('[StudentProfile] fetchSummary() calling getStudentSummary for', sid);
+        clientLog('debug', 'fetchSummary calling getStudentSummary', { studentId: sid });
+        const res = await getStudentSummary(sid!);
         console.debug('[StudentProfile] fetchSummary() getStudentSummary response', res);
-        clientLog('debug', 'fetchSummary getStudentSummary response', { studentId: student?.id, res });
+        clientLog('debug', 'fetchSummary getStudentSummary response', { studentId: sid, res });
         const s = res?.summary;
         if (!cancelled && s) {
-          applySummary(student.id, s);
+          applySummary(sid!, s);
         }
       } catch (e) {
         console.error('Failed to fetch student summary', e);
@@ -1144,21 +1143,21 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     const syncListener = (event: string, payload?: any) => {
       try {
         if (!student) return;
-        if (event === 'student_summary' && payload?.studentId === student.id) {
+        if (event === 'student_summary' && payload?.studentId === sid) {
           fetchSummary();
         }
         if (event === 'attendance_updated') {
           const ids: number[] = payload?.affectedIds || payload?.data?.affectedIds || [];
-          if (ids.length === 0) {
+            if (ids.length === 0) {
             // Generic attendance update — refresh this student's data
             const year = displayedMonth.getFullYear();
             const monthZero = displayedMonth.getMonth();
-            fetchAttendanceTrendForMonth(student.id, year, monthZero);
+                fetchAttendanceTrendForMonth(sid!, year, monthZero);
             fetchSummary();
-          } else if (ids.includes(student.id)) {
+            } else if (ids.includes(sid!)) {
             const year = displayedMonth.getFullYear();
             const monthZero = displayedMonth.getMonth();
-            fetchAttendanceTrendForMonth(student.id, year, monthZero);
+                fetchAttendanceTrendForMonth(sid!, year, monthZero);
             fetchSummary();
           }
         }
@@ -1169,15 +1168,15 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           if (type === 'attendance_db_changed' || type === 'attendance_updated' || type === 'student_updated' || type === 'student_added' || type === 'student_removed') {
             const year = displayedMonth.getFullYear();
             const monthZero = displayedMonth.getMonth();
-            fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            fetchAttendanceTrendForMonth(sid!, year, monthZero);
             fetchSummary();
           } else {
             // If payload contains affectedIds, check membership
             const ids: number[] = payload?.data?.affectedIds || [];
-            if (ids.includes(student.id)) {
+            if (ids.includes(sid!)) {
               const year = displayedMonth.getFullYear();
               const monthZero = displayedMonth.getMonth();
-              fetchAttendanceTrendForMonth(student.id, year, monthZero);
+              fetchAttendanceTrendForMonth(sid!, year, monthZero);
               fetchSummary();
             }
           }
@@ -1198,7 +1197,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
     const handler = (data: { summaries: any[] }) => {
       try {
         if (!data || !Array.isArray(data.summaries)) return;
-        const found = data.summaries.find((s: any) => s.studentId === student.id);
+        const found = data.summaries.find((s: any) => s.studentId === sid);
         if (!found || !found.summary) return;
         const s = found.summary;
         setAttendanceStats({
@@ -1227,11 +1226,11 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
 
     const fetchAndApplySummary = async () => {
       try {
-        const res = await getStudentSummary(student.id);
+        const res = await getStudentSummary(sid!);
         const s = res?.summary;
         if (s) {
           updateStudentSummaries([{
-            studentId: sid,
+            studentId: sid!,
             summary: {
               totalSchoolDays: s.totalSchoolDays,
               presentDays: s.presentDays,
@@ -1270,7 +1269,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           const { studentId, year, month } = data;
           const key = `${studentId}-${year}-${month}`;
           attendanceTrendCache.current.delete(key);
-          if (studentId === student.id && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth() + 1)) {
+          if (studentId === sid && year === displayedMonth.getFullYear() && month === (displayedMonth.getMonth() + 1)) {
             await fetchAttendanceTrendForMonth(studentId, year, displayedMonth.getMonth());
           }
           return;
@@ -1281,7 +1280,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
           try { await fetchMonthAggregate(displayedMonth); } catch (e) {}
           // If payload contains per-student summaries targeting this student, apply them
           if (event === 'summary_update' && payload?.summaries && Array.isArray(payload.summaries)) {
-            const found = payload.summaries.find((s: any) => s.studentId === student.id);
+            const found = payload.summaries.find((s: any) => s.studentId === sid);
             if (found && found.summary) {
               const s = found.summary;
               setAttendanceStats({
@@ -1300,7 +1299,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         }
 
         // student_summary -> if for this student, refresh via HTTP
-        if (event === 'student_summary' && payload?.studentId === student.id) {
+        if (event === 'student_summary' && payload?.studentId === sid) {
           await fetchAndApplySummary();
           return;
         }
@@ -1308,10 +1307,10 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         // attendance_updated -> if affectedIds empty (generic) or contains this student, refresh
         if (event === 'attendance_updated') {
           const ids: number[] = payload?.affectedIds || payload?.data?.affectedIds || [];
-          if (ids.length === 0 || ids.includes(student.id)) {
+          if (ids.length === 0 || ids.includes(sid!)) {
             const year = displayedMonth.getFullYear();
             const monthZero = displayedMonth.getMonth();
-            await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            await fetchAttendanceTrendForMonth(sid!, year, monthZero);
             await fetchAndApplySummary();
           }
           return;
@@ -1326,14 +1325,14 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
             try { await fetchMonthAggregate(displayedMonth); } catch (e) {}
             const year = displayedMonth.getFullYear();
             const monthZero = displayedMonth.getMonth();
-            await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            await fetchAttendanceTrendForMonth(sid!, year, monthZero);
             await fetchAndApplySummary();
             return;
           }
-          if (Array.isArray(ids) && ids.includes(student.id)) {
+          if (Array.isArray(ids) && ids.includes(sid!)) {
             const year = displayedMonth.getFullYear();
             const monthZero = displayedMonth.getMonth();
-            await fetchAttendanceTrendForMonth(student.id, year, monthZero);
+            await fetchAttendanceTrendForMonth(sid!, year, monthZero);
             await fetchAndApplySummary();
             return;
           }
@@ -1419,8 +1418,9 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
               <DialogDescription>
                 Grade {student.grade} - Class {student.className}
                 {user?.role === 'dev' && (
-                  <> | ID: {student.id}</>
+                  <> | ID: {sid ?? '—'}</>
                 )}
+
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2">
