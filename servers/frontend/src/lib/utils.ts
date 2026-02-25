@@ -159,5 +159,9 @@ export function shrinkStudentForList(student: Student): Student {
  * Uses the canonical `student_id` only (legacy `id` removed).
  */
 export function getStudentId(s?: any): number | undefined {
-  return s?.student_id;
+  // Prefer canonical `student_id`, but tolerate other common id fields
+  const id = s?.student_id ?? s?.studentId ?? s?.id;
+  if (id === undefined || id === null) return undefined;
+  const n = Number(id);
+  return Number.isNaN(n) ? undefined : n;
 }
