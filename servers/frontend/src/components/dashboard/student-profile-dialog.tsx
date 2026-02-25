@@ -1431,14 +1431,13 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
               </DialogTitle>
               <DialogDescription>
                 Grade {student.grade} - Class {student.className}
-                {student.bach ? (
-                  <div className="text-sm text-muted-foreground">Bach {student.bach}</div>
-                ) : null}
                 {user?.role === 'dev' && (
                   <> | ID: {sid ?? '—'}</>
                 )}
-
               </DialogDescription>
+              {student.bach ? (
+                <div className="text-sm text-muted-foreground mt-0">Bach {student.bach}</div>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               {canEdit && !isEditing && (
@@ -1454,7 +1453,7 @@ export function StudentProfileDialog({ student, open, onOpenChange, canEdit, can
         {isEditing && canEdit ? (
           <EditStudentForm student={student} onFinished={() => setIsEditing(false)} />
         ) : (
-          <Tabs defaultValue="general" className="mt-4">
+          <Tabs defaultValue="general" className="mt-2">
             <TabsList>
               <TabsTrigger value="general">General Information</TabsTrigger>
               <TabsTrigger value="additional">Additional Information</TabsTrigger>
