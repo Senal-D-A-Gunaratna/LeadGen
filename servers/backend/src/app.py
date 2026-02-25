@@ -1548,7 +1548,7 @@ def http_get_student_by_id(student_id):
             'name': student.get('name'),
             'grade': student.get('grade'),
             'className': student.get('className'),
-            'bach': student.get('bach'),
+            'bach': student.get('batch') or student.get('bach'),
             'role': student.get('role'),
             'contact': student.get('contact'),
             'specialRoles': student.get('specialRoles'),
@@ -2153,6 +2153,8 @@ async def handle_update_student(sid, data):
     whatsapp_no = update_data.get('contact', {}).get('whatsapp') or update_data.get('contact', {}).get('whatsapp_no') or existing_dict.get('whatsapp_no', '')
     specialRoles = update_data.get('specialRoles', existing_dict.get('specialRoles', ''))
     notes = update_data.get('notes', existing_dict.get('notes', ''))
+    # Support frontend 'bach' field while DB column is named 'batch'
+    batch = update_data.get('bach') if update_data.get('bach') is not None else update_data.get('batch', existing_dict.get('batch', ''))
     
     fingerprints = update_data.get('fingerprints')
     if fingerprints is None:
@@ -2185,7 +2187,7 @@ async def handle_update_student(sid, data):
         UPDATE students
         SET name = ?, grade = ?, className = ?, role = ?, email = ?, phone = ?,
             whatsapp_no = ?, fingerprint1 = ?, fingerprint2 = ?, fingerprint3 = ?, fingerprint4 = ?,
-            specialRoles = ?, notes = ?, updated_at = ?
+            specialRoles = ?, notes = ?, batch = ?, updated_at = ?
         WHERE student_id = ?
     ''', (
         name, grade, className, role, email, phone,
@@ -2194,7 +2196,7 @@ async def handle_update_student(sid, data):
         fingerprints[1] if len(fingerprints) > 1 else '',
         fingerprints[2] if len(fingerprints) > 2 else '',
         fingerprints[3] if len(fingerprints) > 3 else '',
-        specialRoles, notes, datetime.now().isoformat(),
+        specialRoles, notes, batch, datetime.now().isoformat(),
         student_id
     ))
     
@@ -2211,6 +2213,12 @@ async def handle_update_student(sid, data):
     conn_students.close()
     
     student = get_student_by_id(student_id)
+    # Ensure websocket response includes frontend-friendly `bach` field (maps DB `batch`)
+    try:
+        if isinstance(student, dict):
+            student['bach'] = student.get('batch') or student.get('bach')
+    except Exception:
+        pass
     broadcast_data_change('student_updated', {'studentId': student_id})
     broadcast_summary_update([student_id])
     # static filter pushes removed

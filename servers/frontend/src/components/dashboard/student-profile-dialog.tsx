@@ -77,6 +77,7 @@ const editFormSchema = z.object({
   grade: z.coerce.number().min(6, { message: "Grade must be between 6 and 13." }).max(13, { message: "Grade must be between 6 and 13." }),
   className: z.string().min(1, { message: "Class is required." }),
   role: z.string().optional(),
+  bach: z.string().optional(),
   contact: z.object({
     email: z.string().email({ message: "Invalid email address." }).optional().or(z.literal('')),
     phone: z.string().length(10, { message: "Phone number must be exactly 10 digits." }),
@@ -193,6 +194,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
       },
       specialRoles: student.specialRoles || '',
       notes: student.notes || '',
+      bach: (student as any).bach || '',
     },
   });
 
@@ -220,6 +222,7 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
         name: values.name,
         grade: values.grade,
         className: values.className,
+        bach: values.bach || undefined,
         contact: {
           email: values.contact.email || '',
           phone: values.contact.phone,
@@ -362,6 +365,17 @@ function EditStudentForm({ student, onFinished }: { student: Student, onFinished
                             ))}
                         </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="bach"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Bach</FormLabel>
+                    <FormControl><Input placeholder="Bach (optional)" {...field} className="glassmorphic" /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
