@@ -1065,7 +1065,7 @@ def api_attendance_aggregate():
             total_late_days += late
             perc = round((present / total_school_days) * 100, 1) if total_school_days > 0 else 0
             students_out.append({
-                'id': s.get('student_id') or s.get('id'),
+                'id': s.get('student_id'),
                 'name': s.get('name'),
                 'grade': s.get('grade'),
                 'className': s.get('className'),
