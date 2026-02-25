@@ -39,6 +39,26 @@ def main():
 
         print(f'Found {len(rows)} students in backup')
 
+        # If backup is empty, look for an alternative backup file named 'students.db' in the same folder
+        if len(rows) == 0:
+            alt = BACKUP_FILE.with_name('students.db')
+            if alt.exists() and alt != BACKUP_FILE:
+                print('Primary backup is empty — switching to alternative backup:', alt)
+                try:
+                    src.close()
+                except:
+                    pass
+                src = sqlite3.connect(str(alt))
+                src.row_factory = sqlite3.Row
+                src_cur = src.cursor()
+                try:
+                    src_cur.execute('SELECT * FROM students')
+                    rows = src_cur.fetchall()
+                except Exception as e:
+                    print('No students table in alternative backup or read error:', e)
+                    rows = []
+                print(f'Found {len(rows)} students in alternative backup')
+
         # Ensure target has columns we expect
         dst_cur.execute("PRAGMA table_info(students)")
         dst_cols = [r[1] for r in dst_cur.fetchall()]
