@@ -3,6 +3,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useStudentStore } from "@/hooks/use-student-store";
+import { getStudentId } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "../ui/skeleton";
 import type { AttendanceStatus } from "@/lib/types";

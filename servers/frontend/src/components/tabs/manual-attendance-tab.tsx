@@ -490,6 +490,7 @@ export function ManualAttendanceTab() {
                     return students.map((student, i) => {
                     const selectedDateStr = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : '';
                     const sid = getStudentId(student) as number | undefined;
+                    if (sid == null) return null;
                     const fullStudent = fullStudents.find(s => getStudentId(s) === sid) as Student | undefined;
                     const record = (fullStudent?.attendanceHistory || student.attendanceHistory).find(h => h.date === selectedDateStr) as any | undefined;
 
@@ -513,7 +514,7 @@ export function ManualAttendanceTab() {
                       return '';
                     })() : '';
 
-                    const pending = (pendingAttendanceChanges || {})[sid ?? ''];
+                    const pending = (pendingAttendanceChanges || {})[sid];
                     const timeValue = pending?.checkInTime !== undefined ? (pending.checkInTime ?? '') : existingTime;
                     // Determine display status: prefer pending.status if present; otherwise derive from time (pending or existing) or fallback to record.status
                     const displayStatus: AttendanceStatus | 'null' = (pending && pending.status && pending.status !== 'null')
