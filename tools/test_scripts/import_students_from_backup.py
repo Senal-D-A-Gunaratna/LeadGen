@@ -61,10 +61,13 @@ def main():
 
         # Ensure target has columns we expect
         dst_cur.execute("PRAGMA table_info(students)")
-        dst_cols = [r[1] for r in dst_cur.fetchall()]
+        table_info = dst_cur.fetchall()
+        dst_cols = [r[1] for r in table_info]
+        # map column types for basic coercion
+        col_types = {r[1]: (r[2] or '').upper() for r in table_info}
 
         target_columns = [
-            'id', 'name', 'grade', 'className', 'role', 'phone', 'whatsapp_no', 'email',
+            'student_id', 'name', 'grade', 'className', 'role', 'phone', 'whatsapp_no', 'email',
             'specialRoles', 'notes',
             'fingerprint1', 'fingerprint2', 'fingerprint3', 'fingerprint4',
             'created_at', 'updated_at'
@@ -79,23 +82,44 @@ def main():
         insert_sql = f"INSERT OR REPLACE INTO students ({', '.join(insert_cols)}) VALUES ({placeholders})"
 
         inserted = 0
+        def row_get(row, key):
+            return row[key] if key in row.keys() else None
+
         for r in rows:
-            # Map values from backup row by name, providing defaults
+            # Map values from backup row by name, with simple type coercion
             vals = []
             for col in insert_cols:
                 if col in r.keys():
-                    vals.append(r[col])
+                    val = r[col]
                 else:
-                    # default values
-                    if col in ('id', 'grade'):
-                        vals.append(0)
-                    else:
-                        vals.append('')
+                    val = None
+
+                # coerce based on destination column type
+                ctype = col_types.get(col, '')
+                if val is None or (isinstance(val, str) and val == ''):
+                    coerced = None
+                elif 'INT' in ctype:
+                    try:
+                        coerced = int(val)
+                    except Exception:
+                        coerced = None
+                elif 'REAL' in ctype or 'FLOA' in ctype or 'DOUB' in ctype:
+                    try:
+                        coerced = float(val)
+                    except Exception:
+                        coerced = None
+                else:
+                    # keep as-is (text/blob)
+                    coerced = val
+
+                vals.append(coerced)
+
             try:
                 dst_cur.execute(insert_sql, vals)
                 inserted += 1
             except Exception as e:
-                print('Failed to insert row id', r.get('id'), 'error:', e)
+                ident = row_get(r, 'student_id') or row_get(r, 'id') or '<unknown>'
+                print('Failed to insert row id', ident, 'error:', repr(e))
 
         dst.commit()
         print('Inserted/updated', inserted, 'rows into', TARGET_DB)
