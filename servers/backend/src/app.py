@@ -2015,7 +2015,7 @@ def api_save_attendance():
     except Exception:
         pass
 
-    affected_ids = [s.get('student_id') or get('student_id') or get('id') for s in students]
+    affected_ids = [s.get('student_id')]
     broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
     broadcast_summary_update(affected_ids)
 
