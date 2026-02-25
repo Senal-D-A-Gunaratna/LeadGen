@@ -3,9 +3,10 @@ from pathlib import Path
 import shutil
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-BACKUP_FILE = REPO_ROOT / 'backend' / 'backups' / 'students' / 'students-backup-2026-01-04T23-26-56.db'
-TARGET_DB = REPO_ROOT / 'backend' / 'data' / 'students.db'
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+# Use the specified backup and the actual server database path
+BACKUP_FILE = REPO_ROOT / 'servers' / 'backend' / 'backups' / 'students' / 'students-backup-2026-02-24T21-10-12.db'
+TARGET_DB = REPO_ROOT / 'servers' / 'backend' / 'database' / 'students.db'
 
 def main():
     if not BACKUP_FILE.exists():
