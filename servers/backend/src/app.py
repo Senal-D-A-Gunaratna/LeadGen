@@ -684,7 +684,7 @@ def api_attendance_history():
             cursor_att = get_db_connection('attendance').cursor()
             cursor_att.execute(f'''
                 SELECT date,
-                       SUM(CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present
+                       COUNT(DISTINCT CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN student_id END) as present
                 FROM attendance_records
                 WHERE date BETWEEN ? AND ? AND student_id IN ({placeholders})
                 GROUP BY date
@@ -694,7 +694,7 @@ def api_attendance_history():
         cursor_att = get_db_connection('attendance').cursor()
         cursor_att.execute('''
             SELECT date,
-                   SUM(CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present
+                   COUNT(DISTINCT CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN student_id END) as present
             FROM attendance_records
             WHERE date BETWEEN ? AND ?
             GROUP BY date
@@ -1116,16 +1116,16 @@ def api_attendance_aggregate():
         base_sql = f"FROM attendance_records ar WHERE ar.date IN ({date_placeholders}) AND ar.student_id IN ({student_placeholders})"
 
         # Total present records (on_time/late or with check_in_time)
-        sql_total_present = f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
+        sql_total_present = f"SELECT COUNT(DISTINCT (ar.student_id || '|' || ar.date)) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
         cur_att.execute(sql_total_present, tuple(params))
         total_present_records = int(cur_att.fetchone()['cnt'] or 0)
 
         # Per-student counts from attendance DB
         sql_per_student = f"""SELECT ar.student_id,
-                                 SUM(CASE WHEN TRIM(LOWER(ar.status)) = 'on time' THEN 1 ELSE 0 END) AS on_time,
-                                 SUM(CASE WHEN TRIM(LOWER(ar.status)) = 'late' THEN 1 ELSE 0 END) AS late
-                          {base_sql}
-                          GROUP BY ar.student_id"""
+    COUNT(DISTINCT CASE WHEN TRIM(LOWER(ar.status)) = 'on time' THEN ar.date END) AS on_time,
+    COUNT(DISTINCT CASE WHEN TRIM(LOWER(ar.status)) = 'late' THEN ar.date END) AS late
+    {base_sql}
+    GROUP BY ar.student_id"""
         cur_att.execute(sql_per_student, tuple(params))
         per_student_counts = {r['student_id']: {'on_time': int(r['on_time'] or 0), 'late': int(r['late'] or 0)} for r in cur_att.fetchall()}
 
