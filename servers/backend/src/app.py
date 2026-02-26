@@ -602,14 +602,24 @@ def api_attendance_history():
     conn_att = get_db_connection('attendance')
     cursor_att = conn_att.cursor()
     if start_date is None or end_date is None:
-        # If filtering by grade, join students; otherwise simple min/max
+        # If filtering by grade, avoid cross-DB JOIN: fetch student IDs and query attendance db
         if grade and grade != 'all':
-            cursor_att.execute('''
-                SELECT MIN(ar.date) as min_date, MAX(ar.date) as max_date
-                FROM attendance_records ar
-                JOIN students s ON s.student_id = ar.student_id
-                WHERE s.grade = ?
-            ''', (int(grade),))
+            conn_s = get_db_connection('students')
+            cur_s = conn_s.cursor()
+            cur_s.execute('SELECT student_id FROM students WHERE grade = ?', (int(grade),))
+            srows = cur_s.fetchall()
+            try:
+                conn_s.close()
+            except Exception:
+                pass
+            student_ids = [r['student_id'] for r in srows]
+            if not student_ids:
+                # no students for this grade -> no attendance range
+                row = None
+            else:
+                placeholders = ','.join(['?'] * len(student_ids))
+                params = tuple(student_ids)
+                cursor_att.execute(f'SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records WHERE student_id IN ({placeholders})', params)
         else:
             cursor_att.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
         row = cursor_att.fetchone()
@@ -656,16 +666,30 @@ def api_attendance_history():
     # A record counts as present when its trimmed/lower-case status is 'on time' or 'late',
     # or when a non-null check_in_time exists. Do not treat stored 'absent' rows as present.
     if grade and grade != 'all':
-        cursor_att = get_db_connection('attendance').cursor()
-        cursor_att.execute('''
-            SELECT ar.date as date,
-                   SUM(CASE WHEN (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present
-            FROM attendance_records ar
-            JOIN students s ON s.student_id = ar.student_id
-            WHERE ar.date BETWEEN ? AND ? AND s.grade = ?
-            GROUP BY ar.date
-            ORDER BY ar.date ASC
-        ''', (start_date.isoformat(), end_date.isoformat(), int(grade)))
+        # Avoid cross-DB JOIN: fetch student IDs for the requested grade
+        conn_s = get_db_connection('students')
+        cur_s = conn_s.cursor()
+        cur_s.execute('SELECT student_id FROM students WHERE grade = ?', (int(grade),))
+        sid_rows = cur_s.fetchall()
+        try:
+            conn_s.close()
+        except Exception:
+            pass
+        student_ids_for_grade = [r['student_id'] for r in sid_rows]
+        if not student_ids_for_grade:
+            rows = []
+        else:
+            placeholders = ','.join(['?'] * len(student_ids_for_grade))
+            params_sql = [start_date.isoformat(), end_date.isoformat()] + student_ids_for_grade
+            cursor_att = get_db_connection('attendance').cursor()
+            cursor_att.execute(f'''
+                SELECT date,
+                       SUM(CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present
+                FROM attendance_records
+                WHERE date BETWEEN ? AND ? AND student_id IN ({placeholders})
+                GROUP BY date
+                ORDER BY date ASC
+            ''', tuple(params_sql))
     else:
         cursor_att = get_db_connection('attendance').cursor()
         cursor_att.execute('''
@@ -1092,7 +1116,8 @@ def api_attendance_aggregate():
         base_sql = f"FROM attendance_records ar WHERE ar.date IN ({date_placeholders}) AND ar.student_id IN ({student_placeholders})"
 
         # Total present records (on_time/late or with check_in_time)
-        cur_att.execute(f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)", tuple(params))
+        sql_total_present = f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
+        cur_att.execute(sql_total_present, tuple(params))
         total_present_records = int(cur_att.fetchone()['cnt'] or 0)
 
         # Per-student counts from attendance DB
@@ -1204,11 +1229,9 @@ def api_attendance_aggregate():
 
         # Points series per school date (present counts per date applying student filters)
         params_dates = school_dates[:]
-        sql_date_present = f"SELECT ar.date, SUM(CASE WHEN (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present FROM attendance_records ar JOIN students s ON s.student_id = ar.student_id WHERE ar.date IN ({date_placeholders})"
-        if student_where:
-            sql_date_present += ' AND ' + ' AND '.join(student_where)
-            params_dates.extend(student_params)
-        sql_date_present += ' GROUP BY ar.date ORDER BY ar.date ASC'
+        # Use attendance DB only: filter by date IN (...) and student_id IN (...)
+        params_dates = school_dates[:] + student_ids[:]
+        sql_date_present = f"SELECT date, SUM(CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present FROM attendance_records WHERE date IN ({date_placeholders}) AND student_id IN ({student_placeholders}) GROUP BY date ORDER BY date ASC"
         cur_att.execute(sql_date_present, tuple(params_dates))
         rows_by_date = {r['date']: int(r['present'] or 0) for r in cur_att.fetchall()}
         points = []
@@ -1218,7 +1241,8 @@ def api_attendance_aggregate():
             points.append({ 'date': iso, 'present': present_count, 'percent': percent })
 
         # Determine whether this date range has any attendance data for the scope
-        cur_att.execute(f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)", tuple(params))
+        sql_chk = f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
+        cur_att.execute(sql_chk, tuple(params))
         row_chk = cur_att.fetchone()
         has_data = bool(row_chk and (row_chk['cnt'] or 0) > 0)
         try:
