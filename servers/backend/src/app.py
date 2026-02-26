@@ -1002,71 +1002,116 @@ def api_attendance_aggregate():
 
         total_school_days = len(school_dates)
 
-        # Load all students and filter by client-provided filters
-        all_students = get_all_students_with_history()
-        def student_matches(s: dict) -> bool:
-            if grade and grade != 'all':
-                try:
-                    try:
-                        gval = s.get('grade')
-                        if isinstance(gval, (int, str)):
-                            if int(gval) != int(grade):
-                                return False
-                        else:
-                            return False
-                    except Exception:
-                        return False
-                except Exception:
-                    return False
-            if classFilter and classFilter != 'all':
-                if s.get('className') != classFilter:
-                    return False
-            if roleFilter and roleFilter != 'all':
-                if roleFilter == 'none':
-                    if s.get('role'):
-                        return False
-                else:
-                    if s.get('role') != roleFilter:
-                        return False
-            return True
+        # If there are no authoritative school_days, return empty aggregates
+        if total_school_days == 0:
+            return jsonify({'success': True, 'pie': {
+                'totalSchoolDays': 0,
+                'studentCount': 0,
+                'presentDays': 0,
+                'onTimeDays': 0,
+                'lateDays': 0,
+                'absentDays': 0,
+                'presencePercentage': 0,
+                'absencePercentage': 0
+            }, 'gradeBars': [], 'students': [], 'points': [], 'hasData': False})
 
-        filtered_students = [s for s in all_students if student_matches(s)]
-        student_count = len(filtered_students)
+        # Build SQL filters for students (grade/class/role)
+        student_where = []
+        student_params = []
+        if grade and grade != 'all':
+            student_where.append('s.grade = ?')
+            student_params.append(int(grade))
+        if classFilter and classFilter != 'all':
+            student_where.append('s.className = ?')
+            student_params.append(classFilter)
+        if roleFilter and roleFilter != 'all':
+            if roleFilter == 'none':
+                student_where.append('(s.role IS NULL OR s.role = "")')
+            else:
+                student_where.append('s.role = ?')
+                student_params.append(roleFilter)
 
-        # Build per-student summaries for the requested date range (using school_dates)
+        where_clause = (' AND '.join(student_where)) if student_where else '1=1'
+
+        # Count students in scope
+        conn = get_db_connection('students')
+        cur = conn.cursor()
+        if student_where:
+            cur.execute(f'SELECT COUNT(*) as cnt FROM students s WHERE {" AND ".join(student_where)}', tuple(student_params))
+        else:
+            cur.execute('SELECT COUNT(*) as cnt FROM students')
+        student_count = int(cur.fetchone()['cnt'] if cur.fetchone() is not None else 0) if False else None
+        # The above attempt to reuse cursor.fetchone() consumed the row; re-run safely
+        if student_where:
+            cur.execute(f'SELECT COUNT(*) as cnt FROM students s WHERE {" AND ".join(student_where)}', tuple(student_params))
+            row_cnt = cur.fetchone()
+            student_count = int(row_cnt['cnt'] if row_cnt and row_cnt['cnt'] is not None else 0)
+        else:
+            cur.execute('SELECT COUNT(*) as cnt FROM students')
+            row_cnt = cur.fetchone()
+            student_count = int(row_cnt['cnt'] if row_cnt and row_cnt['cnt'] is not None else 0)
+        conn.close()
+
+        # Prepare date placeholders for SQL IN clause
+        date_placeholders = ','.join(['?'] * len(school_dates))
+
+        # Total present/on_time/late counts across all students
+        conn_att = get_db_connection('attendance')
+        cur_att = conn_att.cursor()
+        params = school_dates[:]
+        # Build base join with students to apply filters
+        base_sql = f"FROM attendance_records ar JOIN students s ON s.student_id = ar.student_id WHERE ar.date IN ({date_placeholders})"
+        if student_where:
+            base_sql += ' AND ' + ' AND '.join(student_where)
+            params.extend(student_params)
+
+        # Total present days (count of records with on_time/late or check_in_time)
+        cur_att.execute(f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)", tuple(params))
+        total_present_records = int(cur_att.fetchone()['cnt'] or 0)
+
+        # Per-student on_time/late counts
+        # Left join ensures students with zero records are included
+        conn_s = get_db_connection('students')
+        cur_s = conn_s.cursor()
+        student_select_sql = f'''
+            SELECT s.student_id, s.name, s.grade, s.className,
+                   COALESCE(SUM(CASE WHEN TRIM(LOWER(ar.status)) = 'on time' THEN 1 ELSE 0 END),0) AS on_time,
+                   COALESCE(SUM(CASE WHEN TRIM(LOWER(ar.status)) = 'late' THEN 1 ELSE 0 END),0) AS late
+            FROM students s
+            LEFT JOIN attendance_records ar ON ar.student_id = s.student_id AND ar.date IN ({date_placeholders})
+            WHERE {where_clause}
+            GROUP BY s.student_id
+            ORDER BY s.name ASC
+        '''
+        cur_s.execute(student_select_sql, tuple(school_dates + student_params))
+        students_rows = cur_s.fetchall()
+        conn_s.close()
+
         students_out = []
-        grade_buckets = {}
-        total_present_days = 0
         total_on_time_days = 0
         total_late_days = 0
-        for s in filtered_students:
-            records = s.get('attendanceHistory', [])
-            on_time = 0
-            late = 0
-            for r in records:
-                if r.get('date') in school_dates:
-                    st = r.get('status')
-                    if st == 'on time':
-                        on_time += 1
-                    elif st == 'late':
-                        late += 1
+        total_present_days = 0
+        grade_buckets = {}
+        for r in students_rows:
+            on_time = int(r['on_time'] or 0)
+            late = int(r['late'] or 0)
             present = on_time + late
-            absent = max(0, total_school_days - present) if total_school_days > 0 else 0
-            total_present_days += present
+            absent = max(0, total_school_days - present)
             total_on_time_days += on_time
             total_late_days += late
-            perc = round((present / total_school_days) * 100, 1) if total_school_days > 0 else 0
+            total_present_days += present
+            sid = r['student_id']
             students_out.append({
-                'id': s.get('student_id'),
-                'name': s.get('name'),
-                'grade': s.get('grade'),
-                'className': s.get('className'),
+                'id': sid,
+                'name': r.get('name'),
+                'grade': r.get('grade'),
+                'className': r.get('className'),
                 'on_time': on_time,
                 'late': late,
                 'absent': absent,
-                'presencePercentage': perc
+                'presencePercentage': round((present / total_school_days) * 100, 1) if total_school_days > 0 else 0
             })
-            g = str(s.get('grade') or '')
+            g = str(r.get('grade') or '')
             if g not in grade_buckets:
                 grade_buckets[g] = { 'students': 0, 'present': 0, 'on_time': 0, 'late': 0 }
             grade_buckets[g]['students'] += 1
@@ -1074,7 +1119,8 @@ def api_attendance_aggregate():
             grade_buckets[g]['on_time'] += on_time
             grade_buckets[g]['late'] += late
 
-        # Build pie (overall percentages across all students and school days)
+        # Build pie
+        total_possible = student_count * total_school_days if student_count > 0 else 0
         if student_count == 0 or total_school_days == 0:
             pie = {
                 'totalSchoolDays': total_school_days,
@@ -1087,7 +1133,6 @@ def api_attendance_aggregate():
                 'absencePercentage': 0
             }
         else:
-            total_possible = student_count * total_school_days
             absent_days = total_possible - total_present_days
             pie = {
                 'totalSchoolDays': total_school_days,
@@ -1110,8 +1155,6 @@ def api_attendance_aggregate():
                 total_possible_grade = students_in_grade * total_school_days
                 present_grade = data['present']
                 absent_grade = total_possible_grade - present_grade
-
-                # Compute ratios depending on requested status scope.
                 if status in ('on_time', 'on time', 'ontime'):
                     on_ratio = round((data.get('on_time', 0) / total_possible_grade), 3) if total_possible_grade > 0 else 0
                     late_ratio = 0
@@ -1125,7 +1168,6 @@ def api_attendance_aggregate():
                     late_ratio = 0
                     absent_ratio = round((absent_grade / total_possible_grade), 3) if total_possible_grade > 0 else 0
                 else:
-                    # default: include all statuses (backwards compatible)
                     on_ratio = round((data.get('on_time', 0) / total_possible_grade), 3) if total_possible_grade > 0 else 0
                     late_ratio = round((data.get('late', 0) / total_possible_grade), 3) if total_possible_grade > 0 else 0
                     absent_ratio = round((absent_grade / total_possible_grade), 3) if total_possible_grade > 0 else 0
@@ -1140,43 +1182,28 @@ def api_attendance_aggregate():
                     'absentCount': absent_grade,
                 })
 
-        # Points series per school date
+        # Points series per school date (present counts per date applying student filters)
+        params_dates = school_dates[:]
+        sql_date_present = f"SELECT ar.date, SUM(CASE WHEN (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present FROM attendance_records ar JOIN students s ON s.student_id = ar.student_id WHERE ar.date IN ({date_placeholders})"
+        if student_where:
+            sql_date_present += ' AND ' + ' AND '.join(student_where)
+            params_dates.extend(student_params)
+        sql_date_present += ' GROUP BY ar.date ORDER BY ar.date ASC'
+        cur_att.execute(sql_date_present, tuple(params_dates))
+        rows_by_date = {r['date']: int(r['present'] or 0) for r in cur_att.fetchall()}
         points = []
         for iso in school_dates:
-            present_count = 0
-            for s in filtered_students:
-                found = next((r for r in s.get('attendanceHistory', []) if r.get('date') == iso), None)
-                if found and found.get('status') != 'absent':
-                    present_count += 1
+            present_count = rows_by_date.get(iso, 0)
             percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
             points.append({ 'date': iso, 'present': present_count, 'percent': percent })
 
-        # Determine whether this date range (month) has any attendance data.
-        # Check per-student attendanceHistory for any record inside school_dates
-        has_data = False
-        if school_dates and filtered_students:
-            sd_set = set(school_dates)
-            for s in filtered_students:
-                for r in s.get('attendanceHistory', []):
-                    if r.get('date') in sd_set:
-                        has_data = True
-                        break
-                if has_data:
-                    break
-
-        # Also check attendance_records table as authoritative fallback
+        # Determine whether this date range has any attendance data for the scope
+        cur_att.execute(f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)", tuple(params))
+        row_chk = cur_att.fetchone()
+        has_data = bool(row_chk and row_chk.get('cnt', 0) > 0)
         try:
-            cur_chk = get_db_connection('attendance').cursor()
-            cur_chk.execute('SELECT COUNT(1) as cnt FROM attendance_records WHERE date BETWEEN ? AND ?', (start_date.isoformat(), end_date.isoformat()))
-            row_chk = cur_chk.fetchone()
-            if row_chk and row_chk.get('cnt', 0) > 0:
-                has_data = True
-            try:
-                cur_chk.connection.close()
-            except Exception:
-                pass
+            cur_att.connection.close()
         except Exception:
-            # If the check fails, conservatively leave has_data as computed above
             pass
 
         return jsonify({'success': True, 'pie': pie, 'gradeBars': gradeBars, 'students': students_out, 'points': points, 'hasData': bool(has_data)})
