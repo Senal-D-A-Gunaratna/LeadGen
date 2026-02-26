@@ -652,11 +652,14 @@ def api_attendance_history():
     student_count = row_cnt['cnt'] if row_cnt else 0
     conn_students.close()
 
-    # Fetch present counts per date (present = status != 'absent')
+    # Fetch present counts per date.
+    # A record counts as present when its trimmed/lower-case status is 'on time' or 'late',
+    # or when a non-null check_in_time exists. Do not treat stored 'absent' rows as present.
     if grade and grade != 'all':
         cursor_att = get_db_connection('attendance').cursor()
         cursor_att.execute('''
-            SELECT ar.date as date, SUM(CASE WHEN ar.status != 'absent' THEN 1 ELSE 0 END) as present
+            SELECT ar.date as date,
+                   SUM(CASE WHEN (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present
             FROM attendance_records ar
             JOIN students s ON s.student_id = ar.student_id
             WHERE ar.date BETWEEN ? AND ? AND s.grade = ?
@@ -666,7 +669,8 @@ def api_attendance_history():
     else:
         cursor_att = get_db_connection('attendance').cursor()
         cursor_att.execute('''
-            SELECT date, SUM(CASE WHEN status != 'absent' THEN 1 ELSE 0 END) as present
+            SELECT date,
+                   SUM(CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present
             FROM attendance_records
             WHERE date BETWEEN ? AND ?
             GROUP BY date
@@ -677,9 +681,8 @@ def api_attendance_history():
 
     # Map present counts by date
     results_by_date = {r['date']: (r['present'] or 0) for r in rows}
-    # Prefer authoritative `school_days` as the X-axis. If there are no
-    # school_days for the requested range, fall back to a full-day series
-    # (preserving legacy behavior).
+    # Use authoritative `school_days` as the X-axis. If there are no
+    # school_days for the requested range, return empty series (no fallbacks).
     series = []
     try:
         cur_sd = get_db_connection('attendance').cursor()
@@ -693,23 +696,12 @@ def api_attendance_history():
     except Exception:
         school_dates = []
 
-    if school_dates:
-        for iso in school_dates:
-            present = results_by_date.get(iso, 0)
-            percent = round((present / student_count) * 100, 1) if student_count > 0 else 0
-            series.append({'date': iso, 'percent': percent})
-    else:
-        # Fallback to daily series across the full range
-        day = start_date
-        while day <= end_date:
-            iso = day.isoformat()
-            present = results_by_date.get(iso, 0)
-            if student_count > 0:
-                percent = round((present / student_count) * 100, 1)
-            else:
-                percent = 0
-            series.append({'date': iso, 'percent': percent})
-            day = day + timedelta(days=1)
+    if not school_dates:
+        return jsonify({'success': True, 'data': series})
+    for iso in school_dates:
+        present = results_by_date.get(iso, 0)
+        percent = round((present / student_count) * 100, 1) if student_count > 0 else 0
+        series.append({'date': iso, 'percent': percent})
 
     return jsonify({'success': True, 'data': series})
 
@@ -2290,9 +2282,9 @@ async def handle_request_attendance_aggregate(sid, data):
     grade = (data or {}).get('grade', 'all')
     status = (data or {}).get('status', 'overview')
 
-    # Default SQL case expression for single-series queries. This ensures
-    # `case_expr` is always defined for all code paths (avoids static analysis warnings).
-    case_expr = "SUM(CASE WHEN ar.status != 'absent' THEN 1 ELSE 0 END) as present"
+    # Default SQL case expression for single-series queries. Use authoritative
+    # present detection: status 'on time' or 'late' (trimmed/lower) OR a non-null check_in_time.
+    case_expr = "SUM(CASE WHEN (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present"
     from datetime import timedelta
 
     # Denominator: number of students in scope
