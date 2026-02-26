@@ -515,9 +515,33 @@ def register_endpoints(app, socketio, helpers):
         await emit('clear_action_logs_response', {'success': True}, to=sid)
 
     @socketio.on('get_auth_logs')
-    async def handle_get_auth_logs(sid):
-        """Get authentication logs via WebSocket."""
-        if not _is_authorized(sid):
+    async def handle_get_auth_logs(*args):
+        """Get authentication logs via WebSocket.
+
+        Accept flexible signatures from different Socket.IO servers: (sid), (data), (sid, data), or no args.
+        """
+        sid = None
+        data = None
+        # Normalize args similar to ensure_ws_args
+        if len(args) == 0:
+            try:
+                sid = request.sid
+            except Exception:
+                sid = None
+        elif len(args) == 1:
+            if isinstance(args[0], dict):
+                data = args[0]
+                try:
+                    sid = request.sid
+                except Exception:
+                    sid = None
+            else:
+                sid = args[0]
+        else:
+            sid = args[0]
+            data = args[1]
+
+        if not _is_authorized(sid, data):
             await emit('get_auth_logs_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
             return
 

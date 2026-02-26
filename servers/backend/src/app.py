@@ -863,7 +863,7 @@ def api_attendance_aggregate():
                     cur = get_db_connection('attendance').cursor()
                     cur.execute('SELECT MIN(date) as min_date, MAX(date) as max_date FROM attendance_records')
                     row = cur.fetchone()
-                    if row and row.get('min_date') and row.get('max_date'):
+                    if row and row['min_date'] and row['max_date']:
                         if start_date is None:
                             start_date = date.fromisoformat(row['min_date'])
                         if end_date is None:
@@ -1063,7 +1063,7 @@ def api_attendance_aggregate():
             cur_students_meta.execute(sql_students, tuple(student_params))
         else:
             cur_students_meta.execute('SELECT student_id, name, grade, className FROM students ORDER BY name ASC')
-        student_rows = cur_students_meta.fetchall()
+        student_rows = [dict(r) for r in cur_students_meta.fetchall()]
         try:
             conn_students_meta.close()
         except Exception:
@@ -1220,7 +1220,7 @@ def api_attendance_aggregate():
         # Determine whether this date range has any attendance data for the scope
         cur_att.execute(f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)", tuple(params))
         row_chk = cur_att.fetchone()
-        has_data = bool(row_chk and row_chk.get('cnt', 0) > 0)
+        has_data = bool(row_chk and (row_chk['cnt'] or 0) > 0)
         try:
             cur_att.connection.close()
         except Exception:

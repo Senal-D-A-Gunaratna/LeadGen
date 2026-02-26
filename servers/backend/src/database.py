@@ -6,6 +6,8 @@ import sqlite3
 import shutil
 from datetime import datetime
 from typing import Dict, Optional
+import asyncio
+import inspect
 from pathlib import Path
 import threading
 import time
@@ -767,7 +769,12 @@ def start_attendance_watcher(poll_interval: float = 1.0):
                     try:
                         for cb in list(_post_mtime_change_callbacks):
                             try:
-                                cb()
+                                res = cb()
+                                if inspect.isawaitable(res):
+                                    try:
+                                        asyncio.ensure_future(res)
+                                    except Exception:
+                                        pass
                             except Exception:
                                 pass
                     except Exception:
@@ -791,7 +798,12 @@ def start_attendance_watcher(poll_interval: float = 1.0):
         try:
             for cb in list(_post_mtime_change_callbacks):
                 try:
-                    cb()
+                    res = cb()
+                    if inspect.isawaitable(res):
+                        try:
+                            asyncio.ensure_future(res)
+                        except Exception:
+                            pass
                 except Exception:
                     pass
         except Exception:
