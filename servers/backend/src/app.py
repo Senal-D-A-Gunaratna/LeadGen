@@ -1115,10 +1115,33 @@ def api_attendance_aggregate():
         params = school_dates[:] + student_ids[:]
         base_sql = f"FROM attendance_records ar WHERE ar.date IN ({date_placeholders}) AND ar.student_id IN ({student_placeholders})"
 
-        # Total present records (on_time/late or with check_in_time)
-        sql_total_present = f"SELECT COUNT(DISTINCT (ar.student_id || '|' || ar.date)) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
-        cur_att.execute(sql_total_present, tuple(params))
-        total_present_records = int(cur_att.fetchone()['cnt'] or 0)
+        # Build presence clause depending on requested `status` filter.
+        # If `status` is 'on_time' or 'late' we count only that status.
+        # If `status` is 'all' we treat any non-null check_in_time or on_time/late as presence.
+        # For 'absent' we compute total_present_all (presence regardless of status) and derive absent from total_possible.
+        status_normalized = (status or 'all').strip().lower()
+        if status_normalized in ('on_time', 'on time', 'ontime'):
+            presence_clause = "TRIM(LOWER(ar.status)) = 'on time'"
+        elif status_normalized == 'late':
+            presence_clause = "TRIM(LOWER(ar.status)) = 'late'"
+        else:
+            # 'all' and any other unknown value => count any presence marker
+            presence_clause = "(TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
+
+        # For computing absent we sometimes need the total present across any presence marker
+        presence_clause_all = "(TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
+
+        # Total present records for the requested status (or 0 for 'absent')
+        if status_normalized == 'absent':
+            # Compute total present across any presence marker so we can derive absent days later
+            sql_total_present_all = f"SELECT COUNT(DISTINCT (ar.student_id || '|' || ar.date)) as cnt {base_sql} AND ({presence_clause_all})"
+            cur_att.execute(sql_total_present_all, tuple(params))
+            total_present_all = int(cur_att.fetchone()['cnt'] or 0)
+            total_present_records = 0
+        else:
+            sql_total_present = f"SELECT COUNT(DISTINCT (ar.student_id || '|' || ar.date)) as cnt {base_sql} AND ({presence_clause})"
+            cur_att.execute(sql_total_present, tuple(params))
+            total_present_records = int(cur_att.fetchone()['cnt'] or 0)
 
         # Per-student counts from attendance DB
         sql_per_student = f"""SELECT ar.student_id,
@@ -1141,7 +1164,17 @@ def api_attendance_aggregate():
             counts = per_student_counts.get(sid, {'on_time': 0, 'late': 0})
             on_time = int(counts['on_time'])
             late = int(counts['late'])
-            present = on_time + late
+            # When a specific status filter is active, make per-student "present"
+            # reflect only that status so the pie/chart numbers match the UI filter.
+            if status_normalized in ('on_time', 'on time', 'ontime'):
+                present = on_time
+            elif status_normalized == 'late':
+                present = late
+            elif status_normalized == 'absent':
+                # For 'absent' we treat present as 0 here; absent is derived below
+                present = 0
+            else:
+                present = on_time + late
             absent = max(0, total_school_days - present)
             total_on_time_days += on_time
             total_late_days += late
@@ -1178,17 +1211,34 @@ def api_attendance_aggregate():
                 'absencePercentage': 0
             }
         else:
-            absent_days = total_possible - total_present_days
-            pie = {
-                'totalSchoolDays': total_school_days,
-                'studentCount': student_count,
-                'presentDays': total_present_days,
-                'onTimeDays': total_on_time_days,
-                'lateDays': total_late_days,
-                'absentDays': absent_days,
-                'presencePercentage': round((total_present_days / total_possible) * 100, 1),
-                'absencePercentage': round((absent_days / total_possible) * 100, 1)
-            }
+            # If the client requested 'absent' we derive absent using the
+            # total present across any presence marker (computed above as
+            # `total_present_all`) so absences reflect true missing scans.
+            if status_normalized == 'absent':
+                used_present = int(total_present_all if 'total_present_all' in locals() else total_present_days)
+                absent_days = total_possible - used_present
+                pie = {
+                    'totalSchoolDays': total_school_days,
+                    'studentCount': student_count,
+                    'presentDays': 0,
+                    'onTimeDays': 0,
+                    'lateDays': 0,
+                    'absentDays': absent_days,
+                    'presencePercentage': 0,
+                    'absencePercentage': round((absent_days / total_possible) * 100, 1)
+                }
+            else:
+                absent_days = total_possible - total_present_days
+                pie = {
+                    'totalSchoolDays': total_school_days,
+                    'studentCount': student_count,
+                    'presentDays': total_present_days,
+                    'onTimeDays': total_on_time_days,
+                    'lateDays': total_late_days,
+                    'absentDays': absent_days,
+                    'presencePercentage': round((total_present_days / total_possible) * 100, 1),
+                    'absencePercentage': round((absent_days / total_possible) * 100, 1)
+                }
 
         # Grade bars
         gradeBars = []
@@ -1231,14 +1281,27 @@ def api_attendance_aggregate():
         params_dates = school_dates[:]
         # Use attendance DB only: filter by date IN (...) and student_id IN (...)
         params_dates = school_dates[:] + student_ids[:]
-        sql_date_present = f"SELECT date, SUM(CASE WHEN (TRIM(LOWER(status)) IN ('on time','late') OR check_in_time IS NOT NULL) THEN 1 ELSE 0 END) as present FROM attendance_records WHERE date IN ({date_placeholders}) AND student_id IN ({student_placeholders}) GROUP BY date ORDER BY date ASC"
-        cur_att.execute(sql_date_present, tuple(params_dates))
-        rows_by_date = {r['date']: int(r['present'] or 0) for r in cur_att.fetchall()}
-        points = []
-        for iso in school_dates:
-            present_count = rows_by_date.get(iso, 0)
-            percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
-            points.append({ 'date': iso, 'present': present_count, 'percent': percent })
+        # Per-date present counts should respect the requested status filter
+        if status_normalized == 'absent':
+            # For 'absent' the per-date "present" is 0 (we derive absent from total_possible)
+            # but still compute rows_by_date for diagnostics if needed (not used here)
+            sql_date_present = f"SELECT date, SUM(CASE WHEN ({presence_clause_all}) THEN 1 ELSE 0 END) as present FROM attendance_records WHERE date IN ({date_placeholders}) AND student_id IN ({student_placeholders}) GROUP BY date ORDER BY date ASC"
+            cur_att.execute(sql_date_present, tuple(params_dates))
+            rows_by_date = {r['date']: int(r['present'] or 0) for r in cur_att.fetchall()}
+            points = []
+            for iso in school_dates:
+                present_count = 0
+                percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
+                points.append({ 'date': iso, 'present': present_count, 'percent': percent })
+        else:
+            sql_date_present = f"SELECT date, SUM(CASE WHEN ({presence_clause}) THEN 1 ELSE 0 END) as present FROM attendance_records WHERE date IN ({date_placeholders}) AND student_id IN ({student_placeholders}) GROUP BY date ORDER BY date ASC"
+            cur_att.execute(sql_date_present, tuple(params_dates))
+            rows_by_date = {r['date']: int(r['present'] or 0) for r in cur_att.fetchall()}
+            points = []
+            for iso in school_dates:
+                present_count = rows_by_date.get(iso, 0)
+                percent = round((present_count / student_count) * 100, 1) if student_count > 0 else 0
+                points.append({ 'date': iso, 'present': present_count, 'percent': percent })
 
         # Determine whether this date range has any attendance data for the scope
         sql_chk = f"SELECT COUNT(1) as cnt {base_sql} AND (TRIM(LOWER(ar.status)) IN ('on time','late') OR ar.check_in_time IS NOT NULL)"
