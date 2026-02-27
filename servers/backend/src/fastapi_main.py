@@ -1297,6 +1297,64 @@ async def clear_auth_logs(data: dict):
         return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
 
 
+@fastapi_app.get('/api/action-logs')
+async def api_get_action_logs(limit: Optional[int] = Query(500)):
+    """Return recent action logs."""
+    try:
+        conn_logs = get_db_connection('logs')
+        cur = conn_logs.cursor()
+        cur.execute('SELECT id, timestamp, action FROM action_logs ORDER BY id DESC LIMIT ?', (int(limit),))
+        rows = cur.fetchall()
+        try:
+            cur.connection.close()
+        except Exception:
+            pass
+        logs = [{'id': r['id'], 'timestamp': r['timestamp'], 'action': r['action']} for r in rows]
+        return JSONResponse({'success': True, 'logs': logs})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
+
+
+@fastapi_app.post('/api/clear-action-logs')
+async def api_clear_action_logs(data: dict):
+    """Clear action logs and insert a clearing entry with the provided role."""
+    role = (data or {}).get('role', 'unknown')
+    try:
+        conn_logs = get_db_connection('logs')
+        cur = conn_logs.cursor()
+        cur.execute('DELETE FROM action_logs')
+        cur.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (datetime.now().isoformat(), f'[{role}] Cleared all action logs.'))
+        conn_logs.commit()
+        try:
+            cur.connection.close()
+        except Exception:
+            pass
+        return JSONResponse({'success': True})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
+
+
+@fastapi_app.get('/api/auth-logs')
+async def api_get_auth_logs(limit: Optional[int] = Query(500)):
+    """Return recent authentication logs."""
+    try:
+        conn_logs = get_db_connection('logs')
+        cur = conn_logs.cursor()
+        cur.execute('SELECT id, timestamp, message FROM auth_logs ORDER BY id DESC LIMIT ?', (int(limit),))
+        rows = cur.fetchall()
+        try:
+            cur.connection.close()
+        except Exception:
+            pass
+        logs = [{'id': r['id'], 'timestamp': r['timestamp'], 'message': r['message']} for r in rows]
+        return JSONResponse({'success': True, 'logs': logs})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
+
+
 @fastapi_app.get("/api/students/{student_id}/attendance")
 async def api_get_student_attendance(student_id: int, month: Optional[str] = Query(None)):
     try:
