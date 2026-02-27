@@ -7,7 +7,7 @@
     "all": "npm run frontend & npm run backend",
     "install-servers": "npm run install-frontend && npm run install-backend",
     "frontend": "cd servers/frontend && npm run dev",
-    "backend": "python3 -m servers.backend.src.app",
+    "backend": "uvicorn servers.backend.src.fastapi_app:app --reload --host 0.0.0.0 --port 5000",
     "build": "cd servers/frontend && npm run build",
     "start": "cd servers/frontend && npm start",
     "lint": "cd servers/frontend && npm run lint",
