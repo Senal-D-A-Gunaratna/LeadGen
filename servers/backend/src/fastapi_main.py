@@ -65,6 +65,59 @@ async def api_server_connections():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@fastapi_app.get('/api/events/poll')
+async def api_events_poll(since: Optional[int] = Query(0), timeout: Optional[int] = Query(25)):
+    """Long-poll endpoint: returns events newer than `since`.
+
+    Query params:
+      - since: integer event id (default 0)
+      - timeout: seconds to block waiting for new events (default 25)
+    """
+    try:
+        loop = asyncio.get_running_loop()
+        # Delegate waiting to the Flask app's thread-safe waiter to reuse
+        # the same event queue used by internal broadcast functions.
+        events = await loop.run_in_executor(None, flask_app.wait_for_events, int(since or 0), int(timeout or 25))
+        latest = max((e['id'] for e in events), default=int(since or 0))
+        return JSONResponse({'success': True, 'events': events, 'latest_id': latest})
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@fastapi_app.get('/api/static-filters')
+async def api_static_filters():
+    """Return computed static filters (grades, classes, roles)."""
+    try:
+        out = flask_app.compute_static_filters_from_db()
+        return JSONResponse({'success': True, **out})
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@fastapi_app.post('/api/scan')
+async def api_scan(request: Request):
+    """Scan fingerprint (HTTP wrapper for scanner devices).
+
+    Expects JSON: { fingerprint: string, scanner_token?: string }
+    """
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Invalid JSON'}, status_code=400)
+    fingerprint = data.get('fingerprint')
+    scanner_token = data.get('scanner_token')
+    try:
+        # Allow HTTP auth via header token if provided
+        # (fastapi_main delegates authentication elsewhere when needed)
+        result = await asyncio.get_running_loop().run_in_executor(None, flask_app.perform_scan_sync, fingerprint, scanner_token, None)
+        return JSONResponse(result)
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+
+
 @fastapi_app.post('/api/auth/login')
 async def api_auth_login(request: Request):
     """Authenticate using role+password and return a server-side session token."""

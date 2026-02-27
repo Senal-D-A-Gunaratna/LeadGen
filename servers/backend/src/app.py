@@ -194,6 +194,60 @@ if os.environ.get('DEV_FORCE_FULL_ACCESS') == '1':
     print('WARNING: DEV_FORCE_FULL_ACCESS=1 -> bypassing WebSocket auth checks')
 
 
+# ------------------ Long-poll event queue ------------------
+# A simple in-memory event queue used by HTTP long-poll polling.
+# Events are small dicts: { id: int, ts: str, type: str, data: dict }
+_events: list[dict] = []
+_event_id = 0
+_events_cv = threading.Condition()
+_max_events_store = 2000
+
+
+def _append_event(event_type: str, data: Optional[dict] = None) -> dict:
+    """Append an event to the in-memory queue and notify waiters."""
+    global _event_id, _events
+    try:
+        with _events_cv:
+            _event_id += 1
+            ev = {'id': _event_id, 'ts': datetime.utcnow().isoformat() + 'Z', 'type': event_type, 'data': data or {}}
+            _events.append(ev)
+            # Keep store bounded
+            if len(_events) > _max_events_store:
+                _events = _events[-_max_events_store:]
+            _events_cv.notify_all()
+            return ev
+    except Exception:
+        return {'id': _event_id, 'ts': datetime.utcnow().isoformat() + 'Z', 'type': event_type, 'data': data or {}}
+
+
+def get_events_since(since_id: int) -> list[dict]:
+    try:
+        with _events_cv:
+            if since_id < 0:
+                since_id = 0
+            out = [e for e in _events if e['id'] > since_id]
+            return out
+    except Exception:
+        return []
+
+
+def wait_for_events(since_id: int, timeout_sec: int = 25) -> list[dict]:
+    """Block until events newer than `since_id` are available or timeout."""
+    try:
+        end_ts = datetime.utcnow().timestamp() + float(timeout_sec)
+        with _events_cv:
+            out = [e for e in _events if e['id'] > since_id]
+            while not out and datetime.utcnow().timestamp() < end_ts:
+                remaining = end_ts - datetime.utcnow().timestamp()
+                if remaining <= 0:
+                    break
+                _events_cv.wait(timeout=remaining)
+                out = [e for e in _events if e['id'] > since_id]
+            return out
+    except Exception:
+        return []
+
+
 def create_http_session(role: str) -> str:
     """Create a simple server-side HTTP session token for `role`.
 
@@ -229,9 +283,9 @@ def broadcast_data_change(event_type: str, data: Optional[dict] = None):
     except Exception:
         pass
     payload = {'type': event_type, 'data': data or {}}
-    # Enqueue an emit-only task for the worker thread. The worker will
-    # schedule the actual Socket.IO emits on the main asyncio loop so
-    # background threads never call asyncio APIs directly.
+    # Enqueue an emit-only task for the worker thread (legacy) and
+    # append to the HTTP long-poll event queue so polling clients
+    # receive notifications.
     try:
         _work_queue.put({'action': 'emit_data_changed', 'payload': payload})
     except Exception:
@@ -239,6 +293,10 @@ def broadcast_data_change(event_type: str, data: Optional[dict] = None):
             print('[broadcast] failed to enqueue data_changed task')
         except Exception:
             pass
+    try:
+        _append_event('data_changed', payload)
+    except Exception:
+        pass
 
 def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
     """Broadcast updated attendance summaries for affected students or all if None.
@@ -257,6 +315,10 @@ def broadcast_summary_update(affected_student_ids: Optional[list[int]] = None):
             print('[broadcast] failed to enqueue summary_update task')
         except Exception:
             pass
+    try:
+        _append_event('summary_update', {'affectedIds': affected_student_ids or []})
+    except Exception:
+        pass
 
 
 def compute_static_filters_from_db() -> Dict[str, List[str]]:
@@ -1414,6 +1476,136 @@ def handle_disconnect(*args, **kwargs):
 # See `fastapi_main.py` for `/api/auth/*` endpoints and `create_http_session`
 # / `validate_http_token` helpers in this module.
 
+
+def perform_scan_sync(fingerprint: str, scanner_token: Optional[str] = None, sid: Optional[str] = None) -> dict:
+    """Synchronous scan helper reused by HTTP and WebSocket handlers.
+
+    Returns a JSON-serializable dict like {'success': True, 'student': {...}} or
+    {'success': False, 'message': '...'} on error.
+    """
+    try:
+        unauthenticated = True
+        try:
+            if sid in authenticated_sessions:
+                unauthenticated = False
+        except Exception:
+            unauthenticated = True
+
+        if unauthenticated:
+            if SCANNER_TOKEN:
+                if scanner_token != SCANNER_TOKEN:
+                    return {'success': False, 'message': 'Invalid scanner token'}
+            else:
+                return {'success': False, 'message': 'Not authenticated'}
+
+        today_dt = date.today()
+        if today_dt.weekday() >= 5:
+            return {'success': False, 'message': 'Scanning not allowed on weekends'}
+
+        if not fingerprint:
+            return {'success': False, 'message': 'Missing fingerprint'}
+
+        # Find student by fingerprint
+        conn_students = get_db_connection('students')
+        cursor_students = conn_students.cursor()
+        cursor_students.execute('''
+            SELECT s.*
+            FROM students s
+            JOIN student_fingerprints_id f ON s.id = f.student_id
+            WHERE f.fingerprint = ?
+            LIMIT 1
+        ''', (fingerprint,))
+        row = cursor_students.fetchone()
+        if not row:
+            try:
+                conn_students.close()
+            except Exception:
+                pass
+            return {'success': False, 'message': 'Student not found'}
+
+        student = dict(row)
+        student_id = student['student_id']
+        try:
+            conn_students.close()
+        except Exception:
+            pass
+
+        receipt_local = datetime.now()
+        receipt_utc_iso = datetime.now(timezone.utc).isoformat()
+        date_str = receipt_local.date().isoformat()
+
+        try:
+            earliest_utc = save_checkin_utc(student_id, date_str, receipt_utc_iso)
+        except Exception:
+            conn_attendance = get_db_connection('attendance')
+            cur = conn_attendance.cursor()
+            try:
+                cur.execute('''
+                    INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (student_id, date_str, 'absent', datetime.utcnow().isoformat(), receipt_utc_iso))
+                conn_attendance.commit()
+                earliest_utc = receipt_utc_iso
+            except Exception:
+                earliest_utc = receipt_utc_iso
+            finally:
+                try:
+                    conn_attendance.close()
+                except Exception:
+                    pass
+
+        status = compute_attendance_status(receipt_local, ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END)
+
+        conn_attendance = get_db_connection('attendance')
+        cur = conn_attendance.cursor()
+        try:
+            cur.execute('SELECT 1 FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
+            existing_row = cur.fetchone()
+            if existing_row:
+                cur.execute('''
+                    UPDATE attendance_records
+                    SET status = ?, updated_at = ?, check_in_time = ?
+                    WHERE student_id = ? AND date = ?
+                ''', (status, datetime.utcnow().isoformat(), earliest_utc, student_id, date_str))
+            else:
+                cur.execute('''
+                    INSERT INTO attendance_records (student_id, date, status, created_at, updated_at, check_in_time)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (student_id, date_str, status, datetime.utcnow().isoformat(), datetime.utcnow().isoformat(), earliest_utc))
+            conn_attendance.commit()
+            try:
+                if status in ('on time', 'late'):
+                    cur.execute('INSERT OR IGNORE INTO school_days (date, created_at) VALUES (?, ?)', (date_str, datetime.utcnow().isoformat()))
+                    conn_attendance.commit()
+            except Exception:
+                pass
+        except Exception as e:
+            try:
+                conn_attendance.rollback()
+            except Exception:
+                pass
+        finally:
+            try:
+                conn_attendance.close()
+            except Exception:
+                pass
+
+        student_data = get_student_by_id(student_id)
+        # Broadcast scan event for polling clients
+        try:
+            _append_event('scan', {'studentId': student_id})
+        except Exception:
+            pass
+        # Also keep legacy broadcast
+        try:
+            broadcast_data_change('scan', {'studentId': student_id})
+        except Exception:
+            pass
+
+        return {'success': True, 'student': student_data}
+    except Exception as e:
+        return {'success': False, 'message': str(e)}
+
 @socketio.on('scan_student')
 @ensure_ws_args
 async def handle_scan(sid, data):
@@ -1424,122 +1616,22 @@ async def handle_scan(sid, data):
     - If unauthenticated, require a matching `scanner_token` payload when
       `SCANNER_TOKEN` is set in the environment; otherwise reject.
     """
-    unauthenticated = sid not in authenticated_sessions
-    if unauthenticated:
-        # If a scanner token is configured, require it for unauthenticated scans.
-        if SCANNER_TOKEN:
-            supplied = (data or {}).get('scanner_token')
-            if supplied != SCANNER_TOKEN:
-                await socketio.emit('scan_response', {'success': False, 'message': 'Invalid scanner token'}, to=sid)
-                return
-        else:
-            await socketio.emit('scan_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
-            return
-    
-    # Block weekend scans (Saturday=5, Sunday=6)
-    today = date.today()
-    if today.weekday() >= 5:
-        await socketio.emit('scan_response', {'success': False, 'message': 'Scanning not allowed on weekends'}, to=sid)
-        return
-    
-    fingerprint = data.get('fingerprint')
-    if not fingerprint:
-        await socketio.emit('scan_response', {'success': False, 'message': 'Missing fingerprint'}, to=sid)
-        return
-    
-    # Find student by fingerprint using normalized table
-    conn_students = get_db_connection('students')
-    cursor_students = conn_students.cursor()
-    cursor_students.execute('''
-        SELECT s.*
-        FROM students s
-        JOIN student_fingerprints_id f ON s.id = f.student_id
-        WHERE f.fingerprint = ?
-        LIMIT 1
-    ''', (fingerprint,))
-    
-    row = cursor_students.fetchone()
-    if not row:
-        conn_students.close()
-        await socketio.emit('scan_response', {'success': False, 'message': 'Student not found'}, to=sid)
-        return
-    
-    student = dict(row)
-    student_id = student['student_id']
-    today = date.today().isoformat()
-    conn_students.close()
-    
-    # Determine server receipt time (server-local) and UTC stamp to persist (timezone-aware)
-    receipt_local = datetime.now()
-    receipt_utc_iso = datetime.now(timezone.utc).isoformat()
-    print(f"DEBUG: receipt_local={receipt_local.isoformat()} receipt_utc_iso={receipt_utc_iso}")
-    date_str = receipt_local.date().isoformat()
-
-    # Save check-in using transactional helper - ensures earliest checkin wins
+    # Delegate synchronous scan logic to `perform_scan_sync` helper so the
+    # same behavior can be used by HTTP endpoints (long-poll clients).
     try:
-        earliest_utc = save_checkin_utc(student_id, date_str, receipt_utc_iso)
-    except Exception:
-        # On failure, fall back to a simple insert/update to avoid losing scans
-        conn_attendance = get_db_connection('attendance')
-        cur = conn_attendance.cursor()
+        fingerprint = (data or {}).get('fingerprint')
+        supplied_token = (data or {}).get('scanner_token')
+        result = perform_scan_sync(fingerprint, supplied_token, sid=sid)
+        # `result` is a dict expected to be JSON-serializable
         try:
-            cur.execute('''
-                INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (student_id, date_str, 'absent', datetime.utcnow().isoformat(), receipt_utc_iso))
-            conn_attendance.commit()
-            earliest_utc = receipt_utc_iso
+            await socketio.emit('scan_response', result, to=sid)
         except Exception:
-            earliest_utc = receipt_utc_iso
-        finally:
-            conn_attendance.close()
-
-    # Compute status using server local receipt time (system time).
-    # This ensures comparisons use the server's wall-clock unambiguously.
-    status = compute_attendance_status(receipt_local, ATTENDANCE_ONTIME_END, ATTENDANCE_LATE_END)
-    print(f"DEBUG: computed status from receipt_local={receipt_local.isoformat()} -> {status}")
-
-    # Persist computed status and ensure check_in_time is earliest_utc
-    conn_attendance = get_db_connection('attendance')
-    cur = conn_attendance.cursor()
-    try:
-        # If a row exists, update it; otherwise insert a new row.
-        # attendance_records no longer has an auto-increment `id` column —
-        # check existence using a scalar select.
-        cur.execute('SELECT 1 FROM attendance_records WHERE student_id = ? AND date = ?', (student_id, date_str))
-        existing_row = cur.fetchone()
-        if existing_row:
-            cur.execute('''
-                UPDATE attendance_records
-                SET status = ?, updated_at = ?, check_in_time = ?
-                WHERE student_id = ? AND date = ?
-            ''', (status, datetime.utcnow().isoformat(), earliest_utc, student_id, date_str))
-        else:
-            cur.execute('''
-                INSERT INTO attendance_records (student_id, date, status, created_at, updated_at, check_in_time)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (student_id, date_str, status, datetime.utcnow().isoformat(), datetime.utcnow().isoformat(), earliest_utc))
-        conn_attendance.commit()
-        # If this checkin denotes an actual presence (on time or late), mark the date as a school day
-        try:
-            if status in ('on time', 'late'):
-                cur.execute('INSERT OR IGNORE INTO school_days (date, created_at) VALUES (?, ?)', (date_str, datetime.utcnow().isoformat()))
-                conn_attendance.commit()
-        except Exception:
-            # Non-fatal — if the table isn't present or insert fails, continue
             pass
     except Exception as e:
         try:
-            conn_attendance.rollback()
+            await socketio.emit('scan_response', {'success': False, 'message': str(e)}, to=sid)
         except Exception:
             pass
-        print('Error persisting attendance record:', e)
-    finally:
-        conn_attendance.close()
-
-    student_data = get_student_by_id(student_id)
-    await socketio.emit('scan_response', {'success': True, 'student': student_data}, to=sid)
-    broadcast_data_change('scan', {'studentId': student_id})
 
 @socketio.on('get_filtered_students')
 @ensure_ws_args
