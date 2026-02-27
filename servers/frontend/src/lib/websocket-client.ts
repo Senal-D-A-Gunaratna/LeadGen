@@ -9,14 +9,34 @@ async function getBackendUrlFromServer(): Promise<string> {
   if (typeof window === 'undefined') {
     return 'http://localhost:5000';
   }
-  // When running in the browser, derive the backend URL from the current
-  // location: assume the backend runs on the same host at port 5000.
+  // Probe common backend locations instead of hardcoding :5000 so dev
+  // setups with different ports are supported.
   try {
     const proto = window.location.protocol || 'http:';
     const hostname = window.location.hostname || 'localhost';
-    const backendUrl = `${proto}//${hostname}:5000`;
-    console.debug('Derived backend URL from browser location:', backendUrl);
-    return backendUrl;
+    const candidates = [
+      '',
+      `${proto}//${hostname}:5000`,
+      `${proto}//${hostname}:8000`,
+    ];
+
+    for (const candidate of candidates) {
+      try {
+        const url = candidate ? `${candidate}/api/health` : `/api/health`;
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 1500);
+        const resp = await fetch(url, { signal: controller.signal, credentials: 'same-origin' });
+        clearTimeout(timer);
+        if (resp && resp.ok) {
+          console.debug('Backend detected at', candidate || 'same-origin');
+          return candidate;
+        }
+      } catch (e) {
+        // ignore probe failure and try next
+      }
+    }
+
+    return `${window.location.protocol}//${window.location.hostname}:5000`;
   } catch (error) {
     console.error('Failed to derive backend URL from window.location:', error);
     return 'http://localhost:5000';
