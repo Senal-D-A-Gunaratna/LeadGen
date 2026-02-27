@@ -83,3 +83,4 @@ servers/frontend/out/
 #Other (if any)
 tools/__pycache__
 servers/__pycache__
+tmp
