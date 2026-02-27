@@ -240,6 +240,7 @@ class WebSocketClient {
 }
 
 export const wsClient = new WebSocketClient();
+export const apiClient = wsClient;
 
 // Get backend URL from Node.js server API endpoint
 async function getBackendUrlFromServer(): Promise<string> {

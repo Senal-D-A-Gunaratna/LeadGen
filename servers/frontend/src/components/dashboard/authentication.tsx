@@ -18,7 +18,7 @@ import { RolePasswordDialog } from "./role-password-dialog";
 import type { Role } from "@/hooks/use-auth-store";
 import { ChangePasswordDialog } from "./change-password-dialog";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
-import { wsClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api-client";
 
 
 export function Authentication() {
@@ -38,7 +38,7 @@ export function Authentication() {
 
   const handleSignOut = () => {
     logout();
-    wsClient.disconnect();
+    apiClient.disconnect();
     setActiveTab('dashboard');
   };
 

@@ -31,7 +31,7 @@ import { Button } from "../ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Calendar } from "../ui/calendar";
 import { MonthYearSelector } from "../ui/month-year-selector";
-import { wsClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api-client";
 import { getAttendanceAggregate, getAttendanceTrend } from "@/lib/api-client";
 import { syncClient } from "@/lib/sync-client";
 import { cn, parseDate, getStudentId } from "@/lib/utils";

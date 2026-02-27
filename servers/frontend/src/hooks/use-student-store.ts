@@ -16,7 +16,7 @@ import { useActionLogStore } from './use-action-log-store';
 import { useAuthStore } from './use-auth-store';
 import { produce, enableMapSet } from 'immer';
 import { devtools } from 'zustand/middleware';
-import { wsClient } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
 import { shrinkStudentForList } from '@/lib/utils';
 
 // Enable Immer MapSet plugin
@@ -182,7 +182,7 @@ export const useStudentStore = create<StudentStore>()(
             
             try {
               // Use WebSocket to scan student
-              const updatedStudent = await wsClient.scanStudent(fingerprint);
+              const updatedStudent = await apiClient.scanStudent(fingerprint);
               
               if (updatedStudent) {
                 const studentWithTime = { ...updatedStudent, lastScanTime: scanTime.getTime() };

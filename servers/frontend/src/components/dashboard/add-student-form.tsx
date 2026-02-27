@@ -30,7 +30,7 @@ import { Loader2 } from "lucide-react";
 import type { NewStudent, PrefectRole } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/student-data";
-import { wsClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
 import { useAuthStore } from "@/hooks/use-auth-store";
 
@@ -115,7 +115,7 @@ export function AddStudentForm({ open, onOpenChange }: AddStudentFormProps) {
   useEffect(() => {
     let mounted = true;
     if (!open) return;
-    wsClient.getStaticFilters().then((resp) => {
+    apiClient.getStaticFilters().then((resp) => {
       if (!mounted) return;
       if (resp.grades && resp.grades.length) setGradeOptions(resp.grades);
       if (resp.classes && resp.classes.length) setClassOptions(resp.classes);

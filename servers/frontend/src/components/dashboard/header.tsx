@@ -4,7 +4,7 @@
 import { LeadGenLogo } from "@/icons";
 import { Wifi, WifiOff, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { wsClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { CreditsDialog } from "./credits-dialog";
 import { Authentication } from "./authentication";
@@ -19,10 +19,10 @@ export function Header() {
     setIsClient(true);
     // Prefer WebSocket connection state for "Live Sync" indicator
     const initial = typeof navigator !== 'undefined' ? navigator.onLine : true;
-    setIsOnline(wsClient.isConnected() ?? initial);
+    setIsOnline(apiClient.isConnected() ?? initial);
 
     const handler = (connected: boolean) => setIsOnline(connected);
-    wsClient.on('connection', handler);
+    apiClient.on('connection', handler);
 
     // Connection established centrally in `servers/frontend/src/app/page.tsx`
 
@@ -32,7 +32,7 @@ export function Header() {
 
 
     return () => {
-      wsClient.off('connection', handler);
+      apiClient.off('connection', handler);
       // nothing additional to clean up for theme
     };
   }, []);

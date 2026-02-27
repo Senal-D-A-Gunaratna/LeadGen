@@ -27,7 +27,7 @@ import { Loader2 } from "lucide-react";
 import type { Role } from "@/hooks/use-auth-store";
 import { useLogStore } from "@/hooks/use-log-store";
 import { validatePasswordAction } from "@/app/actions";
-import { wsClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
@@ -90,7 +90,7 @@ export function RolePasswordDialog({ role, open, onOpenChange, onSuccess, title,
     if (isValid) {
       // Authenticate WebSocket session
       try {
-        const wsAuthenticated = await wsClient.authenticate(role, values.password);
+        const wsAuthenticated = await apiClient.authenticate(role, values.password);
         if (wsAuthenticated) {
           try {
             onSuccess(values.password);

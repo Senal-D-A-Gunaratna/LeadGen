@@ -17,7 +17,7 @@ import { useLogStore } from '@/hooks/use-log-store';
 import { useActionLogStore } from '@/hooks/use-action-log-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
-import { wsClient } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
 import { syncClient } from '@/lib/sync-client';
 import { getStudentByIdAction } from '@/app/actions';
 import { shrinkStudentForList, getStudentId } from '@/lib/utils';
@@ -72,7 +72,7 @@ export default function Home() {
     init();
     
     // WebSocket real-time updates (replaces long-polling)
-    wsClient.connect();
+    apiClient.connect();
 
     // Debounced, event-driven staleness: on 'data_changed' request a snapshot refresh
     let dataChangeTimer: number | null = null;
@@ -141,7 +141,7 @@ export default function Home() {
 
     syncClient.on(syncListener);
     // Keep realtime_patch on the raw socket for fast incremental patches
-    wsClient.on('realtime_patch', onRealtimePatch);
+    apiClient.on('realtime_patch', onRealtimePatch);
 
     // Note: tab visibility / beforeunload handlers removed per request.
 
@@ -157,8 +157,8 @@ export default function Home() {
 
     return () => {
       clearInterval(dayCheckIntervalId);
-      wsClient.off('data_changed', onDataChanged);
-      wsClient.off('realtime_patch', onRealtimePatch);
+      apiClient.off('data_changed', onDataChanged);
+      apiClient.off('realtime_patch', onRealtimePatch);
       // cleanup note: visibility/beforeunload handlers removed earlier
       // Do not disconnect the global WebSocket here — keep connections open per-tab as requested
     };

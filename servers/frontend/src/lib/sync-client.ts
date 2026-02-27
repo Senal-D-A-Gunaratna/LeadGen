@@ -1,4 +1,4 @@
-import { wsClient } from './api-client';
+import { apiClient } from './api-client';
 import * as api from './api-client';
 
 type Listener = (event: string, payload?: any) => void;
@@ -24,17 +24,17 @@ class SyncClient {
   start() {
     try {
       // Ensure wsClient starts connecting (no-op if already connected)
-      try { (wsClient as any).connect && (wsClient as any).connect(); } catch (err) {}
-      wsClient.on('data_changed', this.handleDataChanged);
+      try { (apiClient as any).connect && (apiClient as any).connect(); } catch (err) {}
+      apiClient.on('data_changed', this.handleDataChanged);
     } catch (e) { console.debug('sync-client.start bind data_changed failed', e); }
-    try { wsClient.on('summary_update', this.handleSummaryUpdate); } catch (e) { console.debug('sync-client.start bind summary_update failed', e); }
-    try { wsClient.on('attendance_trend', this.handleAttendanceTrend); } catch (e) { console.debug('sync-client.start bind attendance_trend failed', e); }
+    try { apiClient.on('summary_update', this.handleSummaryUpdate); } catch (e) { console.debug('sync-client.start bind summary_update failed', e); }
+    try { apiClient.on('attendance_trend', this.handleAttendanceTrend); } catch (e) { console.debug('sync-client.start bind attendance_trend failed', e); }
   }
 
   stop() {
-    try { wsClient.off('data_changed', this.handleDataChanged); } catch (e) {}
-    try { wsClient.off('summary_update', this.handleSummaryUpdate); } catch (e) {}
-    try { wsClient.off('attendance_trend', this.handleAttendanceTrend); } catch (e) {}
+    try { apiClient.off('data_changed', this.handleDataChanged); } catch (e) {}
+    try { apiClient.off('summary_update', this.handleSummaryUpdate); } catch (e) {}
+    try { apiClient.off('attendance_trend', this.handleAttendanceTrend); } catch (e) {}
   }
 
   private handleAttendanceTrend = (payload: any) => {

@@ -6,7 +6,7 @@ import { StudentProfileDialog } from "./student-profile-dialog";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { useUIStateStore } from "@/hooks/use-ui-state-store";
 import { useEffect } from "react";
-import { wsClient } from "@/lib/api-client";
+import { apiClient } from "@/lib/api-client";
 import { syncClient } from "@/lib/sync-client";
 
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
