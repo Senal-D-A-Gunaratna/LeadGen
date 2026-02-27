@@ -1,4 +1,4 @@
-import { wsClient } from './websocket-client';
+import { wsClient } from './api-client';
 import * as api from './api-client';
 
 type Listener = (event: string, payload?: any) => void;

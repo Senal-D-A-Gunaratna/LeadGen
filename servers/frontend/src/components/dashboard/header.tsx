@@ -4,7 +4,7 @@
 import { LeadGenLogo } from "@/icons";
 import { Wifi, WifiOff, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { wsClient } from "@/lib/websocket-client";
+import { wsClient } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { CreditsDialog } from "./credits-dialog";
 import { Authentication } from "./authentication";

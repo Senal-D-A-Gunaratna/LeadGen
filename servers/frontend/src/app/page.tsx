@@ -17,7 +17,7 @@ import { useLogStore } from '@/hooks/use-log-store';
 import { useActionLogStore } from '@/hooks/use-action-log-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
-import { wsClient } from '@/lib/websocket-client';
+import { wsClient } from '@/lib/api-client';
 import { syncClient } from '@/lib/sync-client';
 import { getStudentByIdAction } from '@/app/actions';
 import { shrinkStudentForList, getStudentId } from '@/lib/utils';

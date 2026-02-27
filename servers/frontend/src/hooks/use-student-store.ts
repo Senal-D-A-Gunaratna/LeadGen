@@ -16,7 +16,7 @@ import { useActionLogStore } from './use-action-log-store';
 import { useAuthStore } from './use-auth-store';
 import { produce, enableMapSet } from 'immer';
 import { devtools } from 'zustand/middleware';
-import { wsClient } from '@/lib/websocket-client';
+import { wsClient } from '@/lib/api-client';
 import { shrinkStudentForList } from '@/lib/utils';
 
 // Enable Immer MapSet plugin

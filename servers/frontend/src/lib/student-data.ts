@@ -77,7 +77,7 @@ if (typeof window !== 'undefined') {
 		// Populate static/config-backed lists once from the backend via WebSocket.
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-var-requires
-			const { wsClient } = require('@/lib/websocket-client');
+			const { wsClient } = require('@/lib/api-client');
 			wsClient.getStaticFilters().then((resp: { grades?: string[]; classes?: string[]; roles?: string[] }) => {
 				if (resp) {
 					if (resp.grades && resp.grades.length) {

@@ -30,7 +30,7 @@ import { Loader2 } from "lucide-react";
 import type { NewStudent, PrefectRole } from "@/lib/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { PREFECT_ROLES, CLASSES, GRADES } from "@/lib/student-data";
-import { wsClient } from "@/lib/websocket-client";
+import { wsClient } from "@/lib/api-client";
 import { Textarea } from "../ui/textarea";
 import { useAuthStore } from "@/hooks/use-auth-store";
 

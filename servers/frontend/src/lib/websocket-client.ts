@@ -237,4 +237,6 @@ class WebSocketClient {
   }
 }
 
-export const wsClient = new WebSocketClient();
+// Re-export wsClient from `api-client.ts` to preserve existing imports while
+// the implementation has been migrated into `api-client.ts`.
+export { wsClient } from './api-client';

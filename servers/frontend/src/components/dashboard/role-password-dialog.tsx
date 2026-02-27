@@ -27,7 +27,7 @@ import { Loader2 } from "lucide-react";
 import type { Role } from "@/hooks/use-auth-store";
 import { useLogStore } from "@/hooks/use-log-store";
 import { validatePasswordAction } from "@/app/actions";
-import { wsClient } from "@/lib/websocket-client";
+import { wsClient } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
