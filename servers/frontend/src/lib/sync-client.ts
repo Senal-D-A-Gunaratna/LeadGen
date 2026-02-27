@@ -22,13 +22,15 @@ class SyncClient {
   }
 
   start() {
+    // Start the long-poll client (no-op if already running) and bind handlers.
     try {
-      // Ensure wsClient starts connecting (no-op if already connected)
-      try { (apiClient as any).connect && (apiClient as any).connect(); } catch (err) {}
+      try { (apiClient as any).connect && (apiClient as any).connect(); } catch (err) { console.debug('apiClient.connect failed', err); }
       apiClient.on('data_changed', this.handleDataChanged);
-    } catch (e) { console.debug('sync-client.start bind data_changed failed', e); }
-    try { apiClient.on('summary_update', this.handleSummaryUpdate); } catch (e) { console.debug('sync-client.start bind summary_update failed', e); }
-    try { apiClient.on('attendance_trend', this.handleAttendanceTrend); } catch (e) { console.debug('sync-client.start bind attendance_trend failed', e); }
+      apiClient.on('summary_update', this.handleSummaryUpdate);
+      apiClient.on('attendance_trend', this.handleAttendanceTrend);
+    } catch (e) {
+      console.debug('sync-client.start bind failed', e);
+    }
   }
 
   stop() {
@@ -39,7 +41,6 @@ class SyncClient {
 
   private handleAttendanceTrend = (payload: any) => {
     try {
-      // Forward attendance_trend payload to listeners; do not treat as authoritative.
       this.emit('attendance_trend', payload);
     } catch (e) {
       console.error('sync-client.handleAttendanceTrend error', e);
@@ -47,7 +48,6 @@ class SyncClient {
   };
 
   private handleSummaryUpdate = (data: any) => {
-    // Re-emit as higher-level event and provide summaries
     this.emit('summary_update', data);
   };
 
@@ -55,14 +55,12 @@ class SyncClient {
     try {
       const type = payload?.type || null;
       const data = payload?.data || {};
-      // Emit raw data_changed for callers that want to inspect themselves
       this.emit('data_changed', payload);
 
       if (!type) return;
 
-      // Map backend event types to HTTP refreshes
+      // Full DB change: refresh all summaries
       if (type === 'attendance_db_changed') {
-        // Full attendance DB changed: refresh all summaries (HTTP/WS fallback)
         try {
           const summaries = await api.getAllStudentsSummaries();
           this.emit('all_summaries', summaries);
@@ -73,7 +71,7 @@ class SyncClient {
 
       if (type === 'attendance_updated') {
         const affectedIds: number[] = data?.affectedIds || [];
-        if (affectedIds && affectedIds.length > 0) {
+        if (Array.isArray(affectedIds) && affectedIds.length > 0) {
           for (const id of affectedIds) {
             try {
               const summary = await api.getStudentSummary(id);
@@ -87,7 +85,6 @@ class SyncClient {
       }
 
       if (type === 'student_added' || type === 'student_removed' || type === 'student_updated') {
-        // Refresh filtered students list (roster) via HTTP snapshot
         try {
           const today = (new Date()).toISOString().slice(0,10);
           const students = await api.getFilteredStudents({ date: today });
@@ -96,8 +93,7 @@ class SyncClient {
           console.debug('sync-client: getFilteredStudents failed', e);
         }
 
-        // If single student id provided, refresh their summary
-        const sid = data?.studentId || data?.studentId;
+        const sid = data?.studentId;
         if (sid) {
           try {
             const summary = await api.getStudentSummary(sid);
@@ -108,7 +104,6 @@ class SyncClient {
         }
       }
 
-      // Generic case: if payload contains affectedIds, warm per-student summary cache
       if (data?.affectedIds && Array.isArray(data.affectedIds)) {
         for (const id of data.affectedIds) {
           try {
