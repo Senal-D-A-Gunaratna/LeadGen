@@ -180,8 +180,13 @@ class WebSocketClient {
 
   async appendActionLog(timestamp: string, action: string) {
     const r = await fetch('/api/append-action-log', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timestamp, action }) });
-    if (!r.ok) throw new Error('Append action log failed');
-    return await r.json();
+    let body: any = null
+    try { body = await r.json(); } catch (e) { /* ignore */ }
+    if (!r.ok) {
+      const msg = (body && (body.error || body.message)) || `HTTP ${r.status}`;
+      throw new Error(msg || 'Append action log failed');
+    }
+    return body || { success: true };
   }
 
   async clearActionLogs(role: string) {
