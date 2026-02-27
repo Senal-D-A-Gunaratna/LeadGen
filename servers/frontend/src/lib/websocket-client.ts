@@ -38,6 +38,10 @@ class WebSocketClient {
     return null;
   }
 
+  isConnected(): boolean {
+    return this.connected;
+  }
+
   on(event: string, cb: EventCallback) {
     if (!this.listeners.has(event)) this.listeners.set(event, new Set());
     this.listeners.get(event)!.add(cb);
@@ -161,6 +165,54 @@ class WebSocketClient {
 
   async listActionLogs() {
     return [] as any[];
+  }
+
+  async getActionLogs() {
+    try {
+      const r = await fetch('/api/action-logs', { credentials: 'same-origin' });
+      if (!r.ok) return [];
+      const body = await r.json();
+      return body.logs || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async appendActionLog(timestamp: string, action: string) {
+    const r = await fetch('/api/append-action-log', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timestamp, action }) });
+    if (!r.ok) throw new Error('Append action log failed');
+    return await r.json();
+  }
+
+  async clearActionLogs(role: string) {
+    const r = await fetch('/api/clear-action-logs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
+    if (!r.ok) throw new Error('Clear action logs failed');
+    return await r.json();
+  }
+
+  async getAuthLogs() {
+    try {
+      const r = await fetch('/api/auth-logs', { credentials: 'same-origin' });
+      if (!r.ok) return [];
+      const body = await r.json();
+      return body.logs || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async getAllStudentsSummaries() {
+    try {
+      const r = await fetch('/api/students', { credentials: 'same-origin' });
+      if (!r.ok) return [];
+      const body = await r.json();
+      // Backend returns { students: [...] }
+      const students = body.students || [];
+      // Map to minimal summaries structure expected by callers.
+      return students.map((s: any) => ({ studentId: s.student_id, name: s.name, grade: s.grade, className: s.className, summary: s.summary || {} }));
+    } catch (e) {
+      return [];
+    }
   }
 
   async authenticate(role: string, password: string) {
