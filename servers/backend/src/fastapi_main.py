@@ -369,6 +369,234 @@ async def api_get_student_summary(student_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@fastapi_app.post('/api/add-student')
+async def api_add_student(request: Request):
+    """Add a student via HTTP (requires bearer token).
+
+    Body: same shape as frontend `addStudent` payload.
+    """
+    try:
+        auth = request.headers.get('authorization') or request.headers.get('Authorization')
+        token = None
+        if auth and auth.lower().startswith('bearer '):
+            token = auth.split(' ', 1)[1]
+        role = flask_app.validate_http_token(token) if token else None
+        if not role:
+            return JSONResponse({'success': False, 'message': 'Not authenticated'}, status_code=401)
+        data = await request.json()
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Invalid JSON'}, status_code=400)
+
+    # Validate minimal fields
+    if not data or not data.get('name'):
+        return JSONResponse({'success': False, 'message': 'Missing student data'}, status_code=400)
+
+    try:
+        conn_students = get_db_connection('students')
+        cursor_students = conn_students.cursor()
+        cursor_students.execute('SELECT MAX(student_id) FROM students')
+        max_id = cursor_students.fetchone()[0] or 0
+        next_id = max_id + 1
+
+        fingerprints = data.get('fingerprints', ['', '', '', ''])
+
+        cursor_students.execute('''
+            INSERT INTO students (student_id, name, grade, className, role, email, phone,
+                                whatsapp_no, fingerprint1, fingerprint2, fingerprint3, fingerprint4,
+                                specialRoles, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            next_id,
+            data.get('name'),
+            data.get('grade'),
+            data.get('className'),
+            data.get('role'),
+            (data.get('contact') or {}).get('email'),
+            (data.get('contact') or {}).get('phone'),
+            (data.get('contact') or {}).get('whatsapp') or (data.get('contact') or {}).get('whatsapp_no') or '',
+            fingerprints[0] if len(fingerprints) > 0 else '',
+            fingerprints[1] if len(fingerprints) > 1 else '',
+            fingerprints[2] if len(fingerprints) > 2 else '',
+            fingerprints[3] if len(fingerprints) > 3 else '',
+            data.get('specialRoles', ''),
+            data.get('notes', '')
+        ))
+
+        for position, fp in enumerate(fingerprints, start=1):
+            if fp:
+                cursor_students.execute('''
+                    INSERT OR IGNORE INTO student_fingerprints_id (student_id, fingerprint, position)
+                    VALUES (?, ?, ?)
+                ''', (next_id, fp, position))
+
+        conn_students.commit()
+        conn_students.close()
+
+        student = flask_app.get_student_by_id(next_id)
+        try:
+            flask_app.broadcast_data_change('student_added', {'studentId': next_id})
+            flask_app.broadcast_summary_update([next_id])
+        except Exception:
+            pass
+        return JSONResponse({'success': True, 'student': student})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+
+
+@fastapi_app.post('/api/remove-student')
+async def api_remove_student(request: Request):
+    try:
+        auth = request.headers.get('authorization') or request.headers.get('Authorization')
+        token = None
+        if auth and auth.lower().startswith('bearer '):
+            token = auth.split(' ', 1)[1]
+        role = flask_app.validate_http_token(token) if token else None
+        if not role:
+            return JSONResponse({'success': False, 'message': 'Not authenticated'}, status_code=401)
+        data = await request.json()
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Invalid JSON'}, status_code=400)
+
+    student_id = data.get('studentId')
+    if not student_id:
+        return JSONResponse({'success': False, 'message': 'Missing studentId'}, status_code=400)
+
+    try:
+        conn_students = get_db_connection('students')
+        cursor_students = conn_students.cursor()
+        cursor_students.execute('DELETE FROM students WHERE student_id = ?', (student_id,))
+        conn_students.commit()
+        conn_students.close()
+
+        conn_attendance = get_db_connection('attendance')
+        cursor_attendance = conn_attendance.cursor()
+        cursor_attendance.execute('DELETE FROM attendance_records WHERE student_id = ?', (student_id,))
+        conn_attendance.commit()
+        conn_attendance.close()
+
+        try:
+            flask_app.broadcast_data_change('student_removed', {'studentId': student_id})
+            flask_app.broadcast_summary_update()
+        except Exception:
+            pass
+        return JSONResponse({'success': True})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+
+
+@fastapi_app.post('/api/update-student')
+async def api_update_student(request: Request):
+    try:
+        auth = request.headers.get('authorization') or request.headers.get('Authorization')
+        token = None
+        if auth and auth.lower().startswith('bearer '):
+            token = auth.split(' ', 1)[1]
+        role = flask_app.validate_http_token(token) if token else None
+        if not role:
+            return JSONResponse({'success': False, 'message': 'Not authenticated'}, status_code=401)
+        data = await request.json()
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Invalid JSON'}, status_code=400)
+
+    student_id = data.get('studentId')
+    update_data = data.get('data')
+    if not student_id or not update_data:
+        return JSONResponse({'success': False, 'message': 'Missing studentId or data'}, status_code=400)
+
+    try:
+        conn_students = get_db_connection('students')
+        cursor_students = conn_students.cursor()
+        cursor_students.execute('SELECT * FROM students WHERE student_id = ?', (student_id,))
+        existing = cursor_students.fetchone()
+        if not existing:
+            conn_students.close()
+            return JSONResponse({'success': False, 'message': 'Student not found'}, status_code=404)
+
+        existing_dict = dict(existing)
+
+        name = update_data.get('name', existing_dict['name'])
+        grade = update_data.get('grade', existing_dict['grade'])
+        className = update_data.get('className', existing_dict['className'])
+        role_val = update_data.get('role', existing_dict['role'])
+        email = update_data.get('contact', {}).get('email', existing_dict['email'])
+        phone = update_data.get('contact', {}).get('phone', existing_dict['phone'])
+        whatsapp_no = update_data.get('contact', {}).get('whatsapp') or update_data.get('contact', {}).get('whatsapp_no') or existing_dict.get('whatsapp_no', '')
+        specialRoles = update_data.get('specialRoles', existing_dict.get('specialRoles', ''))
+        notes = update_data.get('notes', existing_dict.get('notes', ''))
+        batch = update_data.get('bach') if update_data.get('bach') is not None else update_data.get('batch', existing_dict.get('batch', ''))
+
+        fingerprints = update_data.get('fingerprints')
+        if fingerprints is None:
+            cursor_students.execute('''
+                SELECT fingerprint, position FROM student_fingerprints_id
+                WHERE student_id = ?
+                ORDER BY position
+            ''', (student_id,))
+            fp_rows = cursor_students.fetchall()
+            if fp_rows:
+                fingerprints = [''] * 4
+                for fp in fp_rows:
+                    pos = fp['position']
+                    if 1 <= pos <= 4:
+                        fingerprints[pos - 1] = fp['fingerprint']
+            else:
+                fingerprints = [
+                    existing_dict['fingerprint1'],
+                    existing_dict['fingerprint2'],
+                    existing_dict['fingerprint3'],
+                    existing_dict['fingerprint4']
+                ]
+
+        if 'role' in update_data and update_data['role'] is None:
+            role_val = None
+
+        cursor_students.execute('''
+            UPDATE students
+            SET name = ?, grade = ?, className = ?, role = ?, email = ?, phone = ?,
+                whatsapp_no = ?, fingerprint1 = ?, fingerprint2 = ?, fingerprint3 = ?, fingerprint4 = ?,
+                specialRoles = ?, notes = ?, batch = ?, updated_at = ?
+            WHERE student_id = ?
+        ''', (
+            name, grade, className, role_val, email, phone,
+            whatsapp_no,
+            fingerprints[0] if len(fingerprints) > 0 else '',
+            fingerprints[1] if len(fingerprints) > 1 else '',
+            fingerprints[2] if len(fingerprints) > 2 else '',
+            fingerprints[3] if len(fingerprints) > 3 else '',
+            specialRoles, notes, batch, datetime.now().isoformat(),
+            student_id
+        ))
+
+        cursor_students.execute('DELETE FROM student_fingerprints_id WHERE student_id = ?', (student_id,))
+        for position, fp in enumerate(fingerprints, start=1):
+            if fp:
+                cursor_students.execute('''
+                    INSERT OR IGNORE INTO student_fingerprints_id (student_id, fingerprint, position)
+                    VALUES (?, ?, ?)
+                ''', (student_id, fp, position))
+
+        conn_students.commit()
+        conn_students.close()
+
+        student = flask_app.get_student_by_id(student_id)
+        try:
+            if isinstance(student, dict):
+                student['bach'] = student.get('batch') or student.get('bach')
+        except Exception:
+            pass
+        try:
+            flask_app.broadcast_data_change('student_updated', {'studentId': student_id})
+            flask_app.broadcast_summary_update([student_id])
+        except Exception:
+            pass
+        return JSONResponse({'success': True, 'student': student})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+
+
 # ------------------ Backups & export endpoints (migrated/adapted) ------------------
 
 def _get_forwarded_ip(request: Request) -> str:
