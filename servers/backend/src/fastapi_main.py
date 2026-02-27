@@ -1379,7 +1379,8 @@ async def api_get_action_logs(limit: Optional[int] = Query(500)):
     try:
         conn_logs = get_db_connection('logs')
         cur = conn_logs.cursor()
-        cur.execute('SELECT id, timestamp, action FROM action_logs ORDER BY id DESC LIMIT ?', (int(limit),))
+        limit_val = limit if limit is not None else 500
+        cur.execute('SELECT id, timestamp, action FROM action_logs ORDER BY id DESC LIMIT ?', (limit_val,))
         rows = cur.fetchall()
         try:
             cur.connection.close()
@@ -1418,7 +1419,8 @@ async def api_get_auth_logs(limit: Optional[int] = Query(500)):
     try:
         conn_logs = get_db_connection('logs')
         cur = conn_logs.cursor()
-        cur.execute('SELECT id, timestamp, message FROM auth_logs ORDER BY id DESC LIMIT ?', (int(limit),))
+        limit_val = limit if limit is not None else 500
+        cur.execute('SELECT id, timestamp, message FROM auth_logs ORDER BY id DESC LIMIT ?', (limit_val,))
         rows = cur.fetchall()
         try:
             cur.connection.close()
