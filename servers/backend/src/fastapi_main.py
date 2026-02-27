@@ -767,6 +767,29 @@ async def restore_backup(request: Request):
     return JSONResponse({'success': True})
 
 
+@fastapi_app.get('/api/list-backups')
+async def list_backups(request: Request):
+    """Return available backup filenames for students and attendance."""
+    try:
+        backups_root = Path(__file__).resolve().parents[1] / 'backups'
+        students_dir = backups_root / 'students'
+        attendance_dir = backups_root / 'attendance'
+
+        students_dir.mkdir(parents=True, exist_ok=True)
+        attendance_dir.mkdir(parents=True, exist_ok=True)
+
+        def _list():
+            student_backups = sorted([p.name for p in students_dir.glob('*.db')], reverse=True)
+            attendance_backups = sorted([p.name for p in attendance_dir.glob('*.db')], reverse=True)
+            return student_backups, attendance_backups
+
+        student_backups, attendance_backups = await asyncio.to_thread(_list)
+        return JSONResponse({'success': True, 'students': student_backups, 'attendance': attendance_backups})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'error': str(e)}, status_code=500)
+
+
 @fastapi_app.get('/api/download-detailed-attendance-history-csv')
 async def download_detailed_attendance_history_csv():
     students = flask_app.get_all_students_with_history()

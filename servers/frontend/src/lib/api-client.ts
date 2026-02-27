@@ -364,11 +364,15 @@ export async function createBackup(dataType: 'students' | 'attendance', timestam
 }
 
 export async function listBackups() {
-  return wsClient.listBackups();
+  const result = await fetchAPI('/api/list-backups');
+  return { students: result.students || [], attendance: result.attendance || [] };
 }
 
 export async function restoreBackup(dataType: 'students' | 'attendance', filename: string) {
-  return wsClient.restoreBackup(dataType, filename);
+  return fetchAPI('/api/restore-backup', {
+    method: 'POST',
+    body: JSON.stringify({ dataType, filename }),
+  });
 }
 
 export async function downloadBackup(dataType: 'students' | 'attendance', filename: string, authorizerRole?: string, authorizerPassword?: string) {
