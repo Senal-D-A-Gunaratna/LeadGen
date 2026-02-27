@@ -96,6 +96,82 @@ async def api_static_filters():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@fastapi_app.post('/api/save-attendance')
+async def api_save_attendance(request: Request):
+    """Save attendance records (mirror of Flask `/api/save-attendance`).
+
+    Expects JSON: { students: [ { student_id, attendanceHistory: [ { date, status, checkInTime? } ] } ] }
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({'success': False, 'message': 'Invalid JSON payload'}, status_code=400)
+
+    students = payload.get('students') if isinstance(payload, dict) else None
+    if students is None:
+        return JSONResponse({'success': False, 'message': 'Missing students array in payload'}, status_code=400)
+
+    inserts = []
+    affected_ids = []
+    try:
+        from datetime import timezone
+        for student in students:
+            sid = student.get('student_id') or student.get('id') or student.get('studentId')
+            if sid is None:
+                continue
+            for record in student.get('attendanceHistory', []):
+                date_str = record.get('date')
+                if not date_str:
+                    return JSONResponse({'success': False, 'message': f'Invalid or missing date for student {sid}'}, status_code=400)
+                try:
+                    parsed_date = date.fromisoformat(date_str)
+                except Exception:
+                    return JSONResponse({'success': False, 'message': f'Invalid date format for student {sid}: {date_str}'}, status_code=400)
+                # Reject weekend dates
+                if parsed_date.weekday() >= 5:
+                    return JSONResponse({'success': False, 'message': 'Weekend attendance cannot be marked. Please select a weekday (Monday-Friday).'} , status_code=400)
+
+                status_val = (record.get('status') or '').strip()
+                if status_val.lower() == 'absent':
+                    check_in_time = None
+                else:
+                    supplied = record.get('checkInTime') or record.get('check_in_time')
+                    check_in_time = supplied if supplied else datetime.now(timezone.utc).isoformat()
+
+                inserts.append((sid, parsed_date.isoformat(), record.get('status'), datetime.now(timezone.utc).isoformat(), check_in_time))
+            if sid not in affected_ids:
+                affected_ids.append(sid)
+
+        if not inserts:
+            return JSONResponse({'success': False, 'message': 'No attendance records to save.'}, status_code=400)
+
+        conn_attendance = get_db_connection('attendance')
+        cursor_attendance = conn_attendance.cursor()
+        for ins in inserts:
+            cursor_attendance.execute('''
+                INSERT OR REPLACE INTO attendance_records (student_id, date, status, updated_at, check_in_time)
+                VALUES (?, ?, ?, ?, ?)
+            ''', ins)
+        conn_attendance.commit()
+        conn_attendance.close()
+
+        try:
+            # attempt to reuse Flask's recalculation if available
+            try:
+                flask_app.recalculate_school_days()
+            except Exception:
+                pass
+            flask_app.broadcast_data_change('attendance_updated', {'affectedIds': affected_ids})
+            flask_app.broadcast_summary_update(affected_ids)
+        except Exception:
+            pass
+
+        return JSONResponse({'success': True})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+
+
 @fastapi_app.post('/api/scan')
 async def api_scan(request: Request):
     """Scan fingerprint (HTTP wrapper for scanner devices).
