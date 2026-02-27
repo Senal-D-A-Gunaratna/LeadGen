@@ -164,7 +164,7 @@ class WebSocketClient {
   }
 
   async listActionLogs() {
-    return [] as any[];
+    return this.getActionLogs();
   }
 
   async getActionLogs() {
