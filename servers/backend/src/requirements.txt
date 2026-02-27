@@ -1,9 +1,6 @@
 Flask
 Flask-Cors
-Flask-SocketIO
 reportlab
 uvicorn
 asgiref
 fastapi
-eventlet
-gevent
