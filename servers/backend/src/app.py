@@ -1366,11 +1366,7 @@ def handle_connect(*args, **kwargs):
     except Exception:
         pass
 
-    # Emit current connection counts to all clients
-    emit_maybe_async('connection_count', {
-        'total': len(connected_sids),
-        'authenticated': len(authenticated_sessions)
-    }, namespace='/')
+    # connection_count WebSocket emit removed; frontend now polls `/api/server/connections`
 
 
 @socketio.on('disconnect')
@@ -1409,10 +1405,7 @@ def handle_disconnect(*args, **kwargs):
             print(f'Client disconnected: {sid}')
         except Exception:
             pass
-        emit_maybe_async('connection_count', {
-            'total': len(connected_sids),
-            'authenticated': len(authenticated_sessions)
-        }, namespace='/')
+        # connection_count WebSocket emit removed; frontend now polls `/api/server/connections`
     except Exception:
         pass
 

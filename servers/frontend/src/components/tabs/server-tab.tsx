@@ -9,7 +9,7 @@ import { Server, Activity, Database, Wifi } from "lucide-react";
 import { ActionLog } from "../dashboard/action-log";
 import { AuthLog } from "../dashboard/auth-log";
 import { BackupManagement } from "../dashboard/backup-management";
-import { wsClient } from "@/lib/websocket-client";
+// Use HTTP polling for server connection counts instead of WebSocket events
 
 export function ServerTab() {
   const { toast } = useToast();
@@ -28,14 +28,25 @@ export function ServerTab() {
   };
 
   useEffect(() => {
-    // WebSocket connection is handled centrally in `servers/frontend/src/app/page.tsx`
-    const handler = (data: { total: number; authenticated: number }) => {
-      setTotalConnections(data.total ?? 0);
-      setAuthenticatedConnections(data.authenticated ?? 0);
+    let mounted = true;
+    const fetchCounts = async () => {
+      try {
+        const resp = await fetch('/api/server/connections');
+        const data = await resp.json();
+        if (!mounted) return;
+        if (data && data.success) {
+          setTotalConnections(data.total ?? 0);
+          setAuthenticatedConnections(data.authenticated ?? 0);
+        }
+      } catch (e) {
+        // ignore network errors; keep existing state
+      }
     };
-    wsClient.on('connection_count', handler);
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 5000);
     return () => {
-      wsClient.off('connection_count', handler);
+      mounted = false;
+      clearInterval(interval);
     };
   }, []);
 

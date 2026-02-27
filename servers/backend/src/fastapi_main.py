@@ -41,6 +41,30 @@ async def health():
     return {"status": "ok"}
 
 
+@fastapi_app.get('/api/server/connections')
+async def api_server_connections():
+    """Return current connection counts (total and authenticated).
+
+    Reads the in-memory tracking structures from the Flask app module so
+    the frontend can poll over HTTP instead of relying on WebSocket events.
+    """
+    try:
+        total = 0
+        authenticated = 0
+        try:
+            total = len(flask_app.connected_sids)
+        except Exception:
+            total = 0
+        try:
+            authenticated = len(getattr(flask_app, 'authenticated_sessions', {}))
+        except Exception:
+            authenticated = 0
+        return JSONResponse({'success': True, 'total': total, 'authenticated': authenticated})
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @fastapi_app.post('/api/auth/login')
 async def api_auth_login(request: Request):
     """Authenticate using role+password and return a server-side session token."""
