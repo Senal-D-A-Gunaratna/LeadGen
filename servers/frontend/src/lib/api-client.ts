@@ -66,15 +66,16 @@ class WebSocketClient {
   private async startPolling() {
     while (this.polling) {
       try {
-        this.pollController = new AbortController();
-        const signal = this.pollController.signal;
-        const resp = await fetch(`/api/events/poll?since=${this.lastId}&timeout=25`, { credentials: 'same-origin', signal });
-        if (!resp.ok) {
-          await new Promise(r => setTimeout(r, 1000));
-          continue;
-        }
-        const body = await resp.json();
-        if (body && body.success && Array.isArray(body.events)) {
+            this.pollController = new AbortController();
+            const signal = this.pollController.signal;
+            let body: any = null;
+            try {
+              body = await fetchAPI(`/api/events/poll?since=${this.lastId}&timeout=25`, { signal });
+            } catch (e) {
+              await new Promise(r => setTimeout(r, 1000));
+              continue;
+            }
+            if (body && body.success && Array.isArray(body.events)) {
           for (const ev of body.events) {
             try {
               this.lastId = Math.max(this.lastId, ev.id || 0);
@@ -110,59 +111,42 @@ class WebSocketClient {
   // --- High-level operations implemented over HTTP ---
 
   async getStaticFilters(): Promise<any> {
-    const r = await fetch('/api/static-filters', { credentials: 'same-origin' });
-    if (!r.ok) throw new Error('Failed to fetch static filters');
-    return await r.json();
+    const res = await fetchAPI('/api/static-filters');
+    return res;
   }
 
   async scanStudent(fingerprint: string, scannerToken?: string) {
     const body: any = { fingerprint };
     if (scannerToken) body.scanner_token = scannerToken;
-    const r = await fetch('/api/scan', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!r.ok) throw new Error('Scan request failed');
-    return await r.json();
+    return await fetchAPI('/api/scan', { method: 'POST', body: JSON.stringify(body) });
   }
 
   async saveAttendance(students: any[]) {
-    const r = await fetch('/api/save-attendance', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ students }) });
-    if (!r.ok) throw new Error('Save attendance failed');
-    return await r.json();
+    return await fetchAPI('/api/save-attendance', { method: 'POST', body: JSON.stringify({ students }) });
   }
 
   async addStudent(studentData: any) {
-    const r = await fetch('/api/add-student', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(studentData) });
-    if (!r.ok) throw new Error('Add student failed');
-    return await r.json();
+    return await fetchAPI('/api/add-student', { method: 'POST', body: JSON.stringify(studentData) });
   }
 
   async removeStudent(studentId: number) {
-    const r = await fetch('/api/remove-student', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId }) });
-    if (!r.ok) throw new Error('Remove student failed');
-    return await r.json();
+    return await fetchAPI('/api/remove-student', { method: 'POST', body: JSON.stringify({ studentId }) });
   }
 
   async updateStudent(studentId: number, data: any) {
-    const r = await fetch('/api/update-student', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ studentId, data }) });
-    if (!r.ok) throw new Error('Update student failed');
-    return await r.json();
+    return await fetchAPI('/api/update-student', { method: 'POST', body: JSON.stringify({ studentId, data }) });
   }
 
   async updatePasswords(passwords: Record<string, string>, authorizerRole: string, authorizerPassword: string) {
-    const r = await fetch('/api/update-passwords', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ passwords, authorizerRole, authorizerPassword }) });
-    if (!r.ok) throw new Error('Update passwords failed');
-    return await r.json();
+    return await fetchAPI('/api/update-passwords', { method: 'POST', body: JSON.stringify({ passwords, authorizerRole, authorizerPassword }) });
   }
 
   async listBackups() {
-    const r = await fetch('/api/list-backups', { credentials: 'same-origin' });
-    if (!r.ok) throw new Error('List backups failed');
-    return await r.json();
+    return await fetchAPI('/api/list-backups');
   }
 
   async restoreBackup(dataType: string, filename: string) {
-    const r = await fetch('/api/restore-backup', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dataType, filename }) });
-    if (!r.ok) throw new Error('Restore backup failed');
-    return await r.json();
+    return await fetchAPI('/api/restore-backup', { method: 'POST', body: JSON.stringify({ dataType, filename }) });
   }
 
   async listActionLogs() {
@@ -171,9 +155,7 @@ class WebSocketClient {
 
   async getActionLogs() {
     try {
-      const r = await fetch('/api/action-logs', { credentials: 'same-origin' });
-      if (!r.ok) return [];
-      const body = await r.json();
+      const body = await fetchAPI('/api/action-logs');
       return body.logs || [];
     } catch (e) {
       return [];
@@ -181,27 +163,17 @@ class WebSocketClient {
   }
 
   async appendActionLog(timestamp: string, action: string) {
-    const r = await fetch('/api/append-action-log', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ timestamp, action }) });
-    let body: any = null
-    try { body = await r.json(); } catch (e) { /* ignore */ }
-    if (!r.ok) {
-      const msg = (body && (body.error || body.message)) || `HTTP ${r.status}`;
-      throw new Error(msg || 'Append action log failed');
-    }
+    const body = await fetchAPI('/api/append-action-log', { method: 'POST', body: JSON.stringify({ timestamp, action }) });
     return body || { success: true };
   }
 
   async clearActionLogs(role: string) {
-    const r = await fetch('/api/clear-action-logs', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
-    if (!r.ok) throw new Error('Clear action logs failed');
-    return await r.json();
+    return await fetchAPI('/api/clear-action-logs', { method: 'POST', body: JSON.stringify({ role }) });
   }
 
   async getAuthLogs() {
     try {
-      const r = await fetch('/api/auth-logs', { credentials: 'same-origin' });
-      if (!r.ok) return [];
-      const body = await r.json();
+      const body = await fetchAPI('/api/auth-logs');
       return body.logs || [];
     } catch (e) {
       return [];
@@ -210,9 +182,7 @@ class WebSocketClient {
 
   async getAllStudentsSummaries() {
     try {
-      const r = await fetch('/api/students', { credentials: 'same-origin' });
-      if (!r.ok) return [];
-      const body = await r.json();
+      const body = await fetchAPI('/api/students');
       // Backend returns { students: [...] }
       const students = body.students || [];
       // Map to minimal summaries structure expected by callers.
@@ -223,15 +193,13 @@ class WebSocketClient {
   }
 
   async authenticate(role: string, password: string) {
-    const r = await fetch('/api/auth/login', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, password }) });
-    if (!r.ok) return { success: false };
-    return await r.json();
+    return await fetchAPI('/api/auth/login', { method: 'POST', body: JSON.stringify({ role, password }) });
   }
 
   async getCurrentTime(): Promise<string> {
     try {
-      const r = await fetch('/api/health', { credentials: 'same-origin' });
-      if (r.ok) {
+      const r = await fetchAPI('/api/health');
+      if (r) {
         return new Date().toISOString();
       }
     } catch (e) {}
