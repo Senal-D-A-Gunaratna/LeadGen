@@ -345,12 +345,9 @@ def get_student_by_id(student_id: int) -> Optional[Dict]:
     conn_attendance.close()
 
     # Build attendanceHistory aligned to authoritative school_days
-    try:
-        from .database import get_school_days
-        school_days = get_school_days()
-    except Exception:
-        # Fallback: use dates from existing rows
-        school_days = sorted(list(att_map.keys()))
+    from .database import get_school_days
+    # Use authoritative `school_days` only — do not fallback to attendance_records.
+    school_days = get_school_days()
 
     history = []
     for sd in school_days:
@@ -788,24 +785,15 @@ def api_attendance_trend():
         if start_date > end_date:
             start_date, end_date = end_date, start_date
 
-        # Build authoritative school dates for range
+        # Build authoritative school dates for range (no fallbacks)
+        cur_sd = get_db_connection('attendance').cursor()
+        cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+        sd_rows = cur_sd.fetchall()
+        school_dates = [r['date'] for r in sd_rows]
         try:
-            cur_sd = get_db_connection('attendance').cursor()
-            cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
-            sd_rows = cur_sd.fetchall()
-            school_dates = [r['date'] for r in sd_rows]
-            try:
-                cur_sd.connection.close()
-            except Exception:
-                pass
+            cur_sd.connection.close()
         except Exception:
-            # Fallback to weekdays in range
-            school_dates = []
-            day = start_date
-            while day <= end_date:
-                if day.weekday() < 5:
-                    school_dates.append(day.isoformat())
-                day = day + timedelta(days=1)
+            pass
 
         # Load all students and filter by client-provided filters
         all_students = get_all_students_with_history()
@@ -902,19 +890,18 @@ def api_attendance_aggregate():
             if start_date > end_date:
                 start_date, end_date = end_date, start_date
 
-            # Build school_dates (use school_days table if available)
+            # Build school_dates from authoritative `school_days` only.
+            cur_sd = get_db_connection('attendance').cursor()
+            cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+            sd_rows = cur_sd.fetchall()
+            school_dates = [r['date'] for r in sd_rows]
             try:
-                cur_sd = get_db_connection('attendance').cursor()
-                cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
-                sd_rows = cur_sd.fetchall()
-                school_dates = [r['date'] for r in sd_rows]
+                cur_sd.connection.close()
             except Exception:
-                school_dates = []
-                d = start_date
-                while d <= end_date:
-                    if d.weekday() < 5:
-                        school_dates.append(d.isoformat())
-                    d = d + timedelta(days=1)
+                pass
+            # If there are no school_days in the range, return empty series — no fallback to generated weekdays.
+            if not school_dates:
+                return [], None
 
             # Load all students and apply filters
             all_students = get_all_students_with_history()
@@ -1005,24 +992,15 @@ def api_attendance_aggregate():
         except Exception:
             pass
 
-        # Build authoritative school dates for range
+        # Build authoritative school dates for range (no fallbacks).
+        cur_sd = get_db_connection('attendance').cursor()
+        cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+        sd_rows = cur_sd.fetchall()
+        school_dates = [r['date'] for r in sd_rows]
         try:
-            cur_sd = get_db_connection('attendance').cursor()
-            cur_sd.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
-            sd_rows = cur_sd.fetchall()
-            school_dates = [r['date'] for r in sd_rows]
-            try:
-                cur_sd.connection.close()
-            except Exception:
-                pass
+            cur_sd.connection.close()
         except Exception:
-            # Fallback to weekdays in range
-            school_dates = []
-            day = start_date
-            while day <= end_date:
-                if day.weekday() < 5:
-                    school_dates.append(day.isoformat())
-                day = day + timedelta(days=1)
+            pass
 
         total_school_days = len(school_dates)
 
@@ -1783,21 +1761,11 @@ def http_get_student_attendance_month(student_id):
                     except Exception:
                         pass
 
-        # Build canonical attendanceHistory: iterate canonical school_days and mark absent when no on_time/late
-        try:
-            cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
-            sd_rows = cur.fetchall()
-            school_days = [r['date'] for r in sd_rows]
-        except Exception:
-            # Fallback: compute weekdays in the month
-            from calendar import monthrange as _mr
-            ld = _mr(start_date.year, start_date.month)[1]
-            school_days = []
-            for day_num in range(1, ld + 1):
-                d = date(start_date.year, start_date.month, day_num)
-                if d.weekday() >= 5:
-                    continue
-                school_days.append(d.isoformat())
+        # Build canonical attendanceHistory using authoritative `school_days` only.
+        cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+        sd_rows = cur.fetchall()
+        school_days = [r['date'] for r in sd_rows]
+        # Do NOT fallback to generated weekdays; empty `school_days` yields empty history for the month.
 
         attendance_history = []
         for d in school_days:
@@ -1898,21 +1866,11 @@ def http_get_student_attendance_trend(student_id):
                 'arrival_minutes': arrival_minutes,
             }
 
-        # Build list of school dates using school_days table if present
-        try:
-            cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
-            sd_rows = cur.fetchall()
-            school_dates = [r['date'] for r in sd_rows]
-        except Exception:
-            # Fallback to weekdays
-            from calendar import monthrange as _mr
-            ld = _mr(year, mon)[1]
-            school_dates = []
-            for day in range(1, ld + 1):
-                d = date(year, mon, day)
-                if d.weekday() >= 5:
-                    continue
-                school_dates.append(d.isoformat())
+        # Build list of school dates using authoritative `school_days` only.
+        cur.execute('SELECT date FROM school_days WHERE date BETWEEN ? AND ? ORDER BY date ASC', (start_date.isoformat(), end_date.isoformat()))
+        sd_rows = cur.fetchall()
+        school_dates = [r['date'] for r in sd_rows]
+        # If there are no school_days in the month, `school_dates` will be empty.
 
         points = []
         for iso_date in school_dates:
