@@ -157,8 +157,8 @@ export default function Home() {
 
     return () => {
       clearInterval(dayCheckIntervalId);
-      apiClient.off('data_changed', onDataChanged);
-      apiClient.off('realtime_patch', onRealtimePatch);
+      try { syncClient.off(syncListener); } catch (e) {}
+      try { apiClient.off('realtime_patch', onRealtimePatch); } catch (e) {}
       // cleanup note: visibility/beforeunload handlers removed earlier
       // Do not disconnect the global WebSocket here — keep connections open per-tab as requested
     };
