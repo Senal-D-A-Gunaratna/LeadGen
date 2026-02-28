@@ -219,7 +219,7 @@ async function getBackendUrlFromServer(): Promise<string> {
     const proto = window.location.protocol || 'http:';
     const hostname = window.location.hostname || 'localhost';
 
-    // Probe possible backend locations in order: same-origin, :5000
+    // Probe possible backend locations in order: same-origin as backend server IP :5000
     const candidates = [
       '',
       `${proto}//${hostname}:5000`,
