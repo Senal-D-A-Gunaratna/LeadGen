@@ -90,7 +90,7 @@
   /* Generic glass wrapper: keep translucent background but NO blur
      Month picker uses its own stronger blur via `.month-picker-glass`. */
   .glassmorphic {
-    @apply bg-card/40 backdrop-blur-lg border border-border;
+    @apply bg-card/30 backdrop-blur-lg border border-border;
   }
 
   /* Month picker specific glass: stronger blur + slightly darker background */
