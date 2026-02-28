@@ -195,7 +195,7 @@ export default function Home() {
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
             <TabsTrigger value="attendance-history">Attendance History</TabsTrigger>
             {(isAdmin || isDev) && <TabsTrigger value="manual-attendance">Manual Attendance Marking</TabsTrigger>}
-            {(isAdmin || isModerator || isDev) && <TabsTrigger value="manage-prefects">Manage Students</TabsTrigger>}
+            {(isAdmin || isModerator || isDev) && <TabsTrigger value="manage-prefects">Manage Prefects</TabsTrigger>}
             {isAdmin && <TabsTrigger value="admin-settings">Admin</TabsTrigger>}
             {(isAdmin || isDev) && <TabsTrigger value="server">Server</TabsTrigger>}
             {isDev && <TabsTrigger value="dev-tools">Dev Tools</TabsTrigger>}
