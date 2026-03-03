@@ -210,44 +210,16 @@ class WebSocketClient {
 export const wsClient = new WebSocketClient();
 export const apiClient = wsClient;
 
-// Get backend URL from Node.js server API endpoint
+// Previously we attempted to sniff the backend URL by probing the
+// network.  Now that the Next.js development server rewrites `/api/*`
+// requests automatically to the backend, we can simplify the logic to
+// always use a relative path.  This avoids cross‑origin fetches and makes
+// the `allowedDevOrigins` configuration unnecessary for client code.
 async function getBackendUrlFromServer(): Promise<string> {
-  if (typeof window === 'undefined') {
-    return 'http://localhost:5000';
-  }
-  try {
-    const proto = window.location.protocol || 'http:';
-    const hostname = window.location.hostname || 'localhost';
-
-    // Probe possible backend locations in order: same-origin as backend server IP :5000
-    const candidates = [
-      '',
-      `${proto}//${hostname}:5000`,
-    ];
-
-    for (const candidate of candidates) {
-      try {
-        const url = candidate ? `${candidate}/api/health` : `/api/health`;
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 1500);
-        const resp = await fetch(url, { signal: controller.signal, credentials: 'same-origin' });
-        clearTimeout(timer);
-        if (resp && resp.ok) {
-          // Return empty string for same-origin so callers use relative paths.
-          console.debug('Backend detected at', candidate || 'same-origin');
-          return candidate;
-        }
-      } catch (e) {
-        // probe failed; try next candidate
-      }
-    }
-
-    // Fallback to default host:5000 if probes failed
-    return `${window.location.protocol}//${window.location.hostname}:5000`;
-  } catch (error) {
-    console.error('Failed to derive backend URL from window.location:', error);
-    return 'http://localhost:5000';
-  }
+  // Always return empty string so callers append endpoints directly to the
+  // origin (`/api/...`).  The rewrites in `next.config.js` will forward the
+  // request to whatever backend is configured.
+  return '';
 }
 
 let BACKEND_URL: string | null = null;
