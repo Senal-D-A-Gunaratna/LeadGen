@@ -1,32 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  // `eslint` config in next.config is no longer supported by newer Next.js versions.
-  // Keep linting configuration in separate ESLint config files or run `next lint`.
-  // Set Turbopack root explicitly to avoid incorrect root inference when multiple lockfiles exist.
-  turbopack: {
-    // Turbopack expects an absolute path for `root`.
-    root: __dirname,
-  },
-  // The `experimental.allowedDevOrigins` key was not recognized by our
-  // version of Next.js (the warning appeared when starting `next dev`).
-  // In recent releases the property is now a top-level option, so we
-  // compute its value dynamically here.  We also add a rewrite rule to
-  // tunnel every `/api/*` request through to the backend so that the
-  // frontend doesn't return 404s for API paths during development.
-  
-  // `os.networkInterfaces()` lets us enumerate the machine's non-internal
-  // IPv4 addresses.  Add each one on port 5000 so that clients visiting the
-  // site via the LAN address are allowed to proxy requests back to the
-  // backend.
+  typescript: { ignoreBuildErrors: true },
+  turbopack: { root: __dirname },
+
+  // dynamically build a list of allowed dev origins from the machine's
+  // network interfaces.  this avoids hard-coding specific addresses.
   allowedDevOrigins: (() => {
-    const origins = [
-      'http://localhost:5000',
-      'http://127.0.0.1:5000',
-    ];
+    const origins: string[] = [];
     try {
       const os = require('os');
       const nets = os.networkInterfaces();
@@ -37,21 +18,18 @@ const nextConfig = {
           }
         }
       }
-    } catch (e) {
-      // if os.networkInterfaces() fails for some reason just ignore it
+    } catch {
+      // ignore failures
     }
+    // always allow localhost variants
+    origins.push('http://localhost:5000', 'http://127.0.0.1:5000');
     return origins;
   })(),
-  
+
   async rewrites() {
-    // forward all /api requests to the real backend in development and
-    // production (the backend URL can be configured via BACKEND_URL)
     const BACKEND = process.env.BACKEND_URL || 'http://localhost:5000';
     return [
-      {
-        source: '/api/:path*',
-        destination: `${BACKEND}/api/:path*`,
-      },
+      { source: '/api/:path*', destination: `${BACKEND}/api/:path*` },
     ];
   },
 };
