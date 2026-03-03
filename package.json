@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "deploy": "npm run install-frontend && npm run install-backend && npm run all",
-    "all": "npm run frontend & npm run backend",
+    "dev": "npm run frontend & npm run backend",
     "install-servers": "npm run install-frontend && npm run install-backend",
     "frontend": "cd servers/frontend && npm run dev",
-    "backend": "uvicorn servers.backend.src.fastapi_main:fastapi_app --reload --host 0.0.0.0 --port 5000",
+    "backend": "./servers/backend/src/venv/bin/uvicorn servers.backend.src.fastapi_main:fastapi_app --reload --host 0.0.0.0 --port 5000",
     "build": "cd servers/frontend && npm run build",
     "start": "cd servers/frontend && npm start",
     "lint": "cd servers/frontend && npm run lint",
@@ -19,7 +19,7 @@
     "install-all": "npm run install-frontend && npm run install-backend && npm run install-backend-dev",
     "uninstall-frontend": "cd servers/frontend && rm -rf node_modules package-lock.json",
     "uninstall-backend": "cd servers/backend/src && pip3 uninstall -r requirements.txt -y",
-    "uninstall-backend-dev":  "cd servers/backend/src && pip3 uninstall -r requirements-dev.txt -y",
+    "uninstall-backend-dev": "cd servers/backend/src && pip3 uninstall -r requirements-dev.txt -y",
     "uninstall-servers": "npm run uninstall-frontend && npm run uninstall-backend",
     "uninstall-all": "npm run uninstall-frontend && npm run uninstall-backend && npm run uninstall-backend-dev"
   }
