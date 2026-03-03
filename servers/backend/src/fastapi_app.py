@@ -13,4 +13,5 @@ fastapi_app = FastAPI()
 # Compose root ASGI app: mount FastAPI at /api, everything else to the Flask WSGI app
 # This removes Socket.IO integration and serves the Flask app via WSGI middleware.
 flask_wsgi = WSGIMiddleware(flask_module.app)
-app = Starlette(routes=[Mount("/api", app=fastapi_app), Mount("/", app=flask_wsgi)])
+# Mount Flask at root so existing `/api/...` Flask endpoints continue to work.
+app = Starlette(routes=[Mount("/_fastapi", app=fastapi_app), Mount("/", app=flask_wsgi)])
