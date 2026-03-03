@@ -27,7 +27,7 @@
 		,
 		{
 			"type": "npm",
-			"script": "all",
+			"script": "dev",
 			"path": ".",
 			"problemMatcher": [],
 			"label": "Run all",
