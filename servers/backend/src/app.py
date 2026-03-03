@@ -4,7 +4,6 @@ Handles all API endpoints and real-time updates via WebSocket.
 """
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
-import socketio as socketio_module  # type: ignore[import]
 import sqlite3
 import json
 from datetime import datetime, date, timezone
@@ -33,42 +32,36 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 # because it provides `run()` for the synchronous fallback. If it's
 # unavailable, fall back to python-socketio AsyncServer wrapped as ASGI.
 asgi_app: Any = None
-socketio: Any = None
-# Prefer Flask-SocketIO with eventlet/gevent for small-scale LAN production
-# because it's a simple, reliable option for websocket transport. If
-# neither eventlet/gevent nor Flask-SocketIO are available, fall back to
-# python-socketio AsyncServer + ASGIApp so uvicorn can be used.
-try:
-    have_eventlet = False
-    have_gevent = False
-    try:
-        import eventlet  # type: ignore
-        have_eventlet = True
-    except Exception:
-        pass
-    try:
-        import gevent  # type: ignore
-        have_gevent = True
-    except Exception:
-        pass
 
-    if have_eventlet or have_gevent:
-        from flask_socketio import SocketIO
-        async_mode: Any = 'eventlet' if have_eventlet else 'gevent'
-        socketio = SocketIO(app, async_mode=async_mode, cors_allowed_origins='*')
-        asgi_app = None
-    else:
-        # Use python-socketio AsyncServer (ASGI) for uvicorn compatibility
-        socketio = socketio_module.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
-        asgi_app = socketio_module.ASGIApp(socketio, app.wsgi_app)
-except Exception:
-    try:
-        from flask_socketio import SocketIO
-        socketio = SocketIO(app, async_mode='threading', cors_allowed_origins='*')
-        asgi_app = None
-    except Exception:
-        socketio = None
-        asgi_app = None
+# Replace Socket.IO integration with a small dummy adapter so the
+# backend can run without python-socketio or flask-socketio installed.
+# This preserves handler definitions (decorators) but makes emits
+# fall back to the HTTP/long-poll event queue used elsewhere.
+class DummySocketIO:
+    def __init__(self):
+        self._handlers = {}
+
+    def on(self, event_name):
+        def _decorator(fn):
+            # store handler for introspection if needed
+            try:
+                self._handlers.setdefault(event_name, []).append(fn)
+            except Exception:
+                pass
+            return fn
+
+        return _decorator
+
+    def emit(self, event, payload, namespace='/', to=None):
+        try:
+            # Use the existing HTTP long-poll queue so polling clients
+            # observe the same events as socket clients would.
+            _append_event(event, payload)
+        except Exception:
+            pass
+
+
+socketio = DummySocketIO()
 
 # Helper to emit events regardless of whether `socketio.emit` is sync or async.
 import inspect
@@ -2646,7 +2639,7 @@ from .api_endpoints import register_endpoints
 
 # Register additional endpoints now so Flask routes exist on startup.
 try:
-    register_endpoints(app, socketio, {
+    register_endpoints(app, {
         'get_all_students_with_history': globals().get('get_all_students_with_history'),
         'get_student_by_id': globals().get('get_student_by_id'),
         'get_attendance_summary': globals().get('get_attendance_summary'),
@@ -2877,7 +2870,7 @@ def request_recalc():
 
 
     # Register all additional endpoints with helper functions
-    register_endpoints(app, socketio, {
+    register_endpoints(app, {
         'get_all_students_with_history': get_all_students_with_history,
         'get_student_by_id': get_student_by_id,
         'get_attendance_summary': get_attendance_summary,

@@ -3,7 +3,6 @@ Additional API endpoints for backups, CSV/PDF exports, and logs.
 """
 from flask import request, jsonify, send_file
 import os
-from flask_socketio import emit
 import asyncio
 from .database import get_db_connection, DatabaseContext, create_db_file_backup
 from datetime import datetime, date
@@ -54,7 +53,7 @@ def validate_password(role: str, password: str) -> bool:
 # Import helper functions from app module
 # These will be passed in via register_endpoints function
 
-def register_endpoints(app, socketio, helpers):
+def register_endpoints(app, helpers):
     """Register all additional API endpoints.
     
     Args:
@@ -68,7 +67,10 @@ def register_endpoints(app, socketio, helpers):
     broadcast_data_change = helpers['broadcast_data_change']
     broadcast_summary_update = helpers['broadcast_summary_update']
     request_recalc = helpers.get('request_recalc')
-    emit = helpers['emit']
+    # `emit` is no longer provided via Socket.IO. Use the helper that
+    # enqueues broadcasts instead (if present) so HTTP polling clients
+    # still receive updates.
+    emit = helpers.get('emit')
     authenticated_sessions = helpers['authenticated_sessions']
     # Helper to allow alternate auth via HTTP tokens or authorizer role/password
     def _is_authorized(sid, data=None):
@@ -298,43 +300,43 @@ def register_endpoints(app, socketio, helpers):
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
-    # ==================== WEBSOCKET HANDLERS ====================
-    
-    @socketio.on('list_backups')
-    async def handle_list_backups(sid):
-        """List all available backups via WebSocket."""
-        if not _is_authorized(sid):
-            await emit('list_backups_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
-            return
+    # ==================== ADMIN / BACKUP HTTP ENDPOINTS (replacing former socket handlers) ====================
 
-        def _list():
-            backups_root = Path(__file__).resolve().parents[1] / 'backups'
-            students_dir = backups_root / 'students'
-            attendance_dir = backups_root / 'attendance'
+    @app.route('/api/list-backups', methods=['GET'])
+    def flask_list_backups():
+        try:
+            # Authorization: allow token or role/password
+            data = request.args or {}
+            if not _is_authorized(None, dict(data)):
+                return jsonify({'success': False, 'message': 'Not authenticated'}), 401
 
-            students_dir.mkdir(parents=True, exist_ok=True)
-            attendance_dir.mkdir(parents=True, exist_ok=True)
+            def _list():
+                backups_root = Path(__file__).resolve().parents[1] / 'backups'
+                students_dir = backups_root / 'students'
+                attendance_dir = backups_root / 'attendance'
 
-            student_backups = sorted([p.name for p in students_dir.glob('*.db')], reverse=True)
-            attendance_backups = sorted([p.name for p in attendance_dir.glob('*.db')], reverse=True)
-            return student_backups, attendance_backups
+                students_dir.mkdir(parents=True, exist_ok=True)
+                attendance_dir.mkdir(parents=True, exist_ok=True)
 
-        student_backups, attendance_backups = await asyncio.to_thread(_list)
-        await emit('list_backups_response', {'success': True, 'students': student_backups, 'attendance': attendance_backups}, to=sid)
+                student_backups = sorted([p.name for p in students_dir.glob('*.db')], reverse=True)
+                attendance_backups = sorted([p.name for p in attendance_dir.glob('*.db')], reverse=True)
+                return student_backups, attendance_backups
 
-    @socketio.on('restore_backup')
-    async def handle_restore_backup(sid, data):
-        """Restore a backup via WebSocket."""
-        if not _is_authorized(sid, data):
-            await emit('restore_backup_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
-            return
+            student_backups, attendance_backups = _list()
+            return jsonify({'success': True, 'students': student_backups, 'attendance': attendance_backups})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
+    @app.route('/api/restore-backup', methods=['POST'])
+    def flask_restore_backup():
+        data = request.get_json() or {}
+        if not _is_authorized(None, data):
+            return jsonify({'success': False, 'message': 'Not authenticated'}), 401
 
         data_type = data.get('dataType')
         filename = data.get('filename')
-
         if not data_type or not filename:
-            await emit('restore_backup_response', {'success': False, 'message': 'Missing dataType or filename'}, to=sid)
-            return
+            return jsonify({'success': False, 'message': 'Missing dataType or filename'}), 400
 
         backups_root = Path(__file__).resolve().parents[1] / 'backups'
 
@@ -343,8 +345,6 @@ def register_endpoints(app, socketio, helpers):
                 file_path = backups_root / 'students' / filename
                 if not file_path.exists():
                     return False, 'Backup file not found'
-
-                # Replace the main students database file with the backup
                 main_db_path = Path(__file__).resolve().parents[1] / 'database' / 'students.db'
                 import shutil
                 shutil.copy2(file_path, main_db_path)
@@ -353,47 +353,34 @@ def register_endpoints(app, socketio, helpers):
                 file_path = backups_root / 'attendance' / filename
                 if not file_path.exists():
                     return False, 'Backup file not found'
-
-                # Replace the main attendance database file with the backup
                 main_db_path = Path(__file__).resolve().parents[1] / 'database' / 'attendance.db'
                 import shutil
                 shutil.copy2(file_path, main_db_path)
                 return True, None
             return False, 'Invalid dataType'
 
-        ok, err = await asyncio.to_thread(_restore)
+        ok, err = _restore()
         if not ok:
-            await emit('restore_backup_response', {'success': False, 'message': err}, to=sid)
-            return
+            return jsonify({'success': False, 'message': err}), 400
 
-        # After replacing the attendance DB file, request the central
-        # application to perform authoritative recalculation of school_days.
         if data_type == 'attendance' and request_recalc:
             try:
-                await asyncio.to_thread(request_recalc)
+                request_recalc()
             except Exception as e:
-                await emit('restore_backup_response', {'success': False, 'message': 'Failed to recalculate school days', 'error': str(e)}, to=sid)
-                return
+                return jsonify({'success': False, 'message': 'Failed to recalculate school days', 'error': str(e)}), 500
 
-        # Broadcast that a backup was restored (recalculation already performed for attendance)
         broadcast_data_change('backup_restored')
         try:
-            broadcast_summary_update()  # Emit all summaries after restore
-        except sqlite3.OperationalError as e:
-            await emit('restore_backup_response', {'success': False, 'message': 'Failed to restore backup', 'error': str(e)}, to=sid)
-            return
-        except Exception as e:
-            await emit('restore_backup_response', {'success': False, 'message': 'Failed to restore backup', 'error': str(e)}, to=sid)
-            return
+            broadcast_summary_update()
+        except Exception:
+            pass
 
-        await emit('restore_backup_response', {'success': True}, to=sid)
+        return jsonify({'success': True})
 
-    @socketio.on('get_action_logs')
-    async def handle_get_action_logs(sid):
-        """Get action logs via WebSocket."""
-        if not _is_authorized(sid):
-            await emit('get_action_logs_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
-            return
+    @app.route('/api/action-logs', methods=['GET'])
+    def flask_get_action_logs():
+        if not _is_authorized(None):
+            return jsonify({'success': False, 'message': 'Not authenticated'}), 401
 
         def _fetch():
             conn_logs = get_db_connection('logs')
@@ -403,14 +390,15 @@ def register_endpoints(app, socketio, helpers):
             conn_logs.close()
             return logs
 
-        logs = await asyncio.to_thread(_fetch)
-        await emit('get_action_logs_response', {'success': True, 'logs': logs}, to=sid)
+        logs = _fetch()
+        return jsonify({'success': True, 'logs': logs})
 
-    @socketio.on('get_student_summary')
-    async def handle_get_student_summary(sid, data):
-        """Get attendance summary for a single student via WebSocket."""
-        # Allow unauthenticated access for student details
+    @app.route('/api/student-summary', methods=['POST'])
+    def flask_get_student_summary():
+        data = request.get_json() or {}
         student_id = data.get('studentId')
+        if not student_id:
+            return jsonify({'success': False, 'message': 'Missing studentId'}), 400
 
         def _compute(student_id):
             student = get_student_by_id(student_id)
@@ -420,17 +408,13 @@ def register_endpoints(app, socketio, helpers):
             summary = get_attendance_summary(student, students)
             return student, summary
 
-        student, summary = await asyncio.to_thread(_compute, student_id)
+        student, summary = _compute(student_id)
         if not student:
-            await emit('get_student_summary_response', {'success': False, 'message': 'Student not found'}, to=sid)
-            return
-        await emit('get_student_summary_response', {'success': True, 'studentId': student_id, 'summary': summary}, to=sid)
+            return jsonify({'success': False, 'message': 'Student not found'}), 404
+        return jsonify({'success': True, 'studentId': student_id, 'summary': summary})
 
-    @socketio.on('get_all_students_summaries')
-    async def handle_get_all_students_summaries(sid):
-        """Get attendance summaries for all students via WebSocket."""
-        # Allow unauthenticated access for dashboard stats
-
+    @app.route('/api/all-students-summaries', methods=['GET'])
+    def flask_get_all_students_summaries():
         def _compute_all():
             students = get_all_students_with_history()
             summaries = []
@@ -445,61 +429,39 @@ def register_endpoints(app, socketio, helpers):
                 })
             return summaries
 
-        summaries = await asyncio.to_thread(_compute_all)
-        await emit('get_all_students_summaries_response', {'success': True, 'summaries': summaries}, to=sid)
+        summaries = _compute_all()
+        return jsonify({'success': True, 'summaries': summaries})
 
-    @socketio.on('append_action_log')
-    async def handle_append_action_log(sid, data):
-        """Append an action log entry via WebSocket."""
-        if not _is_authorized(sid, data):
-            await emit('append_action_log_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
-            return
+    @app.route('/api/append-action-log', methods=['POST'])
+    def flask_append_action_log():
+        data = request.get_json() or {}
+        if not _is_authorized(None, data):
+            return jsonify({'success': False, 'message': 'Not authenticated'}), 401
 
         timestamp = data.get('timestamp')
         action = data.get('action')
-
-        # Validate required fields
         if not timestamp or not action:
-            await emit('append_action_log_response', {'success': False, 'message': 'Missing timestamp or action'}, to=sid)
-            return
+            return jsonify({'success': False, 'message': 'Missing timestamp or action'}), 400
 
-        def _insert():
-            try:
-                with DatabaseContext('logs') as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (timestamp, action))
-                    conn.commit()
-                    return True, None
-            except sqlite3.OperationalError as e:
-                if 'locked' in str(e).lower():
-                    time.sleep(0.1)
-                    try:
-                        with DatabaseContext('logs') as conn:
-                            cursor = conn.cursor()
-                            cursor.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (timestamp, action))
-                            conn.commit()
-                            return True, None
-                    except Exception as retry_error:
-                        return False, f'Database busy: {str(retry_error)}'
-                return False, str(e)
-            except Exception as e:
-                return False, str(e)
+        try:
+            with DatabaseContext('logs') as conn:
+                cursor = conn.cursor()
+                cursor.execute('INSERT INTO action_logs (timestamp, action) VALUES (?, ?)', (timestamp, action))
+                conn.commit()
+        except sqlite3.OperationalError as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
 
-        ok, err = await asyncio.to_thread(_insert)
-        if ok:
-            await emit('append_action_log_response', {'success': True}, to=sid)
-        else:
-            await emit('append_action_log_response', {'success': False, 'message': err}, to=sid)
+        return jsonify({'success': True})
 
-    @socketio.on('clear_action_logs')
-    async def handle_clear_action_logs(sid, data):
-        """Clear all action logs via WebSocket."""
-        if not _is_authorized(sid, data):
-            await emit('clear_action_logs_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
-            return
+    @app.route('/api/clear-action-logs', methods=['POST'])
+    def flask_clear_action_logs():
+        data = request.get_json() or {}
+        if not _is_authorized(None, data):
+            return jsonify({'success': False, 'message': 'Not authenticated'}), 401
 
         role = data.get('role') or 'unknown'
-
         def _clear():
             conn_logs = get_db_connection('logs')
             cursor_logs = conn_logs.cursor()
@@ -511,39 +473,13 @@ def register_endpoints(app, socketio, helpers):
             conn_logs.commit()
             conn_logs.close()
 
-        await asyncio.to_thread(_clear)
-        await emit('clear_action_logs_response', {'success': True}, to=sid)
+        _clear()
+        return jsonify({'success': True})
 
-    @socketio.on('get_auth_logs')
-    async def handle_get_auth_logs(*args):
-        """Get authentication logs via WebSocket.
-
-        Accept flexible signatures from different Socket.IO servers: (sid), (data), (sid, data), or no args.
-        """
-        sid = None
-        data = None
-        # Normalize args similar to ensure_ws_args
-        if len(args) == 0:
-            try:
-                sid = request.sid
-            except Exception:
-                sid = None
-        elif len(args) == 1:
-            if isinstance(args[0], dict):
-                data = args[0]
-                try:
-                    sid = request.sid
-                except Exception:
-                    sid = None
-            else:
-                sid = args[0]
-        else:
-            sid = args[0]
-            data = args[1]
-
-        if not _is_authorized(sid, data):
-            await emit('get_auth_logs_response', {'success': False, 'message': 'Not authenticated'}, to=sid)
-            return
+    @app.route('/api/auth-logs', methods=['GET'])
+    def flask_get_auth_logs():
+        if not _is_authorized(None):
+            return jsonify({'success': False, 'message': 'Not authenticated'}), 401
 
         def _fetch():
             conn_logs = get_db_connection('logs')
@@ -553,8 +489,8 @@ def register_endpoints(app, socketio, helpers):
             conn_logs.close()
             return logs
 
-        logs = await asyncio.to_thread(_fetch)
-        await emit('get_auth_logs_response', {'success': True, 'logs': logs}, to=sid)
+        logs = _fetch()
+        return jsonify({'success': True, 'logs': logs})
 
     # ==================== BACKUP ENDPOINTS ====================
     

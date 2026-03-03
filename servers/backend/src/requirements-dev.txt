@@ -2,8 +2,9 @@ mypy
 pydantic
 typing-extensions
 types-requests
-types-Flask-SocketIO
 types-reportlab
 types-Flask-Cors
-types-flask-socketio
+types-Flask-Cors
+
+
 
