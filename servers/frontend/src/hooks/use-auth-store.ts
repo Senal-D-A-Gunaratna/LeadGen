@@ -10,6 +10,7 @@ export type Role = 'admin' | 'moderator' | 'dev';
 
 interface User {
   role: Role;
+  token?: string;
 }
 
 interface AuthState {
@@ -17,7 +18,7 @@ interface AuthState {
   isInitialized: boolean;
   isDevUnlocked: boolean; 
   initializeAuth: () => void;
-  login: (role: Role) => void;
+  login: (role: Role, token?: string) => void;
   logout: () => void;
   changePasswordForRole: (role: Role, newPassword: string, authorizerRole: Role, authorizerPassword?: string) => Promise<void>;
   unlockDevMode: (password: string) => Promise<boolean>; 
@@ -33,10 +34,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (get().isInitialized) return;
         set({ isInitialized: true });
     },
-    login: (role) => {
+    login: (role, token?) => {
         const { addLog } = useLogStore.getState();
         addLog(`User signed in as: ${role}`);
-        set({ user: { role } });
+        set({ user: { role, token } });
         // After login, re-run initialization for admin-only stores so they
         // fetch protected data (auth/action logs) without requiring a page reload.
         try {

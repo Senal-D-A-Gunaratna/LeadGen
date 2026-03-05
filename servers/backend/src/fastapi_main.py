@@ -995,6 +995,15 @@ async def upload_student_data_csv(request: Request):
     creates a filesystem backup if `timestamp` is provided, and returns success.
     Full CSV parsing/import is intentionally left as the original implementation.
     """
+    # Client authentication check - require valid session token
+    auth = request.headers.get('authorization') or request.headers.get('Authorization')
+    token = None
+    if auth and auth.lower().startswith('bearer '):
+        token = auth.split(' ', 1)[1]
+    client_role = flask_app.validate_http_token(token) if token else None
+    if not client_role:
+        return JSONResponse({'success': False, 'message': 'Client not authenticated'}, status_code=401)
+
     allow_insecure = os.environ.get('ALLOW_INSECURE_BACKUPS') == '1'
     dev_force = os.environ.get('DEV_FORCE_FULL_ACCESS') == '1'
     if dev_force:
@@ -1039,6 +1048,15 @@ async def restore_backup(request: Request):
     """Restore a backup (HTTP wrapper mirroring the WebSocket `restore_backup` handler).
     Security: allow when request is local or HTTPS or a valid authorizer is provided.
     """
+    # Client authentication check - require valid session token
+    auth = request.headers.get('authorization') or request.headers.get('Authorization')
+    token = None
+    if auth and auth.lower().startswith('bearer '):
+        token = auth.split(' ', 1)[1]
+    client_role = flask_app.validate_http_token(token) if token else None
+    if not client_role:
+        return JSONResponse({'success': False, 'message': 'Client not authenticated'}, status_code=401)
+
     try:
         data = await request.json()
     except Exception:

@@ -859,6 +859,15 @@ def register_endpoints(app, helpers):
     @app.route('/api/upload-student-data-csv', methods=['POST'])
     def upload_student_data_csv():
         """Upload student data from CSV."""
+        # Client authentication check - require valid session token
+        auth = request.headers.get('authorization') or request.headers.get('Authorization')
+        token = None
+        if auth and auth.lower().startswith('bearer '):
+            token = auth.split(' ', 1)[1]
+        client_role = flask_app.validate_http_token(token) if token else None
+        if not client_role:
+            return jsonify({'success': False, 'message': 'Client not authenticated'}), 401
+        
         # SECURITY: Only allow data import operations over HTTPS
         if not request.is_secure:
             return jsonify({'error': 'Data import operations must use HTTPS'}), 403

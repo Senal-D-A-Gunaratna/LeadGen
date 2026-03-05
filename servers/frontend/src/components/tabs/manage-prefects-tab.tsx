@@ -105,12 +105,15 @@ export function ManagePrefectsTab() {
         ? '/api/upload-student-data-csv'
         : `/api/upload-${pendingUploadFile.type}-db`;
 
+      const headers: Record<string, string> = {};
+      if (user?.token) {
+        headers['Authorization'] = `Bearer ${user.token}`;
+      }
+
       const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
-        headers: {
-          'Authorization': `Bearer ${password}`,
-        },
+        headers,
       });
 
       if (!response.ok) {

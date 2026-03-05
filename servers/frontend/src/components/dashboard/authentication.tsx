@@ -42,8 +42,8 @@ export function Authentication() {
     setActiveTab('dashboard');
   };
 
-  const handleSuccessfulLogin = (role: Role) => {
-    login(role);
+  const handleSuccessfulLogin = (role: Role, token?: string) => {
+    login(role, token);
     setDialogRole(null);
     setActiveTab('dashboard');
   };

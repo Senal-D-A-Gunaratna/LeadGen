@@ -38,7 +38,7 @@ interface RolePasswordDialogProps {
   role: Role;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: (password: string) => boolean | Promise<boolean> | void | Promise<void>;
+  onSuccess: (password: string, token?: string) => boolean | Promise<boolean> | void | Promise<void>;
   title?: string;
   description?: string;
   isUnlockAttempt?: boolean;
@@ -90,10 +90,10 @@ export function RolePasswordDialog({ role, open, onOpenChange, onSuccess, title,
     if (isValid) {
       // Authenticate WebSocket session
       try {
-        const wsAuthenticated = await apiClient.authenticate(role, values.password);
-        if (wsAuthenticated) {
+        const authResponse = await apiClient.authenticate(role, values.password);
+        if (authResponse && authResponse.success && authResponse.token) {
           try {
-            onSuccess(values.password);
+            onSuccess(values.password, authResponse.token);
           } finally {
             // Close dialog after successful authentication
             onOpenChange(false);
