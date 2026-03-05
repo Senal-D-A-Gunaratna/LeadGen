@@ -12,7 +12,7 @@
     "start": "cd servers/frontend && npm start",
     "lint": "cd servers/frontend && npm run lint",
     "typecheck-frontend": "cd servers/frontend && npm run typecheck",
-    "typecheck-backend": "python3 -m mypy servers/backend/src",
+    "typecheck-backend": "cd servers/backend/src && source .venv/bin/activate && python -m mypy .",
     "install-frontend": "cd servers/frontend && npm install",
     "install-backend": "cd servers/backend/src && pip3 install -r requirements.txt",
     "install-backend-dev": "cd servers/backend/src && pip3 install -r requirements-dev.txt",
