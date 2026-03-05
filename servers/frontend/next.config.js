@@ -7,7 +7,8 @@ const nextConfig = {
   // dynamically build a list of allowed dev origins from the machine's
   // network interfaces.  this avoids hard-coding specific addresses.
   allowedDevOrigins: (() => {
-    const origins: string[] = [];
+    /** @type {string[]} */
+    const origins = [];
     try {
       const os = require('os');
       const nets = os.networkInterfaces();

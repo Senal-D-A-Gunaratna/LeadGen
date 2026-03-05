@@ -3,6 +3,10 @@
 # Root level items (if any)
 node_modules
 .mypy_cache
+tools/__pycache__
+servers/__pycache__
+tmp
+.venv
 
 # Frontend dependencies & build
 servers/frontend/node_modules/
@@ -81,6 +85,3 @@ servers/frontend/.next/server/
 servers/frontend/out/
 
 #Other (if any)
-tools/__pycache__
-servers/__pycache__
-tmp
