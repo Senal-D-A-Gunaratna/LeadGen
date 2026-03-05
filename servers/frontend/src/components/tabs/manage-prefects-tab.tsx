@@ -1,7 +1,7 @@
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
-import { Table, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import { Table, TableBody, TableRow, TableCell, TableHeader, TableHead } from "@/components/ui/table";
 import { useStudentStore } from "@/hooks/use-student-store";
 import { getStudentId } from "@/lib/utils";
 import type { Student } from "@/lib/types";
@@ -16,6 +16,14 @@ export function ManagePrefectsTab() {
     <Card>
       <CardContent>
         <Table>
+          <TableHeader>
+            <TableRow className="border-border/40 hover:bg-transparent">
+              <TableHead>Name</TableHead>
+              <TableHead>Grade & Class</TableHead>
+              <TableHead>Contact</TableHead>
+              <TableHead>Role</TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
             {rows.map((student: Student, i: number) => {
               const sid = getStudentId(student);
