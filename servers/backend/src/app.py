@@ -74,7 +74,7 @@ def emit_maybe_async(event: str, payload: dict, namespace: str = '/') -> None:
     """
     try:
         if socketio is None:
-            return
+            return  # type: ignore[unreachable]
         res = socketio.emit(event, payload, namespace=namespace)
         if inspect.isawaitable(res):
             try:
@@ -2686,7 +2686,7 @@ def _worker_loop() -> None:
             break
         try:
             if task is None:
-                break
+                break  # type: ignore[unreachable]
             action = task.get('action')
             if action == 'recalculate_and_broadcast':
                 affected = task.get('affected_ids')

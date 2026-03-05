@@ -16,8 +16,8 @@ from pathlib import Path
 
 _pkg_dir = Path(__file__).resolve().parent
 _src_dir = str(_pkg_dir / 'src')
-if _src_dir not in __path__:  # type: ignore[name-defined]
-    __path__.insert(0, _src_dir)  # type: ignore[name-defined]
+if _src_dir not in __path__:
+    __path__.insert(0, _src_dir)
 
 # Explicitly import from the `src` package to make static checkers (mypy)
 # and runtime imports resolve predictably.

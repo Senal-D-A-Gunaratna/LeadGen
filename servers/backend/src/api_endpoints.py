@@ -75,7 +75,7 @@ def register_endpoints(app, helpers):
     # Helper to allow alternate auth via HTTP tokens or authorizer role/password
     def _is_authorized(sid, data=None):
         try:
-            if sid in authenticated_sessions:  # type: ignore
+            if sid in authenticated_sessions:
                 return True
         except Exception:
             pass
