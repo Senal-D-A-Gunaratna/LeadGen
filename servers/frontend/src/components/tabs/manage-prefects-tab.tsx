@@ -178,42 +178,44 @@ export function ManagePrefectsTab() {
                 )}
                 Download
               </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isUploading}
-                    className="flex items-center gap-2"
-                  >
-                    {isUploading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4" />
-                    )}
-                    Upload
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() => csvInputRef.current?.click()}
-                  >
-                    Upload studentdata.csv
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => dbStudentInputRef.current?.click()}
-                  >
-                    Upload studentdata.db
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => dbAttendanceInputRef.current?.click()}
-                  >
-                    Upload attendance.db
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              {(isAdmin || isDev) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isUploading}
+                      className="flex items-center gap-2"
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                      Upload
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => csvInputRef.current?.click()}
+                    >
+                      Upload studentdata.csv
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => dbStudentInputRef.current?.click()}
+                    >
+                      Upload studentdata.db
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => dbAttendanceInputRef.current?.click()}
+                    >
+                      Upload attendance.db
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -276,7 +278,7 @@ export function ManagePrefectsTab() {
       <AddStudentForm open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen} />
       
       <UploadAuthDialog
-        role={user?.role || 'staff'}
+        role={user?.role || 'moderator'}
         open={uploadAuthOpen}
         onOpenChange={setUploadAuthOpen}
         onSuccess={handleUploadConfirm}
