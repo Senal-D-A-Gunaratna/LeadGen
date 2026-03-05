@@ -1,15 +1,24 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableRow, TableCell, TableHeader, TableHead } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { useStudentStore } from "@/hooks/use-student-store";
 import { useAuthStore } from "@/hooks/use-auth-store";
+import { useToast } from "@/hooks/use-toast";
 import { getStudentId } from "@/lib/utils";
 import type { Student } from "@/lib/types";
-import { Plus, Download, Loader2 } from "lucide-react";
+import { Plus, Download, Loader2, Upload, ChevronDown } from "lucide-react";
 import { AddStudentForm } from "@/components/dashboard/add-student-form";
+import { UploadAuthDialog } from "@/components/dashboard/upload-auth-dialog";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 
 export function ManagePrefectsTab() {
@@ -17,8 +26,16 @@ export function ManagePrefectsTab() {
   const { selectStudent } = useStudentStore((state) => state.actions);
   const { user } = useAuthStore();
   const { addActionLog } = useActionLogStore();
+  const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadAuthOpen, setUploadAuthOpen] = useState(false);
+  const [pendingUploadFile, setPendingUploadFile] = useState<{ file: File; type: string } | null>(null);
+
+  const csvInputRef = useRef<HTMLInputElement>(null);
+  const dbStudentInputRef = useRef<HTMLInputElement>(null);
+  const dbAttendanceInputRef = useRef<HTMLInputElement>(null);
 
   const rows = useMemo(() => students || [], [students]);
 
@@ -70,6 +87,62 @@ export function ManagePrefectsTab() {
     }
   };
 
+  const handleFileSelected = (file: File | null, fileType: string) => {
+    if (!file) return;
+    setPendingUploadFile({ file, type: fileType });
+    setUploadAuthOpen(true);
+  };
+
+  const handleUploadConfirm = async (password: string) => {
+    if (!pendingUploadFile) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', pendingUploadFile.file);
+
+      const endpoint = pendingUploadFile.type === 'csv' 
+        ? '/api/upload-student-data-csv'
+        : `/api/upload-${pendingUploadFile.type}-db`;
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${password}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      addActionLog(`[${user?.role}] Uploaded ${pendingUploadFile.file.name}`);
+      
+      toast({
+        title: "Upload Successful",
+        description: `${pendingUploadFile.file.name} has been uploaded successfully.`,
+      });
+
+      // Reset file inputs
+      if (csvInputRef.current) csvInputRef.current.value = '';
+      if (dbStudentInputRef.current) dbStudentInputRef.current.value = '';
+      if (dbAttendanceInputRef.current) dbAttendanceInputRef.current.value = '';
+    } catch (error) {
+      console.error('Upload failed:', error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload ${pendingUploadFile.file.name}. Please try again.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setPendingUploadFile(null);
+    }
+  };
+
   return (
     <>
       <Card className="glassmorphic glowing-border">
@@ -105,6 +178,42 @@ export function ManagePrefectsTab() {
                 )}
                 Download
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isUploading}
+                    className="flex items-center gap-2"
+                  >
+                    {isUploading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4" />
+                    )}
+                    Upload
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => csvInputRef.current?.click()}
+                  >
+                    Upload studentdata.csv
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => dbStudentInputRef.current?.click()}
+                  >
+                    Upload studentdata.db
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => dbAttendanceInputRef.current?.click()}
+                  >
+                    Upload attendance.db
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardHeader>
@@ -141,7 +250,37 @@ export function ManagePrefectsTab() {
         </CardContent>
       </Card>
 
+      {/* Hidden file inputs */}
+      <input
+        ref={csvInputRef}
+        type="file"
+        accept=".csv"
+        style={{ display: 'none' }}
+        onChange={(e) => handleFileSelected(e.target.files?.[0] ?? null, 'csv')}
+      />
+      <input
+        ref={dbStudentInputRef}
+        type="file"
+        accept=".db"
+        style={{ display: 'none' }}
+        onChange={(e) => handleFileSelected(e.target.files?.[0] ?? null, 'studentdata')}
+      />
+      <input
+        ref={dbAttendanceInputRef}
+        type="file"
+        accept=".db"
+        style={{ display: 'none' }}
+        onChange={(e) => handleFileSelected(e.target.files?.[0] ?? null, 'attendance')}
+      />
+
       <AddStudentForm open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen} />
+      
+      <UploadAuthDialog
+        role={user?.role || 'staff'}
+        open={uploadAuthOpen}
+        onOpenChange={setUploadAuthOpen}
+        onSuccess={handleUploadConfirm}
+      />
     </>
   );
 }
