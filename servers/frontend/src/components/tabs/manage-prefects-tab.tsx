@@ -11,19 +11,20 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { useStudentStore } from "@/hooks/use-student-store";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { useToast } from "@/hooks/use-toast";
 import { getStudentId } from "@/lib/utils";
 import type { Student } from "@/lib/types";
-import { Plus, Download, Loader2, Upload, ChevronDown } from "lucide-react";
+import { Plus, Download, Loader2, Upload, ChevronDown, Search, X } from "lucide-react";
 import { AddStudentForm } from "@/components/dashboard/add-student-form";
 import { UploadAuthDialog } from "@/components/dashboard/upload-auth-dialog";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 
 export function ManagePrefectsTab() {
-  const { students } = useStudentStore();
-  const { selectStudent } = useStudentStore((state) => state.actions);
+  const { students, searchQuery } = useStudentStore();
+  const { selectStudent, setSearchQuery } = useStudentStore((state) => state.actions);
   const { user } = useAuthStore();
   const { addActionLog } = useActionLogStore();
   const { toast } = useToast();
@@ -223,6 +224,27 @@ export function ManagePrefectsTab() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-wrap gap-2 w-full mb-4">
+            <div className="relative flex-grow min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by name, phone, WhatsApp or email"
+                className="pl-9 pr-9 glassmorphic"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 text-muted-foreground"
+                  onClick={() => setSearchQuery('')}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
           <div className="overflow-y-auto">
             <Table>
               <TableHeader>
