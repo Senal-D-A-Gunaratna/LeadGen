@@ -12,6 +12,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useStudentStore } from "@/hooks/use-student-store";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { useToast } from "@/hooks/use-toast";
@@ -23,8 +24,8 @@ import { UploadAuthDialog } from "@/components/dashboard/upload-auth-dialog";
 import { useActionLogStore } from "@/hooks/use-action-log-store";
 
 export function ManagePrefectsTab() {
-  const { students, searchQuery } = useStudentStore();
-  const { selectStudent, setSearchQuery } = useStudentStore((state) => state.actions);
+  const { students, searchQuery, gradeFilter, classFilter, roleFilter, availableGrades = [], availableClasses = [], availableRoles = [] } = useStudentStore();
+  const { selectStudent, setSearchQuery, setGradeFilter, setClassFilter, setRoleFilter, fetchAndSetStudents } = useStudentStore((state) => state.actions);
   const { user } = useAuthStore();
   const { addActionLog } = useActionLogStore();
   const { toast } = useToast();
@@ -44,7 +45,6 @@ export function ManagePrefectsTab() {
   const isDev = user?.role === 'dev';
   const canEdit = isAdmin || isDev;
 
-  const { fetchAndSetStudents } = useStudentStore((state) => state.actions);
 
   const handleRowClick = useCallback((student: Student) => {
     if (canEdit) {
@@ -59,7 +59,7 @@ export function ManagePrefectsTab() {
       fetchAndSetStudents();
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [searchQuery, fetchAndSetStudents]);
+  }, [searchQuery, gradeFilter, classFilter, roleFilter, fetchAndSetStudents]);
 
   const handleDownload = async () => {
     setIsDownloading(true);
@@ -255,6 +255,43 @@ export function ManagePrefectsTab() {
                 </Button>
               )}
             </div>
+
+            <Select value={gradeFilter} onValueChange={setGradeFilter}>
+              <SelectTrigger className="glassmorphic w-full sm:w-[140px]">
+                <SelectValue placeholder="Filter by grade" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Grades</SelectItem>
+                {availableGrades.map((grade: string) => (
+                  <SelectItem key={grade} value={grade}>Grade {grade}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={classFilter} onValueChange={setClassFilter}>
+              <SelectTrigger className="glassmorphic w-full sm:w-[160px]">
+                <SelectValue placeholder="Filter by class" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                {availableClasses.map((cl: string) => (
+                  <SelectItem key={cl} value={cl}>{cl}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <SelectTrigger className="glassmorphic w-full sm:w-[160px]">
+                <SelectValue placeholder="Filter by role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="none">No Role</SelectItem>
+                {availableRoles.map((r: string) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="overflow-y-auto">
             <Table>
