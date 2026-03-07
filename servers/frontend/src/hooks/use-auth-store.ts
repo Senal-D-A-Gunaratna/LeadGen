@@ -25,6 +25,35 @@ interface AuthState {
   lockDevMode: () => void; 
 }
 
+const AUTH_SESSION_KEY = 'leadgen:auth';
+
+function loadUserFromSession(): User | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.role) return null;
+    return { role: parsed.role, token: parsed.token };
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveUserToSession(user: User | null) {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!user) {
+      sessionStorage.removeItem(AUTH_SESSION_KEY);
+      return;
+    }
+    sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(user));
+  } catch (e) {
+    // Ignore storage errors
+  }
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
     user: null,
     isInitialized: false,
@@ -33,11 +62,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Prevent re-initialization
         if (get().isInitialized) return;
         set({ isInitialized: true });
+
+        // Recover any existing authenticated session from this browser tab.
+        const existing = loadUserFromSession();
+        if (existing) {
+          set({ user: existing });
+        }
     },
     login: (role, token?) => {
         const { addLog } = useLogStore.getState();
         addLog(`User signed in as: ${role}`);
-        set({ user: { role, token } });
+        const user = { role, token };
+        set({ user });
+        saveUserToSession(user);
         // After login, re-run initialization for admin-only stores so they
         // fetch protected data (auth/action logs) without requiring a page reload.
         try {
@@ -65,6 +102,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             useStudentStore.getState().actions.setFakeDate(null);
         }
         set({ user: null });
+        saveUserToSession(null);
         setActiveTab('dashboard'); // Reset the active tab
     },
     changePasswordForRole: async (role, newPassword, authorizerRole, authorizerPassword) => {

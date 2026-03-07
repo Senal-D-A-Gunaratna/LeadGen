@@ -18,6 +18,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     init();
   }, [initializeAuth]);
 
+  useEffect(() => {
+    // Clear session-based auth state when the user reloads/navigates away.
+    // This prevents stale sessions from persisting across full page reloads
+    // while still allowing the state to survive hot-module reloads.
+    const handleUnload = () => {
+      try {
+        sessionStorage.removeItem('leadgen:auth');
+      } catch {
+        // Ignore
+      }
+    };
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  }, []);
+
   if (!isHydrated) {
     // You can render a loading spinner here if you want
     return null; 
