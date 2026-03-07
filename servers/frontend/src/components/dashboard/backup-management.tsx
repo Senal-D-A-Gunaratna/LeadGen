@@ -102,8 +102,9 @@ export function BackupManagement() {
         toast({ title: "Backup Created", description: `A new ${dataType} backup has been saved.` });
         addActionLog(`[${authorizerRole}] Created backup: ${backupFileName}`);
         await fetchBackups();
-    } catch (error) {
-        toast({ variant: "destructive", title: "Backup Failed", description: "An unexpected error occurred." });
+    } catch (error: any) {
+        const message = error?.message || String(error) || "An unexpected error occurred.";
+        toast({ variant: "destructive", title: "Backup Failed", description: message });
     } finally {
         setIsActioning(null);
     }

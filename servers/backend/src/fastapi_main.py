@@ -685,9 +685,9 @@ def _is_local_request(request: Request) -> bool:
     try:
         host_no_port = (request.headers.get('host','') or '').split(':')[0].lower()
         remote = _get_forwarded_ip(request)
-        if host_no_port.startswith('127.') or 'localhost' in host_no_port:
+        if host_no_port in ('0.0.0.0', '::') or host_no_port.startswith('127.') or 'localhost' in host_no_port:
             return True
-        if remote in ('127.0.0.1', '::1'):
+        if remote in ('0.0.0.0', '127.0.0.1', '::', '::1'):
             return True
         if remote.startswith('192.168.') or remote.startswith('10.'):
             return True
