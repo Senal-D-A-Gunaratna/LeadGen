@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState, useRef } from "react";
+import { useCallback, useMemo, useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableRow, TableCell, TableHeader, TableHead } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -44,11 +44,22 @@ export function ManagePrefectsTab() {
   const isDev = user?.role === 'dev';
   const canEdit = isAdmin || isDev;
 
+  const { fetchAndSetStudents } = useStudentStore((state) => state.actions);
+
   const handleRowClick = useCallback((student: Student) => {
     if (canEdit) {
       selectStudent(student);
     }
   }, [canEdit, selectStudent]);
+
+  // Re-fetch the filtered student list whenever the search query changes.
+  // This ensures the backend applies the query filter and the UI renders the updated list.
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      fetchAndSetStudents();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, fetchAndSetStudents]);
 
   const handleDownload = async () => {
     setIsDownloading(true);
