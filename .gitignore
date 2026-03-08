@@ -1,6 +1,6 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Root level items (if any)
+# Orther items (if any)
 node_modules
 .mypy_cache
 tools/__pycache__
@@ -84,4 +84,4 @@ servers/frontend/.next/static/
 servers/frontend/.next/server/
 servers/frontend/out/
 
-#Other (if any)
+# End of .gitignore
