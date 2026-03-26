@@ -1,3 +1,9 @@
+⚠️ **PROJECT STATUS: TEMPORARILY STOPPED**
+
+This project is currently not in working condition and is temporarily stopped due to O/L exams. Development will resume after the exams conclude. Thank you for your understanding.
+
+---
+
 # LeadGen
 
 Overview
@@ -82,4 +88,3 @@ npm run frontend
 ### Contributing and license
 - Contributions: fork the repository, create a feature branch, add tests where appropriate, and open a pull request
 - License: MIT. See the `LICENSE` file for details
-
