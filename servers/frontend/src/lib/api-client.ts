@@ -1,0 +1,810 @@
+/**
+ * API client for Flask backend.
+ * Replaces Next.js server actions with HTTP requests to Flask.
+ * Now uses WebSocket for most operations, keeping REST for file downloads/uploads.
+ */
+// Long-polling client migrated from `websocket-client.ts` to centralize
+// HTTP helpers. It provides the same `wsClient` API surface used
+// throughout the frontend.
+
+type EventCallback = (data: any) => void;
+
+class WebSocketClient {
+  private listeners: Map<string, Set<EventCallback>> = new Map();
+  private polling = false;
+  private lastId = 0;
+  private connected = false;
+  private pollController: AbortController | null = null;
+
+  connect() {
+    if (this.polling) return;
+    this.polling = true;
+    this.connected = true;
+    this.startPolling();
+  }
+
+  disconnect() {
+    this.polling = false;
+    this.connected = false;
+    if (this.pollController) {
+      try { this.pollController.abort(); } catch (e) {}
+      this.pollController = null;
+    }
+  }
+
+  isAuthenticated(): boolean {
+    return false; // authentication is handled via HTTP auth endpoints
+  }
+
+  getCurrentRole(): string | null {
+    return null;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  on(event: string, cb: EventCallback) {
+    if (!this.listeners.has(event)) this.listeners.set(event, new Set());
+    this.listeners.get(event)!.add(cb);
+  }
+
+  off(event: string, cb: EventCallback) {
+    const s = this.listeners.get(event);
+    if (s) s.delete(cb);
+  }
+
+  private dispatch(event: string, data: any) {
+    const s = this.listeners.get(event);
+    if (s) {
+      for (const cb of Array.from(s)) {
+        try { cb(data); } catch (e) { console.error('wsClient listener error', e); }
+      }
+    }
+  }
+
+  private async startPolling() {
+    while (this.polling) {
+      try {
+            this.pollController = new AbortController();
+            const signal = this.pollController.signal;
+            let body: any = null;
+            try {
+              body = await fetchAPI(`/api/events/poll?since=${this.lastId}&timeout=25`, { signal });
+            } catch (e) {
+              await new Promise(r => setTimeout(r, 1000));
+              continue;
+            }
+            if (body && body.success && Array.isArray(body.events)) {
+          for (const ev of body.events) {
+            try {
+              this.lastId = Math.max(this.lastId, ev.id || 0);
+              if (ev.type) this.dispatch(ev.type, ev.data);
+            } catch (e) {
+              console.error('wsClient: error handling event', e);
+            }
+          }
+        }
+      } catch (e) {
+        if ((e as any)?.name === 'AbortError') {
+          // normal during disconnect
+        } else {
+          console.debug('wsClient.poll error', e);
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } finally {
+        this.pollController = null;
+      }
+    }
+  }
+
+  async waitForConnected(timeoutMs: number): Promise<boolean> {
+    if (this.connected) return true;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (this.connected) return true;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return false;
+  }
+
+  // --- High-level operations implemented over HTTP ---
+
+  async getStaticFilters(): Promise<any> {
+    const res = await fetchAPI('/api/static-filters');
+    return res;
+  }
+
+  async scanStudent(fingerprint: string, scannerToken?: string) {
+    const body: any = { fingerprint };
+    if (scannerToken) body.scanner_token = scannerToken;
+    return await fetchAPI('/api/scan', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async saveAttendance(students: any[]) {
+    return await fetchAPI('/api/save-attendance', { method: 'POST', body: JSON.stringify({ students }) });
+  }
+
+  async addStudent(studentData: any) {
+    return await fetchAPI('/api/add-student', { method: 'POST', body: JSON.stringify(studentData) });
+  }
+
+  async removeStudent(studentId: number) {
+    return await fetchAPI('/api/remove-student', { method: 'POST', body: JSON.stringify({ studentId }) });
+  }
+
+  async updateStudent(studentId: number, data: any) {
+    return await fetchAPI('/api/update-student', { method: 'POST', body: JSON.stringify({ studentId, data }) });
+  }
+
+  async updatePasswords(passwords: Record<string, string>, authorizerRole: string, authorizerPassword: string) {
+    return await fetchAPI('/api/update-passwords', { method: 'POST', body: JSON.stringify({ passwords, authorizerRole, authorizerPassword }) });
+  }
+
+  async listBackups() {
+    return await fetchAPI('/api/list-backups');
+  }
+
+  async restoreBackup(dataType: string, filename: string) {
+    return await fetchAPI('/api/restore-backup', { method: 'POST', body: JSON.stringify({ dataType, filename }) });
+  }
+
+  async listActionLogs() {
+    return this.getActionLogs();
+  }
+
+  async getActionLogs() {
+    try {
+      const body = await fetchAPI('/api/action-logs');
+      return body.logs || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async appendActionLog(timestamp: string, action: string) {
+    const body = await fetchAPI('/api/append-action-log', { method: 'POST', body: JSON.stringify({ timestamp, action }) });
+    return body || { success: true };
+  }
+
+  async clearActionLogs(role: string) {
+    return await fetchAPI('/api/clear-action-logs', { method: 'POST', body: JSON.stringify({ role }) });
+  }
+
+  async getAuthLogs() {
+    try {
+      const body = await fetchAPI('/api/auth-logs');
+      return body.logs || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async getAllStudentsSummaries() {
+    try {
+      const body = await fetchAPI('/api/students');
+      // Backend returns { students: [...] }
+      const students = body.students || [];
+      // Map to minimal summaries structure expected by callers.
+      return students.map((s: any) => ({ studentId: s.student_id, name: s.name, grade: s.grade, className: s.className, summary: s.summary || {} }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async authenticate(role: string, password: string) {
+    return await fetchAPI('/api/auth/login', { method: 'POST', body: JSON.stringify({ role, password }) });
+  }
+
+  async getCurrentTime(): Promise<string> {
+    try {
+      const r = await fetchAPI('/api/health');
+      if (r) {
+        return new Date().toISOString();
+      }
+    } catch (e) {}
+    return new Date().toISOString();
+  }
+}
+
+export const wsClient = new WebSocketClient();
+export const apiClient = wsClient;
+
+// Previously we attempted to sniff the backend URL by probing the
+// network.  Now that the Next.js development server rewrites `/api/*`
+// requests automatically to the backend, we can simplify the logic to
+// always use a relative path.  This avoids cross‑origin fetches and makes
+// the `allowedDevOrigins` configuration unnecessary for client code.
+async function getBackendUrlFromServer(): Promise<string> {
+  // Always return empty string so callers append endpoints directly to the
+  // origin (`/api/...`).  The rewrites in `next.config.js` will forward the
+  // request to whatever backend is configured.
+  return '';
+}
+
+let BACKEND_URL: string | null = null;
+
+async function ensureBackendUrl(): Promise<string> {
+  if (!BACKEND_URL) {
+    BACKEND_URL = await getBackendUrlFromServer();
+  }
+  return BACKEND_URL;
+}
+
+async function fetchAPI(endpoint: string, options: RequestInit = {}) {
+  const backendUrl = await ensureBackendUrl();
+  try {
+    // Only set Content-Type when sending a body (or non-GET methods).
+    const method = (options.method || 'GET').toUpperCase();
+    const baseHeaders: Record<string, string> = {};
+    if (method !== 'GET' || options.body) {
+      baseHeaders['Content-Type'] = 'application/json';
+    }
+    const response = await fetch(`${backendUrl}${endpoint}`, {
+      ...options,
+      headers: {
+        ...baseHeaders,
+        ...(options.headers as Record<string, string> | undefined),
+      },
+    });
+
+    if (!response.ok) {
+      // Try to parse JSON error, but handle cases where response might not be JSON
+      let errorData: any = { error: `HTTP ${response.status}` };
+      try {
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          errorData = await response.json();
+        } else {
+          const text = await response.text();
+          // If server returned an HTML error page (e.g. Flask 500), avoid
+          // throwing the entire HTML blob into the UI overlay. Log the body
+          // for debugging and provide a concise message instead.
+          if (contentType && contentType.includes('text/html')) {
+            // Truncate HTML error bodies and log at debug level to avoid
+            // flooding the browser console/Next overlay with huge HTML pages.
+            const MAX_LOG_CHARS = 1000;
+            const snippet = text.length > MAX_LOG_CHARS ? text.slice(0, MAX_LOG_CHARS) + '... [truncated]' : text;
+            console.debug('Backend returned HTML error body (truncated):', snippet);
+            errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+          } else {
+            errorData = { error: text || `HTTP ${response.status}: ${response.statusText}` };
+          }
+        }
+      } catch (parseError) {
+        // If we can't parse the error, use status text
+        errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+      }
+      
+      const errorMessage = errorData.error || errorData.message || `HTTP ${response.status}`;
+      throw new Error(errorMessage);
+    }
+
+    // Handle empty responses
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      const text = await response.text();
+      return text ? JSON.parse(text) : {};
+    }
+    
+    return response.json();
+  } catch (error: any) {
+    // Better error handling for network issues
+    const msg = (error && error.message) ? String(error.message) : '';
+    const isNetworkErr = error instanceof TypeError || error?.name === 'TypeError' || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('network');
+    if (isNetworkErr) {
+      throw new Error('Cannot connect to backend. Make sure the backend server is running and accessible.');
+    }
+    // Re-throw the error if it's already an Error with a message
+    if (error instanceof Error) {
+      throw error;
+    }
+    // Otherwise wrap it
+    throw new Error(error.message || String(error));
+  }
+}
+
+// Student operations
+export async function getFilteredStudents(filters: {
+  date?: string;
+  searchQuery?: string | null;
+  statusFilter?: string | null;
+  gradeFilter?: string | null;
+  classFilter?: string | null;
+  roleFilter?: string | null;
+}) {
+  // Prefer HTTP snapshot fetch for stable data retrieval. Build query params.
+  const params = new URLSearchParams();
+  if (filters?.date) params.set('date', filters.date);
+  if (filters?.searchQuery) params.set('searchQuery', String(filters.searchQuery));
+  if (filters?.statusFilter) params.set('statusFilter', String(filters.statusFilter));
+  if (filters?.gradeFilter) params.set('gradeFilter', String(filters.gradeFilter));
+  if (filters?.classFilter) params.set('classFilter', String(filters.classFilter));
+  if (filters?.roleFilter) params.set('roleFilter', String(filters.roleFilter));
+
+  const endpoint = `/api/students?${params.toString()}`;
+  const result = await fetchAPI(endpoint);
+  return result.students || [];
+}
+
+export async function getStudentById(studentId: number) {
+  const result = await fetchAPI(`/api/students/${studentId}`);
+  return result.student || null;
+}
+
+export async function getStudentMonthlyAttendance(studentId: number, month?: string) {
+  // month format: YYYY-MM
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  try {
+    const result = await fetchAPI(`/api/students/${studentId}/attendance${query}`);
+    // New backend returns both `attendanceHistory` and `schoolDays` for month requests.
+    return {
+      attendanceHistory: result.attendanceHistory || [],
+      schoolDays: result.schoolDays || []
+    };
+  } catch (err) {
+    // Fallback: fetch full student record and filter client-side
+    try {
+      const student = await getStudentById(studentId);
+      const hist = (student && student.attendanceHistory) ? student.attendanceHistory : [];
+      if (!month) return { attendanceHistory: hist, schoolDays: [] };
+      const filtered = hist.filter((r: any) => typeof r.date === 'string' && r.date.startsWith(month));
+      // Best-effort fallback: compute schoolDays from weekday presence in history
+      const sdSet = new Set<string>();
+      for (const r of hist) {
+        try {
+          if (typeof r.date === 'string') sdSet.add(r.date);
+        } catch (e) {}
+      }
+      return { attendanceHistory: filtered, schoolDays: Array.from(sdSet) };
+    } catch (e) {
+      throw err;
+    }
+  }
+}
+
+export async function getStudentAttendanceTrend(studentId: number, month: string) {
+  // month format: YYYY-MM
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  try {
+    const result = await fetchAPI(`/api/students/${studentId}/attendance/trend${query}`);
+    // Normalize to { points: [...] }
+    return result.points || [];
+  } catch (err) {
+    // Fallback: build points client-side from monthly attendance records
+    try {
+      const monthHistResp = await getStudentMonthlyAttendance(studentId, month);
+      const monthHist = (monthHistResp && (monthHistResp as any).attendanceHistory) ? (monthHistResp as any).attendanceHistory : [];
+      const year = Number(month.split('-')[0]);
+      const mon = Number(month.split('-')[1]);
+      const daysInMonth = new Date(year, mon, 0).getDate();
+      const points: any[] = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dd = String(d).padStart(2, '0');
+        const mm = String(mon).padStart(2, '0');
+        const label = `${year}-${mm}-${dd}`;
+        const records = (monthHist || []).filter((r: any) => r.date === label);
+        let on_time = 0;
+        let late = 0;
+        let absent = 0;
+        let arrival_ts = null;
+        let arrival_local = null;
+        let arrival_minutes = null;
+        if (records.length > 0) {
+          for (const r of records) {
+            if (r.status === 'on time') on_time += 1;
+            else if (r.status === 'late') late += 1;
+            if (!arrival_ts && r.checkInTime) {
+              try {
+                const dObj = new Date(r.checkInTime);
+                arrival_ts = Math.floor(dObj.getTime() / 1000);
+                arrival_local = dObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                arrival_minutes = dObj.getHours() * 60 + dObj.getMinutes();
+              } catch (e) {}
+            }
+          }
+          absent = 0;
+        } else {
+          const dObj = new Date(label + 'T00:00:00');
+          const day = dObj.getDay();
+          absent = (day > 0 && day < 6) ? 1 : 0;
+        }
+        points.push({ date: label, on_time, late, absent, arrival_ts, arrival_local, arrival_minutes });
+      }
+      return points;
+    } catch (e) {
+      throw err;
+    }
+  }
+}
+
+export async function saveAttendance(arg: any) {
+  // Accept an array of students and POST to backend. Do NOT request weekend saves from client.
+  const students = Array.isArray(arg) ? arg : (arg && arg.students) ? arg.students : [];
+  // Prefer WebSocket RPC for saving attendance so server can immediately
+  // broadcast updates to connected clients. Fall back to HTTP if WebSocket
+  // is unavailable to preserve reliability in mixed environments.
+  try {
+    await wsClient.saveAttendance(students);
+    return { success: true };
+  } catch (err) {
+    // If wsClient reports not connected or times out, fall back to HTTP.
+    try {
+      return await fetchAPI('/api/save-attendance', {
+        method: 'POST',
+        body: JSON.stringify({ students }),
+      });
+    } catch (httpErr) {
+      throw httpErr;
+    }
+  }
+}
+
+export async function addStudent(studentData: any) {
+  return wsClient.addStudent(studentData);
+}
+
+export async function removeStudent(studentId: number) {
+  return wsClient.removeStudent(studentId);
+}
+
+export async function updateStudent(studentId: number, data: any) {
+  return wsClient.updateStudent(studentId, data);
+}
+
+// Authentication
+export async function validatePassword(role: string, password: string) {
+  try {
+    const res = await fetchAPI('/api/auth/validate', {
+      method: 'POST',
+      body: JSON.stringify({ role, password }),
+    });
+    // Log attempt to backend frontend.log for debugging
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `validatePassword attempt role=${role} valid=${!!res.valid}` }),
+      });
+    } catch (e) {}
+    return !!res.valid;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Perform login against FastAPI auth endpoint. Returns the parsed response
+// from the server (expected shape: { success: boolean, token?: string, role?: string }).
+export async function login(role: string, password: string) {
+  try {
+    const res = await fetchAPI('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ role, password }),
+    });
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `login attempt role=${role} success=${!!res.success}` }),
+      });
+    } catch (e) {}
+    return res;
+  } catch (e: any) {
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `login error role=${role} error=${e?.message || String(e)}` }),
+      });
+    } catch (ee) {}
+    return { success: false, message: e?.message || String(e) };
+  }
+}
+
+// Validate an existing auth token with the server.
+export async function validateAuthToken(token: string) {
+  try {
+    const res = await fetchAPI('/api/auth/validate', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+    try {
+      await fetchAPI('/api/frontend-log', {
+        method: 'POST',
+        body: JSON.stringify({ message: `validateAuthToken token_present=${!!token} valid=${!!res.valid}` }),
+      });
+    } catch (e) {}
+    return !!res.valid;
+  } catch (e) {
+    return false;
+  }
+}
+
+export async function updatePasswords(passwordsToUpdate: Record<string, string>, authorizerRole: string, authorizerPassword: string) {
+  return wsClient.updatePasswords(passwordsToUpdate, authorizerRole, authorizerPassword);
+}
+
+export async function getCurrentTime() {
+  const timeString = await wsClient.getCurrentTime();
+  return new Date(timeString);
+}
+
+// Backups
+export async function createBackup(dataType: 'students' | 'attendance', timestamp: string, isFrozen: boolean) {
+  const result = await fetchAPI('/api/create-backup', {
+    method: 'POST',
+    body: JSON.stringify({ dataType, timestamp, isFrozen }),
+  });
+  return result.filename;
+}
+
+export async function listBackups() {
+  const result = await fetchAPI('/api/list-backups');
+  return { students: result.students || [], attendance: result.attendance || [] };
+}
+
+export async function restoreBackup(dataType: 'students' | 'attendance', filename: string) {
+  return fetchAPI('/api/restore-backup', {
+    method: 'POST',
+    body: JSON.stringify({ dataType, filename }),
+  });
+}
+
+export async function downloadBackup(dataType: 'students' | 'attendance', filename: string, authorizerRole?: string, authorizerPassword?: string) {
+  // Downloads a binary sqlite file. Return a Blob of the file.
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authorizerRole && authorizerPassword) {
+    headers['X-Authorizer-Role'] = authorizerRole;
+    headers['X-Authorizer-Password'] = authorizerPassword;
+  }
+
+  const backendUrl = await ensureBackendUrl();
+  const response = await fetch(`${backendUrl}/api/download-backup`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ dataType, filename }),
+  });
+  if (!response.ok) {
+    let err = 'Download failed';
+    try {
+      const text = await response.text();
+      err = text || err;
+    } catch {}
+    throw new Error(err);
+  }
+  const blob = await response.blob();
+  return blob;
+}
+
+export async function deleteBackup(dataType: 'students' | 'attendance', filename: string) {
+  return fetchAPI('/api/delete-backup', {
+    method: 'POST',
+    body: JSON.stringify({ dataType, filename }),
+  });
+}
+
+export async function deleteAllBackups() {
+  return fetchAPI('/api/delete-all-backups', {
+    method: 'POST',
+  });
+}
+
+// CSV/JSON exports
+export async function downloadStudentDataAsCsv(): Promise<string> {
+  const backendUrl = await ensureBackendUrl();
+  const response = await fetch(`${backendUrl}/api/download-student-data-csv`);
+  return response.text();
+}
+
+export async function downloadStudentDataAsJson(): Promise<string> {
+  const result = await fetchAPI('/api/download-student-data-json');
+  return JSON.stringify(result, null, 2);
+}
+
+export async function uploadStudentDataFromCsv(csvContent: string, timestamp: string, isFrozen: boolean, authorizerRole: string, authorizerPassword: string) {
+  return fetchAPI('/api/upload-student-data-csv', {
+    method: 'POST',
+    body: JSON.stringify({ csvContent, timestamp, isFrozen, authorizerRole, authorizerPassword }),
+  });
+}
+
+export async function uploadStudentDataFromJson(jsonContent: string, timestamp: string, isFrozen: boolean, authorizerRole: string, authorizerPassword: string) {
+  return fetchAPI('/api/upload-student-data-json', {
+    method: 'POST',
+    body: JSON.stringify({ jsonContent, timestamp, isFrozen, authorizerRole, authorizerPassword }),
+  });
+}
+
+export async function downloadAttendanceHistoryAsJson(): Promise<string> {
+  const result = await fetchAPI('/api/download-attendance-history-json');
+  return JSON.stringify(result, null, 2);
+}
+
+export async function downloadDetailedAttendanceHistoryAsCsv(): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/download-detailed-attendance-history-csv`);
+  return response.text();
+}
+
+export async function downloadAttendanceSummaryAsCsv(): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/download-attendance-summary-csv`);
+  return response.text();
+}
+
+export async function downloadStudentAttendanceSummaryAsCsv(student: any): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/download-student-attendance-summary-csv`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ studentId: student.student_id }),
+  });
+  return response.text();
+}
+
+export async function getStudentSummary(studentId: number) {
+  // Use authoritative HTTP endpoint on FastAPI to get computed student summary.
+  const res = await fetchAPI(`/api/students/${studentId}/summary`);
+  return res;
+}
+
+export async function getAllStudentsSummaries() {
+  return wsClient.getAllStudentsSummaries();
+}
+
+export async function getAttendanceAggregate(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string; status?: string }) {
+  const params = new URLSearchParams();
+  if (opts.month) params.set('month', opts.month);
+  if (opts.start) params.set('start', opts.start);
+  if (opts.end) params.set('end', opts.end);
+  if (opts.grade) params.set('grade', opts.grade);
+  if (opts.classFilter) params.set('classFilter', opts.classFilter);
+  if (opts.roleFilter) params.set('roleFilter', opts.roleFilter);
+  if (opts.status) params.set('status', opts.status);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const result = await fetchAPI(`/api/attendance/aggregate${qs}`);
+  return result;
+}
+
+export async function getAttendanceTrend(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string; status?: string }) {
+  const params = new URLSearchParams();
+  if (opts.month) params.set('month', opts.month);
+  if (opts.start) params.set('start', opts.start);
+  if (opts.end) params.set('end', opts.end);
+  if (opts.grade) params.set('grade', opts.grade);
+  if (opts.classFilter) params.set('classFilter', opts.classFilter);
+  if (opts.roleFilter) params.set('roleFilter', opts.roleFilter);
+  if (opts.status) params.set('status', opts.status);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const result = await fetchAPI(`/api/attendance/trend${qs}`);
+  return result;
+}
+
+export async function getAttendanceHasData(opts: { month?: string; start?: string; end?: string; grade?: string; classFilter?: string; roleFilter?: string }) {
+  const params = new URLSearchParams();
+  if (opts.month) params.set('month', opts.month);
+  if (opts.start) params.set('start', opts.start);
+  if (opts.end) params.set('end', opts.end);
+  if (opts.grade) params.set('grade', opts.grade ?? 'all');
+  if (opts.classFilter) params.set('classFilter', opts.classFilter);
+  if (opts.roleFilter) params.set('roleFilter', opts.roleFilter);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  try {
+    const result = await fetchAPI(`/api/attendance/has_data${qs}`);
+    // Backend returns { success: true, hasData: bool }
+    if (typeof result.hasData !== 'undefined') return !!result.hasData;
+    return null;
+  } catch (err) {
+    // propagate error to caller to allow caller to set fallbacks
+    throw err;
+  }
+}
+
+// Static filters (grades/classes/roles) - authoritative HTTP endpoint on FastAPI
+export async function getStaticFilters() {
+  const result = await fetchAPI('/api/static-filters');
+  // Expecting: { grades: string[], classes: string[], roles: string[] }
+  return result || { grades: [], classes: [], roles: [] };
+}
+
+// PDF exports
+export async function downloadStudentDataAsPdf(): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/download-student-data-pdf`);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function downloadAttendanceSummaryAsPdf(): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/download-attendance-summary-pdf`);
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function downloadStudentAttendanceSummaryAsPdf(student: any): Promise<string> {
+  const response = await fetch(`${BACKEND_URL}/api/download-student-attendance-summary-pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ studentId: student.student_id }),
+  });
+  const blob = await response.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = (reader.result as string).split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Logs
+export async function getActionLogs() {
+  return wsClient.getActionLogs();
+}
+
+export async function appendToActionLog(timestamp: string, action: string) {
+  // Ensure both fields are provided and not empty
+  if (!timestamp || !action) {
+    console.warn('appendToActionLog: Missing timestamp or action', { timestamp, action });
+    return { success: false };
+  }
+  
+  try {
+    await wsClient.appendActionLog(timestamp, action);
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to append action log:', error);
+    // Don't throw - action logs are not critical
+    return { success: false };
+  }
+}
+
+export async function clearActionLogs(role: string) {
+  return wsClient.clearActionLogs(role);
+}
+
+export async function getAuthLogs() {
+  return wsClient.getAuthLogs();
+}
+
+export async function appendToAuthLog(timestamp: string, message: string) {
+  return fetchAPI('/api/append-auth-log', {
+    method: 'POST',
+    body: JSON.stringify({ timestamp, message }),
+  });
+}
+
+export async function clearAuthLogs(role: string) {
+  return fetchAPI('/api/clear-auth-logs', {
+    method: 'POST',
+    body: JSON.stringify({ role }),
+  });
+}
+
+// Delete operations
+export async function deleteHistory() {
+  return fetchAPI('/api/delete-history', {
+    method: 'POST',
+  });
+}
+
+export async function deleteAllStudentData() {
+  return fetchAPI('/api/delete-all-student-data', {
+    method: 'POST',
+  });
+}

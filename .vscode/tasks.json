@@ -1,0 +1,112 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "npm",
+			"script": "npm run deploy",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Deploy",
+			"detail": "npm: Install all server dependencies and run them",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "install-servers",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Install all server dependencies",
+			"detail": "npm: Install dependencies for both frontend and backend servers",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "dev",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Run all",
+			"detail": "npm: Run both frontend and backend servers (dev)",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "install-all",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Install all server dependencies",
+			"detail": "npm: Install dependencies for both servers and dev tools",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "backend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Run backend server",
+			"detail": "npm: Backend_Server (dev)",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "frontend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Run frontend server",
+			"detail": "npm: Run Frontend_Server (dev)",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "typecheck-backend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Typecheck backend",
+			"detail": "npm: Run mypy type check for backend",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "typecheck-frontend",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Typecheck frontend",
+			"detail": "npm: Run TypeScript type check for frontend",
+			"presentation": {
+				"clear": true
+			}
+		}
+		,
+		{
+			"type": "npm",
+			"script": "uninstall-all",
+			"path": ".",
+			"problemMatcher": [],
+			"label": "Uninstall all dependencies",
+			"detail": "npm: Uninstall dependencies for both frontend and backend servers",
+			"presentation": {
+				"clear": true
+			}
+		}
+	]
+}

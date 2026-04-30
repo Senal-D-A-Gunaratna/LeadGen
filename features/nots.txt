@@ -1,0 +1,2 @@
+LeadGen blue colour value   #3B82F6
+add this tothe depandancys file  npm install concurrently --save-dev

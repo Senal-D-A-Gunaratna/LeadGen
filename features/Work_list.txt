@@ -1,0 +1,52 @@
+work list
+
+fix up manual attendance marking
+add bach to stu profile + db (may be)
+
+bulk marking fechers
+        1.attendance
+        2.grade/bach update
+
+
+
+
+
+#tiny pwa
+
+setup is:
+Stored Permanently:
+
+manifest.json (1 KB) - just says "open leadgen.local fullscreen"
+2 icons (50 KB total)
+Total: ~51 KB
+
+Every Time User Opens App:
+
+Tap icon → Opens leadgen.local:5000 fullscreen
+Downloads page fresh from server (cache temporarily)
+WebSocket connects, shows live data
+User exits → cache clears
+
+Next Time:
+
+Same thing! Fresh download, nothing stored
+
+
+Super Clean Architecture:
+Phone: Just has tiny "bookmark" (51 KB)
+         ↓
+    leadgen.local
+         ↓
+    All data/logic here
+Phone is literally just a remote display - zero data stored! 🔒
+When you're ready to add PWA, just let me know - it's literally just:
+
+1 Drop manifest.json in /public
+2 Add one <link> tag
+Done!
+
+------------------------------------------------------------------
+shell scriting the ip port
+
+IP=$(hostname -I | awk '{print $1}')
+echo "LeadGen Fontend at : http://${IP}:9002"

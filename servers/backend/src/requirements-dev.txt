@@ -1,0 +1,10 @@
+mypy
+pydantic
+typing-extensions
+types-requests
+types-reportlab
+types-Flask-Cors
+types-Flask-Cors
+
+
+

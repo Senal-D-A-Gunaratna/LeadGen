@@ -1,0 +1,16 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/servers/backend/venv/bin/python",
+  "python.linting.enabled": true,
+  "python.analysis.typeCheckingMode": "standard",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.python"
+  },
+  "cSpell.words": [
+    "leadgen",
+    "mypy",
+    "pycache",
+    "pytest",
+    "venv",
+    "vercel"
+  ]
+}
